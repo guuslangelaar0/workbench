@@ -39,4 +39,9 @@ if [ -x "$P/scripts/coord/wb-coord" ]; then
   # surface sessions from an unrelated repo.
   echo ""; echo "Other live sessions:"; WB_WORKSPACE_ROOT="$P" "$P/scripts/coord/wb-coord" who 2>/dev/null | sed 's/^/  /' | head -6
 fi
+
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -x "$CLAUDE_PLUGIN_ROOT/scripts/graduate.sh" ]; then
+  grad="$(bash "$CLAUDE_PLUGIN_ROOT/scripts/graduate.sh" "$P" 2>/dev/null)"
+  [ -n "$grad" ] && { echo ""; printf '%s\n' "$grad"; }
+fi
 exit 0
