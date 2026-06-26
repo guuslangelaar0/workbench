@@ -5,6 +5,10 @@
 #
 # Usage: task-move.sh <id> <to-state> [--target DIR]
 set -euo pipefail
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SELF_DIR/lib.sh"
+. "$SELF_DIR/levels.sh"
+
 ID="" TO="" TARGET="$PWD"
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -16,6 +20,25 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "$ID" ] && [ -n "$TO" ] || { echo "task-move.sh: usage: task-move.sh <id> <to-state> [--target DIR]" >&2; exit 64; }
 TARGET="${TARGET%/}"; [ -n "$TARGET" ] || TARGET="/"
+
+# validate the requested stage against the project's configured level lifecycle
+_cfg="$(il_cfg_dir "$TARGET")/config.json"
+if [ -f "$_cfg" ]; then
+  LEVEL="$(sed -n 's/.*"level"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_cfg" | head -1)"
+  if [ -n "$LEVEL" ]; then
+    _valid="$(wb_level_lifecycle "$LEVEL" 2>/dev/null)" || true
+    if [ -n "$_valid" ]; then
+      _found=0
+      for _s in $_valid; do
+        [ "$_s" = "$TO" ] && { _found=1; break; }
+      done
+      if [ "$_found" = 0 ]; then
+        echo "task-move: '$TO' is not a stage at level '$LEVEL' (valid: $_valid)" >&2
+        exit 64
+      fi
+    fi
+  fi
+fi
 
 T="$TARGET/.claude/tasks"
 [ -d "$T" ] || { echo "task-move.sh: no $T (not a workbench project?)" >&2; exit 1; }

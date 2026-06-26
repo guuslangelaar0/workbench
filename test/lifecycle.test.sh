@@ -14,4 +14,18 @@ T2="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --profile full --level fleet --n
 chk "fleet: has release-candidate dir" "[ -d '$T2/.claude/tasks/release-candidate' ]"
 chk "fleet: has staged dir"            "[ -d '$T2/.claude/tasks/staged' ]"
 rm -rf "$T1" "$T2"
+
+# C1: task-move.sh validates stages against the project's level lifecycle
+T3="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --profile full --level crew --name C --mission m --target "$T3" >/dev/null 2>&1
+bash "$HERE/scripts/task-new.sh" --target "$T3" --title "Ship me" >/dev/null 2>&1
+id="$(ls "$T3/.claude/tasks/backlog" | head -1 | sed 's/-.*//')"
+bash "$HERE/scripts/task-move.sh" --target "$T3" "$id" staged >/dev/null 2>&1
+chk "crew: task moved to staged"  "ls '$T3/.claude/tasks/staged/' | grep -q \"$id\""
+chk "crew: status line synced"    "grep -qi 'Status:.*staged' \"\$(ls '$T3/.claude/tasks/staged/'*.md | head -1)\""
+T4="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --profile full --level solo --name So --mission m --target "$T4" >/dev/null 2>&1
+bash "$HERE/scripts/task-new.sh" --target "$T4" --title "x" >/dev/null 2>&1
+sid="$(ls "$T4/.claude/tasks/backlog" | head -1 | sed 's/-.*//')"
+chk "solo: staged is rejected" "! bash \"$HERE/scripts/task-move.sh\" --target \"$T4\" \"$sid\" staged >/dev/null 2>&1"
+rm -rf "$T3" "$T4"
+
 [ "$fail" = 0 ] && echo "PASS: lifecycle" || { echo "lifecycle test failed"; exit 1; }

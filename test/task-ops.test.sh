@@ -8,8 +8,9 @@ trap 'rm -rf "$TMP"' EXIT
 fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
 
-# scaffold a minimal project (gives us .claude/tasks/ + _next-id at 0001)
-bash "$HERE/scripts/init.sh" --name "Acme" --mission "Test." --target "$TMP" --profile minimal >/dev/null 2>&1
+# scaffold a minimal project at pair level (gives us .claude/tasks/ + _next-id at 0001)
+# pair level is used so that both in-development and in-review are valid stages
+bash "$HERE/scripts/init.sh" --name "Acme" --mission "Test." --target "$TMP" --profile minimal --level pair >/dev/null 2>&1
 
 chk "next-id starts 0001" "[ \"\$(cat '$TMP/.claude/tasks/_next-id')\" = 0001 ]"
 
