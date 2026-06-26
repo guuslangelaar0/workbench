@@ -186,8 +186,8 @@ if [ "$PROFILE" = full ] && [ -d "$TARGET/.git" ]; then
   bash "$TARGET/scripts/coord/install-hooks.sh" "$TARGET" >/dev/null || echo "init.sh: warning — pre-commit guard install reported an issue" >&2
 fi
 
-echo "workbench: scaffolded '$NAME' ($PROFILE) into $TARGET"
-echo "  .claude/tasks/{backlog,in-development,in-review,verified,decisions}/"
+echo "workbench: scaffolded '$NAME' ($PROFILE, level $LEVEL) into $TARGET"
+echo "  .claude/tasks/: $(wb_level_lifecycle "$LEVEL" | tr ' ' ',')"
 echo "  CLAUDE.md, .workbench/config.json, .workbench/manifest.json"
 if [ -n "$PRESERVED" ]; then
   echo "  preserved (already existed, not overwritten): $PRESERVED"

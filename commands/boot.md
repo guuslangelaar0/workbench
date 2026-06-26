@@ -12,6 +12,6 @@ Run the workbench boot protocol for this project. Do NOT start new work until th
 4. Build/health check as appropriate for the stack (compile/tests). Report pass/fail with the first error.
 5. If a prod target is configured in `.workbench/config.json`, check its health read-only.
 
-**Phase 2 — Reconcile:** if the task dirs / `_next-id` / `.workbench/` are missing or drifted, note it. Run `/workbench:upgrade` if managed files are behind (once that exists).
+**Phase 2 — Reconcile:** if the task dirs / `_next-id` / `.workbench/` are missing or drifted, note it. Run `/workbench:upgrade` if managed files are behind.
 
 **Phase 3 — Briefing (facts, not vibes):** deliver ~8 lines — deployment gap, build status per repo, task counts, top 3 priorities by ID, any new blockers not in SESSION_STATE. Then wait for "go" before starting the loop.
