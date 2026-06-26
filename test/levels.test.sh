@@ -18,4 +18,9 @@ chk "fleet graphify federated"         "wb_level_dials fleet | grep -qx 'graphif
 chk "index orders levels"             "[ \"\$(wb_level_index fleet)\" -gt \"\$(wb_level_index solo)\" ]"
 chk "unknown level returns 1"         "! wb_level_index bogus >/dev/null 2>&1"
 
+chk "level command exists"              "[ -f '$HERE/commands/level.md' ]"
+chk "level command: status/up/down"     "grep -qi 'status' '$HERE/commands/level.md' && grep -qi 'up' '$HERE/commands/level.md' && grep -qi 'down' '$HERE/commands/level.md'"
+chk "level command: shows dial changes before applying" "grep -qi 'which dials\|dials change\|before applying\|confirm' '$HERE/commands/level.md'"
+chk "levels skill exists"               "[ -f '$HERE/skills/levels/SKILL.md' ]"
+
 [ "$fail" = 0 ] && echo "PASS: levels" || { echo "levels test failed"; exit 1; }
