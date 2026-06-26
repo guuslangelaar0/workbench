@@ -1,0 +1,4 @@
+# workbench coordination runtime state (heartbeats, locks)
+/.claude/locks/
+/.workbench/locks/
+.superpowers/

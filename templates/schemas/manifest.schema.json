@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "initlab managed-file manifest",
+  "type": "object",
+  "required": ["plugin_version", "files"],
+  "properties": {
+    "plugin_version": { "type": "string" },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "template", "mode", "rendered_hash", "from_version"],
+        "properties": {
+          "path": { "type": "string" },
+          "template": { "type": "string" },
+          "mode": { "enum": ["managed", "merge", "once"] },
+          "rendered_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+          "from_version": { "type": "string" }
+        }
+      }
+    }
+  }
+}

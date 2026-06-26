@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+# bb-coord — multi-session presence + monitor (C).
+#
+# Every Claude Code tab is its own process; this is how they see each other.
+# State lives under .claude/locks/ at the workspace root.
+#
+#   bb-coord ping [label]      register/refresh THIS session's heartbeat
+#   bb-coord who               list live sessions (the at-a-glance monitor)
+#   bb-coord status            who + held locks + overlap/conflict warnings
+#   bb-coord claim <key...>    declare task/file keys this session is working on
+#   bb-coord claims [key]      list live claims, or check if <key> is claimed by another (exit 0/1)
+#   bb-coord release [path...] drop claims (all if none given)
+#   bb-coord prune             remove stale session files
+#   bb-coord whoami            print this session's id
+#
+# Agents: run `bb-coord ping <label>` at session start and after big edits,
+# and `bb-coord status` before a shared-repo commit. Look, don't ask.
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+. "$DIR/lib.sh"
+
+bb_ensure_dirs
+sid="$(bb_sid)"
+sfile="$BB_SESSIONS_DIR/$sid.json"
+
+# repo identity for a given dir: name relative to workspace root, or "workspace"
+repo_name() {
+  local top; top="$(git -C "${1:-$PWD}" rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -z "$top" ] && { echo "-"; return; }
+  [ "$top" = "$BB_ROOT" ] && { echo "workspace"; return; }
+  printf '%s\n' "${top#"$BB_ROOT"/}"
+}
+git_branch() { git -C "${1:-$PWD}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "-"; }
+staged_count() { git -C "${1:-$PWD}" diff --cached --name-only 2>/dev/null | grep -c . || true; }
+dirty_count()  { git -C "${1:-$PWD}" status --porcelain 2>/dev/null | grep -c . || true; }
+
+cmd_ping() {
+  # --throttle N: no-op if our heartbeat is younger than N seconds (used by the
+  # PostToolUse auto-ping hook so it costs ~nothing on every tool call).
+  if [ "${1:-}" = "--throttle" ]; then
+    local win="${2:-20}"; shift 2 || true
+    if [ -f "$sfile" ]; then
+      local last; last="$(bb_json_get "$sfile" heartbeat_epoch || echo 0)"
+      [ -n "$last" ] && [ $(( $(bb_now) - last )) -lt "$win" ] && return 0
+    fi
+  fi
+  local label="${1:-${BB_LABEL:-}}"
+  local cwd; cwd="$(pwd -P)"
+  local claims=""; [ -f "$sfile" ] && claims="$(bb_json_get "$sfile" claims || true)"
+  local started; started="$(bb_json_get "$sfile" started_at 2>/dev/null || true)"; [ -z "$started" ] && started="$(bb_now_iso)"
+  printf '{"sid":"%s","label":"%s","pid":%s,"host":"%s","cwd":"%s","repo":"%s","branch":"%s","staged":%s,"dirty":%s,"started_at":"%s","heartbeat_iso":"%s","heartbeat_epoch":%s,"claims":"%s"}\n' \
+    "$sid" "$label" "$$" "$(hostname -s 2>/dev/null || echo host)" "$cwd" "$(repo_name "$cwd")" "$(git_branch "$cwd")" \
+    "$(staged_count "$cwd")" "$(dirty_count "$cwd")" "$started" "$(bb_now_iso)" "$(bb_now)" "$claims" > "$sfile"
+  echo "${BB_GRN}● coord:${BB_RST} $(bb_sid_short "$sid")${label:+ ($label)} pinged."
+}
+
+# iterate live session files; calls `emit <file>` for each fresh one
+each_live() {
+  local f hb
+  shopt -s nullglob
+  for f in "$BB_SESSIONS_DIR"/*.json; do
+    hb="$(bb_json_get "$f" heartbeat_epoch || echo 0)"
+    bb_is_fresh "$hb" "$BB_SESSION_TTL" && "$1" "$f"
+  done
+}
+
+print_row() {
+  local f="$1" me=""; [ "$(bb_json_get "$f" sid)" = "$sid" ] && me="${BB_BOLD} (you)${BB_RST}"
+  local age=$(( $(bb_now) - $(bb_json_get "$f" heartbeat_epoch || echo 0) ))
+  printf '  %s%-12s%s  %-16s repo=%-14s br=%-16s staged=%s dirty=%s  %ds ago%s\n' \
+    "$BB_BOLD" "$(bb_sid_short "$(bb_json_get "$f" sid)")" "$BB_RST" \
+    "$(bb_json_get "$f" label)" "$(bb_json_get "$f" repo)" "$(bb_json_get "$f" branch)" \
+    "$(bb_json_get "$f" staged)" "$(bb_json_get "$f" dirty)" "$age" "$me"
+}
+
+cmd_who() {
+  local n=0; each_live print_row >/tmp/.bbwho.$$ 2>/dev/null || true
+  n="$(grep -c . /tmp/.bbwho.$$ 2>/dev/null || echo 0)"
+  echo "${BB_BOLD}Live sessions (≤${BB_SESSION_TTL}s):${BB_RST}"
+  [ "$n" -gt 0 ] && cat /tmp/.bbwho.$$ || echo "  (none — run 'bb-coord ping')"
+  rm -f /tmp/.bbwho.$$
+}
+
+cmd_status() {
+  cmd_who
+  echo ""
+  echo "${BB_BOLD}Held locks:${BB_RST}"
+  shopt -s nullglob; local any=0
+  for l in "$BB_LOCKS_DIR"/*.lock; do
+    local hb; hb="$(bb_json_get "$l" heartbeat_epoch || echo 0)"
+    if bb_is_fresh "$hb" "$BB_LOCK_TTL"; then
+      any=1; printf '  %s%s%s held by %s (%ds ago)\n' "$BB_YEL" "$(basename "$l" .lock)" "$BB_RST" \
+        "$(bb_sid_short "$(bb_json_get "$l" holder)")" "$(( $(bb_now) - hb ))"
+    fi
+  done
+  [ "$any" = 0 ] && echo "  (none)"
+  echo ""
+  echo "${BB_BOLD}Claims (live sessions):${BB_RST}"
+  cmd_claims
+  echo ""
+  echo "${BB_BOLD}Overlap check:${BB_RST}"
+  # Warn when >1 live session sits in the same repo with uncommitted changes.
+  awk_overlap
+}
+
+# Detect repos where >1 live session has staged/dirty changes → sweep risk.
+awk_overlap() {
+  declare -a repos; local f r staged dirty
+  : > /tmp/.bbov.$$
+  each_live _ov_collect 2>/dev/null || true
+  # group by repo, count sessions with changes
+  sort /tmp/.bbov.$$ 2>/dev/null | awk '{c[$1]++} END{for(r in c) if(c[r]>1) print r" "c[r]}' > /tmp/.bbov2.$$
+  if [ -s /tmp/.bbov2.$$ ]; then
+    while read -r repo cnt; do
+      echo "  ${BB_RED}⚠ $cnt live sessions have uncommitted changes in '$repo'${BB_RST} — commit with an explicit pathspec ('git commit -- <your files>') or use a worktree."
+    done < /tmp/.bbov2.$$
+  else
+    echo "  ${BB_GRN}clear${BB_RST} — no repo has two live sessions with uncommitted changes."
+  fi
+  rm -f /tmp/.bbov.$$ /tmp/.bbov2.$$
+}
+_ov_collect() {
+  local f="$1" st dy rp
+  st="$(bb_json_get "$f" staged || echo 0)"; dy="$(bb_json_get "$f" dirty || echo 0)"
+  rp="$(bb_json_get "$f" repo || echo -)"
+  { [ "${st:-0}" -gt 0 ] 2>/dev/null || [ "${dy:-0}" -gt 0 ] 2>/dev/null; } && echo "$rp" >> /tmp/.bbov.$$
+}
+
+cmd_claim() {
+  [ "$#" -gt 0 ] || { echo "usage: bb-coord claim <key...>" >&2; return 64; }
+  [ -f "$sfile" ] || cmd_ping >/dev/null
+  local cur new p tmp; cur="$(bb_json_get "$sfile" claims || true)"
+  new="$cur"
+  for p in "$@"; do
+    case ";$new;" in *";$p;"*) continue ;; esac   # already claimed → skip (de-dup)
+    new="${new:+$new;}$p"
+  done
+  tmp="$sfile.$$"
+  if grep -q '"claims":' "$sfile"; then
+    sed "s#\"claims\":\"[^\"]*\"#\"claims\":\"$new\"#" "$sfile" > "$tmp" && mv "$tmp" "$sfile"
+  else
+    # older session file without a claims field → insert one before the closing brace
+    sed "s#}\$#,\"claims\":\"$new\"}#" "$sfile" > "$tmp" && mv "$tmp" "$sfile"
+  fi
+  if grep -qF "\"claims\":\"$new\"" "$sfile"; then
+    echo "claimed: $*"
+  else
+    echo "bb-coord: claim write failed for $*" >&2; return 1
+  fi
+}
+
+# list claims of all live sessions, or (with a key) check if it is claimed by ANOTHER live
+# session: prints the holder and exits 0 if so, exits 1 if the key is free.
+cmd_claims() {
+  local want="${1:-}" found=0 f hb s cl
+  shopt -s nullglob
+  for f in "$BB_SESSIONS_DIR"/*.json; do
+    hb="$(bb_json_get "$f" heartbeat_epoch || echo 0)"
+    bb_is_fresh "$hb" "$BB_SESSION_TTL" || continue
+    s="$(bb_json_get "$f" sid)"; cl="$(bb_json_get "$f" claims || true)"
+    [ -n "$cl" ] || continue
+    if [ -n "$want" ]; then
+      case ";$cl;" in
+        *";$want;"*)
+          [ "$s" = "$sid" ] && continue
+          echo "${BB_YEL}$want${BB_RST} claimed by ${BB_BOLD}$(bb_sid_short "$s")${BB_RST}"; found=1 ;;
+      esac
+    else
+      printf '  %s%-12s%s  %s\n' "$BB_BOLD" "$(bb_sid_short "$s")" "$BB_RST" "$cl"; found=1
+    fi
+  done
+  if [ -n "$want" ]; then
+    [ "$found" = 1 ] && return 0 || { echo "$want is free"; return 1; }
+  else
+    [ "$found" = 1 ] || echo "  (no claims by live sessions)"
+  fi
+}
+cmd_release() {
+  [ -f "$sfile" ] || return 0
+  local tmp="$sfile.$$"; sed "s#\"claims\":\"[^\"]*\"#\"claims\":\"\"#" "$sfile" > "$tmp" && mv "$tmp" "$sfile"
+  echo "released claims for $(bb_sid_short "$sid")"
+}
+
+cmd_prune() {
+  shopt -s nullglob; local removed=0 f hb
+  for f in "$BB_SESSIONS_DIR"/*.json; do
+    hb="$(bb_json_get "$f" heartbeat_epoch || echo 0)"
+    bb_is_fresh "$hb" "$BB_SESSION_TTL" || { rm -f "$f"; removed=$((removed+1)); }
+  done
+  for l in "$BB_LOCKS_DIR"/*.lock; do
+    hb="$(bb_json_get "$l" heartbeat_epoch || echo 0)"
+    bb_is_fresh "$hb" "$BB_LOCK_TTL" || { rm -f "$l"; removed=$((removed+1)); }
+  done
+  echo "pruned $removed stale file(s)."
+}
+
+case "${1:-status}" in
+  ping)    shift; cmd_ping "$@" ;;
+  who)     cmd_who ;;
+  status)  cmd_status ;;
+  claim)   shift; cmd_claim "$@" ;;
+  claims)  shift; cmd_claims "$@" ;;
+  release) shift; cmd_release "$@" ;;
+  prune)   cmd_prune ;;
+  whoami)  echo "$sid" ;;
+  *) echo "usage: bb-coord {ping|who|status|claim|claims|release|prune|whoami}" >&2; exit 64 ;;
+esac

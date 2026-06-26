@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # tools/initlab
+fail=0
+chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
+
+chk "init command exists"        "[ -f '$HERE/commands/init.md' ]"
+chk "command has frontmatter"    "head -1 '$HERE/commands/init.md' | grep -q '^---'"
+chk "command invokes init.sh"    "grep -q 'scripts/init.sh' '$HERE/commands/init.md'"
+chk "command uses PLUGIN_ROOT"   "grep -q 'CLAUDE_PLUGIN_ROOT' '$HERE/commands/init.md'"
+
+chk "boot command exists"       "[ -f '$HERE/commands/boot.md' ]"
+chk "boot has reality phase"    "grep -qi 'reality\|verify' '$HERE/commands/boot.md'"
+chk "checkpoint command exists" "[ -f '$HERE/commands/checkpoint.md' ]"
+chk "checkpoint writes STATE"   "grep -q 'SESSION_STATE' '$HERE/commands/checkpoint.md'"
+
+[ "$fail" = 0 ] && echo "PASS: command" || { echo "command test failed"; exit 1; }

@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "initlab project config",
+  "type": "object",
+  "required": ["initlab", "project", "way_of_working", "lifecycle"],
+  "properties": {
+    "initlab": {
+      "type": "object",
+      "required": ["version", "initialized_at"],
+      "properties": {
+        "version": { "type": "string" },
+        "initialized_at": { "type": "string" }
+      }
+    },
+    "project": {
+      "type": "object",
+      "required": ["name", "kind"],
+      "properties": {
+        "name": { "type": "string" },
+        "mission": { "type": "string" },
+        "launch_target": { "type": "string" },
+        "kind": { "enum": ["existing", "greenfield"] },
+        "topology": { "enum": ["single", "multi-repo"] },
+        "repos": { "type": "array" },
+        "prod": { "type": "object" }
+      }
+    },
+    "way_of_working": {
+      "type": "object",
+      "required": ["models", "verification", "review", "parallelism", "enforcement", "continuity", "graphify", "codex", "remote", "inception_depth"],
+      "properties": {
+        "models": { "enum": ["leaner", "recommended", "better"] },
+        "verification": { "enum": ["leaner", "recommended", "better"] },
+        "review": { "enum": ["leaner", "recommended", "better"] },
+        "parallelism": { "enum": ["leaner", "recommended", "better"] },
+        "enforcement": { "enum": ["remind", "warn-default", "strict"] },
+        "continuity": { "enum": ["leaner", "recommended", "better"] },
+        "graphify": { "enum": ["off", "per-repo", "full"] },
+        "codex": { "enum": ["off", "rescue-only", "full-lane"] },
+        "remote": { "enum": ["off", "native", "telegram", "both"] },
+        "inception_depth": { "enum": ["leaner", "recommended", "better"] }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "required": ["states", "in_review_cap"],
+      "properties": {
+        "states": { "type": "array", "items": { "type": "string", "enum": ["backlog", "in-development", "in-review", "verified", "ready-to-ship", "shipped", "decisions"] } },
+        "deploy_gated": { "type": "boolean" },
+        "in_review_cap": { "type": "integer" }
+      }
+    }
+  }
+}

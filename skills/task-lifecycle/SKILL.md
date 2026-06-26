@@ -1,0 +1,27 @@
+---
+name: task-lifecycle
+description: Use when creating, moving, or verifying tasks in .claude/tasks/ — the file format, ID allocation, the git-mv state transitions, and the in-review cap. The lead owns all lifecycle transitions.
+---
+
+# Task lifecycle
+
+Tasks are markdown files under `.claude/tasks/`. **Status is the subdirectory the file lives in**; transitions are `git mv`; full history is in git. The format spec is `.claude/tasks/README.md` in the project.
+
+## States
+`backlog → in-development → in-review → verified`, plus `decisions/` (needs the human; the lead never blocks on it). If `lifecycle.deploy_gated` is true in `.initlab/config.json`, two terminal states are added: `in-review → ready-to-ship → shipped` (locally verified + staged parks in `ready-to-ship/`; only a prod deploy + smoke reaches `shipped/`). Read `lifecycle.states` from config for the project's actual set.
+
+## Create a task
+Use `/initlab:task "<title>"`, or directly:
+`bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-new.sh" --title "<t>" --target "${CLAUDE_PROJECT_DIR}" [--track T] [--repos "a,b"] [--estimate "~1 day"]`
+It allocates the next ID from `_next-id`, renders the canonical template, and bumps the counter atomically. Never hand-edit `_next-id`.
+
+## Move a task (lead-only)
+Use `/initlab:dispatch` and `/initlab:verify`, or directly:
+`bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-move.sh" <id> <to-state> --target "${CLAUDE_PROJECT_DIR}"`
+It `git mv`s the file (or plain `mv` if untracked) and rewrites the `**Status:**` field. The lead does ALL transitions — the workspace `.git` is lead-only; engineers report, they do not move task files.
+
+## Done means verified
+A task is **not done** until it reaches `verified/` (or `shipped/` when deploy-gated) with evidence captured in its `## Verification evidence` section. "In review" means code exists and awaits LOCAL verification — say "code committed, awaiting verification," never "done." If verification fails, move it **back** to `in-development/`, not "almost there."
+
+## The in-review cap
+`lifecycle.in_review_cap` (default 10) bounds `in-review/`. When the count reaches `cap − 3`, **hard-drain**: stop taking new work and verify oldest-first (by ID) until the count is `cap − 6` or lower. An unbounded in-review queue is where "done" claims pile up and the directory stops reflecting reality — the cap forces verification to happen continuously.

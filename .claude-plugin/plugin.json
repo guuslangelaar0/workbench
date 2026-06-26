@@ -1,0 +1,11 @@
+{
+  "name": "workbench",
+  "version": "0.1.0",
+  "description": "An operating system for AI-orchestrated product building: scaffolds and maintains a teamlead/task-lifecycle/continuity way of working that survives compaction and new sessions.",
+  "author": {
+    "name": "Initlabs B.V. / Guus Langelaar",
+    "email": "guus@devidee.nl"
+  },
+  "homepage": "https://github.com/beebeeb-io/workspace",
+  "license": "Proprietary"
+}
