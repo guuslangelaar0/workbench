@@ -1,5 +1,7 @@
 # Workbench Foundation Implementation Plan (Rebrand R + Spec 1)
 
+> **Archived implementation plan.** The task-by-task plan executed on 2026-06-26, kept as a build record. It contains absolute paths and references from the project where workbench was first developed, and describes an interim config model (a persisted `dials` block + `lifecycle.states`) that was superseded: the config now stores only `workbench.level` and derives dials + lifecycle at read-time. Current model: [`../configuration.md`](../configuration.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Rebrand the `initlab` plugin to `workbench` and implement the maturity-ladder spine (levels, dials, lifecycle, graduation, loop-engineering, single front door) from the foundations spec.

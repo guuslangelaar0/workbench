@@ -1,93 +1,174 @@
+<div align="center">
+
 # workbench
 
-An operating system for AI-orchestrated product building. `workbench` scaffolds and maintains a complete way of working — teamlead orchestration loop, file-based task lifecycle, session/compaction continuity, multi-session coordination, the brainstorm->spec->plan discipline, graphify, Codex collaboration, and Telegram remote control — and keeps it active across compaction and new sessions.
+**An operating system for AI-orchestrated product building — for [Claude Code](https://claude.com/claude-code).**
 
-Design spec: `docs/2026-06-26-workbench-foundations-design.md`.
+Workbench scaffolds and maintains a complete *way of working* in your repo: a maturity ladder that grows with your project, a file-based task lifecycle, session & compaction continuity, multi-session coordination, the brainstorm → spec → plan discipline, and a long-running orchestration loop — then keeps it all coherent across new sessions and context compaction.
 
-## Status
+`solo` · `pair` · `crew` · `fleet` — pick a level, get a coherent way of working. Graduate when the friction is real.
 
-**Build COMPLETE — Plans 1–9, 20 test suites green** (`bash test/all.sh`). Every plan was Opus-reviewed (each caught and fixed a real bug). The one remaining check is the live `/plugin install` round-trip below — Guus-only, since no automated test can load the plugin into a real Claude Code session.
+</div>
 
-Plan 1 (Foundation): installable plugin + `/workbench:init` minimal scaffold + config/manifest + tests.
+---
 
-Plan 2 (Full Templates): complete. The default (`full`) profile now renders SOUL.md, AGENTS.md, and a full CLAUDE.md that cross-references them, alongside the 6-file `scripts/coord/` coordination suite (wb-coord, bb-worktree, with-lock, precommit-guard, lib, install-hooks). The manifest tracks each scaffolded file with an explicit update mode (`merge`, `managed`, or `once`). `_next-id` is preserved across re-runs (the `once` mode guards it). The git pre-commit guard installs into the target repo on first scaffold.
+## Why workbench
 
-Plan 3 (Continuity): complete. Continuity hooks: SessionStart re-ground (disk-derived operating brief injected as context), PreCompact checkpoint (writes a durable compaction marker + SESSION_STATE breadcrumb), PostToolUse coord-ping (throttled presence heartbeat). SESSION_STATE.md handoff template (once-mode, preserved on re-run). `/workbench:boot` and `/workbench:checkpoint` commands. `session-continuity` skill covering boot protocol, checkpoint discipline, and restart hygiene.
+Coding agents are brilliant in the moment and amnesiac across sessions. The hard part of building a real product with them isn't writing code — it's everything around it: keeping track of what's done vs. claimed-done, not losing the plot after a compaction, two sessions not clobbering each other, knowing when work is *verified* rather than *probably fine*.
 
-Plan 4 (Setup Wizard + Front Door): complete. Guided per-axis setup wizard (`setup` skill) walks each configuration axis as `AskUserQuestion` cards with Recommended/Better/Leaner options + plain-language cost notes, writes `.workbench/config.json`, then scaffolds. `init.sh` now preserves an existing config (the wizard owns it; init only scaffolds templates + manifest around it). Bare `/workbench` is the front door — auto-runs setup if unconfigured, else shows status + next actions. Any `/workbench:*` command defers to setup when the project is unconfigured (auto-trigger pattern).
+Workbench packages that discipline as a Claude Code plugin. It is **not** a framework you import or a service you sign up for — it writes plain markdown, shell, and JSON into your repo, and teaches your Claude sessions how to use them. Uninstall the plugin and your way of working stays on disk.
 
-Plan 5 (Upgrade Engine + Doctor + Codex Bridge): complete. `/workbench:upgrade` reconciles a project's generated files to the current plugin version — regenerating untouched mechanism files, semantically merging user-edited docs, never clobbering edits silently. `/workbench:doctor` reports drift + health. `scripts/drift.sh` classifies each managed file as `ok`, `edited`, or `missing` using the manifest. Codex bridge: `CODEX_COORDINATION.md` + teamlead prompt render conditionally when `codex != off` in the project config; `codex-bridge` skill wires `codex:rescue`/`codex:setup`. Schemas hardened: `rendered_hash` pattern, `lifecycle.states` enum, `way_of_working` required fields.
+The core idea is a **maturity ladder**. A solo hobby project and an eight-person product need very different amounts of ceremony — so workbench gives you four coherent presets and lets you move between them as the project grows.
 
-Plan 6 (Orchestration): complete. The teamlead loop — `orchestration` + `task-lifecycle` + `models` skills, `engineer`/`verifier` agents, `/loop` `/task` `/dispatch` `/verify` `/mc` commands, the `task-new.sh`/`task-move.sh`/`mc.sh` scripts (the absorbed + generalized mission-control dashboard, config-driven), and the optional `**Estimate:**` task field.
+---
 
-Plan 7 (Multi-teamlead + Coordination): complete. `coordination` skill (the A+B+C presence/locks/worktrees model), `/workbench:teamlead <topic>` (Track-scoped topic leads), and task-locking — `wb-coord` gained a `claims` query + a Claims section in `status` + claim de-dup so a second lead can see a lock. The scaffold now gitignores `.claude/locks/`.
+## The maturity ladder
 
-Plan 8 (Inception): complete. The `inception` skill + `/workbench:inception` — a scope-controlled product-genesis brainstorm that refuses to proceed until you name what's explicitly OUT of v1. Composes `superpowers:brainstorming` (+ `grill-me`/`frontend-design` at the `better` tier), seeds the backlog via `/workbench:task`, Mermaid specs.
+The level describes your **coordination surface** — how many independent streams you must keep coherent — not a ranking of quality. You pick a level; workbench derives a coherent set of *dials* from it.
 
-Plan 9 (Remote + Dogfood): complete. The `remote` skill + `/workbench:remote` (operating the official Telegram Channels plugin + the security model), a `Notification`→Telegram outbound hook, and a `PreToolUse` guard (`remote-guard.sh`) that hard-blocks catastrophic `rm -rf`/force-push on remote-driven sessions. De-beebeeb'd the coord commit-guard advice; a `dogfood.test.sh` end-to-end integration smoke.
+```mermaid
+graph LR
+    solo["solo<br/>one voice"] --> pair["pair<br/>small-group"] --> crew["crew<br/>team"] --> fleet["fleet<br/>org-scale"]
+    style solo fill:#1f2937,color:#fff,stroke:#f59e0b
+    style pair fill:#1f2937,color:#fff,stroke:#f59e0b
+    style crew fill:#1f2937,color:#fff,stroke:#f59e0b
+    style fleet fill:#1f2937,color:#fff,stroke:#f59e0b
+```
 
-## Install & smoke-test (the live round-trip)
+| Level | Coordination surface | When it fits | Loop autonomy |
+|-------|---------------------|--------------|---------------|
+| **`solo`** | One person, one voice | A single builder, main-only, personal projects | most autonomous — `auto-continue` |
+| **`pair`** | Small-group alignment | 2–3 contributors, feature branches, light review | `auto-continue` |
+| **`crew`** | Team coordination | 3–8 people, tagged releases, epics, a staging gate | `suggest-wait` |
+| **`fleet`** | Org-scale governance | 8+ contributors, release trains, federated repos | most gated — `suggest-review` |
 
-Run this once to confirm the plugin loads into a real Claude Code session and its hooks fire — the one check the 20 unit suites can't cover.
+Each level is a **preset over seven dials** — team topology, release model, work decomposition, architecture formality, user-facing surfaces, knowledge-graph scope, and loop autonomy. You change one thing (the level) and all seven move together coherently; no drift, no incoherent combinations like "release trains, but solo."
 
-**1. Install** (from a Claude session at the workspace root):
+Graduation is **recommend-only**: `/workbench:level up` shows exactly what changes and asks before applying. Move up when the current level's friction is real — not when the project is theoretically "ready."
+
+→ Full breakdown of each level and **the struggle it solves** in **[docs/levels.md](docs/levels.md)**.
+
+---
+
+## Install
+
+Workbench is a Claude Code plugin. From any Claude Code session:
 
 ```text
-/plugin marketplace add .
-/plugin install workbench@local
-/reload-plugins
+/plugin marketplace add guuslangelaar0/workbench
+/plugin install workbench@workbench
 ```
 
-`/plugin marketplace add` takes the directory that contains `.claude-plugin/marketplace.json` (here `.`); the marketplace registers as `local`. Install enables the plugin by default; `/reload-plugins` activates its hooks in the current session. Confirm it loaded:
+Then start (or restart) Claude Code in your project and run the front door:
 
 ```text
-/plugin list      → workbench@local, enabled
-/help             → /workbench:* commands appear
-/agents           → engineer, verifier
+/workbench
 ```
 
-**2. Smoke-test in a scratch project.** The hooks gate on `.workbench/config.json`, so scaffold a throwaway project first:
+On an unconfigured project it runs a short guided setup; on a configured one it shows status and the next actions. That's it — one command to remember.
 
-```sh
-mkdir -p ~/workbench-smoke && cd ~/workbench-smoke && git init && claude
+→ Step-by-step, including a local-install smoke test: **[docs/getting-started.md](docs/getting-started.md)**.
+
+---
+
+## How it works
+
+```mermaid
+flowchart TD
+    FD["/workbench<br/>(front door)"] --> SETUP[setup wizard]
+    SETUP --> CFG[".workbench/config.json<br/>level + way of working"]
+    CFG --> SCAFFOLD["scaffold: CLAUDE.md · SOUL.md<br/>.claude/tasks/ · scripts/coord/"]
+    SCAFFOLD --> LOOP["/workbench:loop"]
+
+    subgraph LOOP_CYCLE["the orchestration loop"]
+      direction LR
+      PICK[pick task] --> DISPATCH[dispatch to engineer] --> GATE[verify-gate] --> PICK
+    end
+    LOOP --> LOOP_CYCLE
+
+    CFG -.derives.-> LIFECYCLE["task lifecycle stages<br/>(by level)"]
+    SCAFFOLD -.-> CONTINUITY["session & compaction<br/>continuity hooks"]
 ```
 
-Then, in that scratch session:
+Five capabilities, all configured from the level you pick:
 
-1. **Scaffold** — run `/workbench` (the bare front door auto-runs setup when unconfigured) or `/workbench:setup`, and walk the per-axis wizard. Confirm it wrote `.workbench/config.json`, `CLAUDE.md`, `.claude/tasks/{backlog,in-development,in-review,verified,decisions}/`, `.claude/SOUL.md`, and `scripts/coord/`.
-2. **Confirm the `SessionStart` hook fires** — it only fires on a *fresh* session (not on `/reload-plugins`). Exit and re-launch `claude` in `~/workbench-smoke`; on startup you should see the operating brief print — `=== workbench operating brief: <project> ===` with task counts. That's the re-ground hook working.
-3. **Exercise the loop surface** — `/workbench:task "smoke test"` (creates `0001-smoke-test.md` in `backlog/`), `/workbench:mc` (renders the dashboard), and confirm `/workbench:loop` / `/workbench:dispatch` / `/workbench:verify` exist.
-4. **(Optional) the other hooks** — `PostToolUse`/`PreToolUse`/`Notification` go live in-session after `/reload-plugins`; `PreCompact` writes a checkpoint marker before a compaction. The `Notification`→Telegram nudge and the `PreToolUse` catastrophic-command guard only act when `way_of_working.remote != off` in the config.
+- **Task lifecycle** — tasks are markdown files under `.claude/tasks/`; their status *is* the subdirectory they live in (`backlog → in-development → in-review → verified → …`), and transitions are `git mv`. A bounded in-review cap forces verification to happen continuously instead of piling up. Higher levels add `staged`, `shipped`, and `release-candidate` stages.
+- **The orchestration loop** — a long-running teamlead loop that picks the highest-impact unblocked task, dispatches it, and gates it. The lead coordinates; engineers implement; nothing reaches *verified* without evidence. Universal rule: **bugs auto-file as tasks; new features are *suggested*, never auto-built.**
+- **Continuity** — `SessionStart` re-grounds each new session from disk, `PreCompact` checkpoints before context is compacted, and a `SESSION_STATE.md` handoff means the next session resumes from the file alone.
+- **Coordination** — multiple concurrent sessions register presence, claim tasks, and get warned before they collide; worktrees isolate parallel work.
+- **Discipline built in** — brainstorm → spec → plan before building; "done" means *verified with evidence*, never "should work."
 
-**3. Clean up:**
+→ The model behind each: **[docs/concepts.md](docs/concepts.md)**.
 
-```text
-/plugin uninstall workbench@local
-/plugin marketplace remove local
-```
+---
 
-`rm -rf ~/workbench-smoke`. If skills/commands linger after a reinstall, clear the cache: `rm -rf ~/.claude/plugins/cache`.
+## Commands
 
-## Commands (current)
+`/workbench` is the only one you have to remember; it routes to the rest.
 
-- `/workbench` — front door: set up if needed, else show status and next actions.
-- `/workbench:setup` — configure this project's way of working (guided per-axis wizard) and scaffold it.
-- `/workbench:init` — scaffold the way of working into the current project (non-interactive; wizard's config is preserved).
-- `/workbench:boot` — boot protocol: verify reality from disk, reconcile, then brief (wait for "go" before starting the loop).
-- `/workbench:checkpoint` — write a SESSION_STATE checkpoint now so the next session can resume from it alone.
-- `/workbench:upgrade` — reconcile this project's workbench files to the current plugin version (preserves your edits).
-- `/workbench:doctor` — health-check this workbench project: drift, stale state, in-review cap.
-- `/workbench:loop` — run the autonomous teamlead loop (pick → dispatch → verify-gate → never stop).
-- `/workbench:task "<title>"` — create a task (allocates the next ID, renders the canonical format).
-- `/workbench:dispatch <id> [lane]` — move a task to in-development and dispatch it to an engineer.
-- `/workbench:verify <id>` — run a task's verification and gate it to verified/ (or back).
-- `/workbench:mc` — Mission Control: a text dashboard of tasks, decisions, in-review cap, build, and prod.
-- `/workbench:teamlead <topic>` — designate this session a topic lead; scopes task-picking to one `**Track:**` and locks tasks via `wb-coord` so multiple leads don't collide.
-- `/workbench:inception` — scope-controlled product genesis for a greenfield project: an idea → a v1 spec + seeded backlog, refusing to proceed until you name what's explicitly OUT of v1.
-- `/workbench:remote` — operate the project from your phone over the official Telegram Channels plugin: status + decisions, with an outbound nudge hook and a `PreToolUse` guard that blocks catastrophic commands.
+| Command | What it does |
+|---------|--------------|
+| `/workbench` | Front door: set up if needed, else show status + next actions |
+| `/workbench:setup` | Configure this project's way of working (guided per-axis wizard) and scaffold it |
+| `/workbench:init` | Scaffold non-interactively (the wizard's config is preserved) |
+| `/workbench:level` | Show the level + dials, or move `up` / `down` / to a named level |
+| `/workbench:loop` | Run the autonomous teamlead loop (pick → dispatch → verify-gate → never stop) |
+| `/workbench:task "<title>"` | Create a task (allocates the next ID, renders the canonical format) |
+| `/workbench:dispatch <id>` | Move a task to in-development and dispatch it to an engineer |
+| `/workbench:verify <id>` | Run a task's verification and gate it to `verified/` (or back) |
+| `/workbench:mc` | Mission Control: a text dashboard of tasks, cap, build, and prod |
+| `/workbench:teamlead <topic>` | Scope this session to one track and lock tasks so leads don't collide |
+| `/workbench:inception` | Scope-controlled product genesis: an idea → a v1 spec + seeded backlog |
+| `/workbench:boot` | Boot protocol: verify reality from disk, reconcile, then brief |
+| `/workbench:checkpoint` | Write a `SESSION_STATE` checkpoint now for the next session |
+| `/workbench:upgrade` | Reconcile this project's workbench files to the current plugin version (preserves your edits) |
+| `/workbench:doctor` | Health-check: drift, stale state, in-review cap |
+| `/workbench:remote` | Operate the project from your phone over Telegram, with a catastrophic-command guard |
+
+→ Full reference: **[docs/commands.md](docs/commands.md)**.
+
+---
+
+## Configuration
+
+Everything lives in `.workbench/config.json`. It stores your **level** and your **way-of-working axes**; the seven dials and the lifecycle stages are *derived from the level at read-time*, so there is nothing to keep in sync. Override a single dial via the optional `dial_overrides` object without leaving the preset.
+
+→ The full config model: **[docs/configuration.md](docs/configuration.md)**.
+
+---
 
 ## Tests
 
 ```sh
-bash test/all.sh
+bash test/all.sh                 # fast, offline unit + integration suites (no API, no cost)
+WB_E2E=1 bash test/e2e/run.sh    # live: loads the real plugin into a headless Claude session
 ```
+
+The `test/all.sh` suites exercise every shell script directly and run free and offline. The gated `test/e2e/` harness loads the actual plugin via `claude -p --plugin-dir` and asserts on what the real model + commands + hooks do — the only layer that proves the markdown surface works end-to-end. It needs an authenticated `claude` CLI and costs tokens, so it skips cleanly unless `WB_E2E=1`.
+
+---
+
+## Project layout
+
+```text
+workbench/
+├── .claude-plugin/     plugin.json + marketplace.json
+├── commands/           /workbench:* slash commands (markdown)
+├── skills/             the operating disciplines (levels, orchestration, continuity, …)
+├── agents/             engineer + verifier subagents
+├── hooks/              SessionStart / PreCompact / PostToolUse / PreToolUse / Notification
+├── scripts/            the CLI: init, task-new, task-move, mc, levels, loop-policy, graduate, drift
+├── templates/          what gets scaffolded into a project (minimal | full profiles)
+├── test/               all.sh (offline suites) + e2e/ (live-plugin)
+└── docs/               getting-started · levels · concepts · commands · configuration
+```
+
+---
+
+## Contributing
+
+Issues and PRs welcome. Run `bash test/all.sh` before opening a PR. See **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+
+## License
+
+[MIT](LICENSE) © 2026 Guus Langelaar

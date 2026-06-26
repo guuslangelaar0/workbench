@@ -1,5 +1,7 @@
 # Workbench — Foundational Design
 
+> **Archived design snapshot.** The original brainstorm/spec as written on 2026-06-26, kept for rationale. It predates one change: the config stores only `workbench.level` and **derives** dials + lifecycle at read-time — no persisted `dials` block or `lifecycle.states`, with overrides in `dial_overrides`. Current model: [`../configuration.md`](../configuration.md) and [`../levels.md`](../levels.md).
+
 **Date:** 2026-06-26
 **Status:** Approved (brainstorm) — awaiting spec review before planning
 **Supersedes the identity of:** the `initlab` plugin (`tools/initlab/`), which is rebranded to **workbench**.
