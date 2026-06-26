@@ -48,21 +48,20 @@ Each level is a **preset** across seven dials. The dials are the real configurat
 
 **Always pick a level preset first.** It sets all seven dials coherently. Picking dials one by one risks incoherent combinations (e.g. `release=release-trains` with `team=solo`).
 
-The preset is stored in `.workbench/config.json` under `workbench.level` and `dials`. The `dials` block is what the teamlead loop actually reads; the `level` field is the label.
+Only the level name is stored — `.workbench/config.json` holds `workbench.level`, and the seven dials are **derived from it at read-time** (via `wb_level_dials` in `scripts/levels.sh`). There is no persisted `dials` block to drift out of sync; change the level and every dial moves with it.
 
 ## Single-dial override
 
-After applying a level, you can override any one dial by editing `.workbench/config.json` directly:
+After applying a level, you can override one dial without leaving the preset by adding it to the optional flat `dial_overrides` object in `.workbench/config.json`:
 
 ```json
 {
-  "dials": {
-    "graphify": "per-repo"
-  }
+  "workbench": { "level": "crew" },
+  "dial_overrides": { "graphify": "per-repo" }
 }
 ```
 
-The level label stays the same — it now means "crew preset, except graphify=per-repo." Document the override in the project's CLAUDE.md if it matters for new agents.
+The level label stays `crew` — it now means "crew preset, except `graphify=per-repo`." `wb_dial <project> <name>` resolves `dial_overrides.<name>` first and falls back to the level preset. Document the override in the project's CLAUDE.md if it matters for new agents.
 
 ## Lifecycle dirs per level
 

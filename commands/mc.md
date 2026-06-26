@@ -9,4 +9,4 @@ Show the workbench Mission Control dashboard for this project.
 Run it with your Bash tool and show the output verbatim:
 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/mc.sh" $ARGUMENTS`
 
-It reads `.workbench/config.json` for the project name, lifecycle states, in-review cap, repos, and prod URLs. Useful flags: `--no-prod` (skip network health checks), `--no-build` (skip cargo/tsc). If the user asked about one specific task rather than overall status, read that task file under `.claude/tasks/` directly instead of running the dashboard.
+It reads `.workbench/config.json` for the project name, level (lifecycle stages are derived from it), in-review cap, repos, and prod URLs. Useful flags: `--no-prod` (skip network health checks), `--no-build` (skip cargo/tsc). If the user asked about one specific task rather than overall status, read that task file under `.claude/tasks/` directly instead of running the dashboard.
