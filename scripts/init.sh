@@ -7,8 +7,9 @@ set -euo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"   # workbench/scripts
 PLUGIN_ROOT="$(cd "$SELF_DIR/.." && pwd)"                  # workbench
 . "$SELF_DIR/lib.sh"
+. "$SELF_DIR/levels.sh"
 
-NAME="" MISSION="" LAUNCH="" TARGET="$PWD" PROFILE="full"
+NAME="" MISSION="" LAUNCH="" TARGET="$PWD" PROFILE="full" LEVEL=""
 need_arg() { [ "$#" -ge 2 ] || { echo "init.sh: $1 requires a value" >&2; exit 64; }; }
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -17,6 +18,7 @@ while [ "$#" -gt 0 ]; do
     --launch)  need_arg "$@"; LAUNCH="$2"; shift 2 ;;
     --target)  need_arg "$@"; TARGET="$2"; shift 2 ;;
     --profile) need_arg "$@"; PROFILE="$2"; shift 2 ;;
+    --level)   need_arg "$@"; LEVEL="$2"; shift 2 ;;
     *) echo "init.sh: unknown arg '$1'" >&2; exit 64 ;;
   esac
 done
@@ -24,6 +26,9 @@ done
 [ -n "$MISSION" ] || MISSION="(mission not set)"
 [ -n "$LAUNCH" ]  || LAUNCH="(no target date)"
 case "$PROFILE" in minimal|full) ;; *) echo "init.sh: --profile must be minimal|full" >&2; exit 64 ;; esac
+# default level: fleet for full profile, solo for minimal
+[ -n "$LEVEL" ] || { [ "$PROFILE" = full ] && LEVEL="fleet" || LEVEL="solo"; }
+wb_level_index "$LEVEL" >/dev/null || { echo "init.sh: --level must be solo|pair|crew|fleet" >&2; exit 64; }
 
 VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PLUGIN_ROOT/.claude-plugin/plugin.json" | head -1)"
 [ -n "$VERSION" ] || { echo "init.sh: could not read plugin version from plugin.json" >&2; exit 1; }
@@ -46,9 +51,8 @@ copy_new() { # <src> <dest> <relpath>
   if [ -e "$2" ]; then note_preserved "$3"; else cp "$1" "$2"; fi
 }
 
-# 1. task lifecycle dirs
-# minimal lifecycle; ready-to-ship/ and shipped/ are added later when config.lifecycle.deploy_gated is true
-for d in backlog in-development in-review verified decisions; do
+# 1. task lifecycle dirs — driven by level
+for d in $(wb_level_lifecycle "$LEVEL"); do
   mkdir -p "$TARGET/.claude/tasks/$d"
 done
 # 2. task README (merge) + _next-id (once) — never clobber existing
@@ -89,9 +93,18 @@ fi
 mkdir -p "$TARGET/.workbench"
 if [ ! -f "$TARGET/.workbench/config.json" ]; then
   NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  # Build dials JSON block from level presets (sed-based, jq-free)
+  DIALS_JSON="$(wb_level_dials "$LEVEL" | sed 's/^\([^=]*\)=\(.*\)$/    "\1": "\2",/' | sed '$ s/,$//')"
+  # Build lifecycle states array from level (exclude decisions from the states array)
+  STATES_JSON="$(wb_level_lifecycle "$LEVEL" | tr ' ' '\n' | grep -v '^decisions$' | sed 's/.*/"&"/' | tr '\n' ',' | sed 's/,$//')"
+  # deploy_gated is true for crew and fleet
+  case "$LEVEL" in
+    crew|fleet) DEPLOY_GATED=true ;;
+    *)          DEPLOY_GATED=false ;;
+  esac
   cat > "$TARGET/.workbench/config.json" <<JSON
 {
-  "workbench": { "version": "$VERSION", "initialized_at": "$NOW" },
+  "workbench": { "version": "$VERSION", "initialized_at": "$NOW", "level": "$LEVEL" },
   "project": {
     "name": "$(il_json_escape "$NAME")",
     "mission": "$(il_json_escape "$MISSION")",
@@ -113,9 +126,12 @@ if [ ! -f "$TARGET/.workbench/config.json" ]; then
     "remote": "off",
     "inception_depth": "recommended"
   },
+  "dials": {
+$DIALS_JSON
+  },
   "lifecycle": {
-    "states": ["backlog", "in-development", "in-review", "verified", "decisions"],
-    "deploy_gated": false,
+    "states": [$STATES_JSON],
+    "deploy_gated": $DEPLOY_GATED,
     "in_review_cap": 10
   }
 }

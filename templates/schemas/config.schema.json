@@ -9,7 +9,8 @@
       "required": ["version", "initialized_at"],
       "properties": {
         "version": { "type": "string" },
-        "initialized_at": { "type": "string" }
+        "initialized_at": { "type": "string" },
+        "level": { "enum": ["solo", "pair", "crew", "fleet"] }
       }
     },
     "project": {
@@ -41,11 +42,23 @@
         "inception_depth": { "enum": ["leaner", "recommended", "better"] }
       }
     },
+    "dials": {
+      "type": "object",
+      "properties": {
+        "team": { "type": "string" },
+        "release": { "type": "string" },
+        "decomposition": { "type": "string" },
+        "architecture": { "type": "string" },
+        "surfaces": { "type": "string" },
+        "graphify": { "type": "string" },
+        "loop_autonomy": { "type": "string" }
+      }
+    },
     "lifecycle": {
       "type": "object",
       "required": ["states", "in_review_cap"],
       "properties": {
-        "states": { "type": "array", "items": { "type": "string", "enum": ["backlog", "in-development", "in-review", "verified", "ready-to-ship", "shipped", "decisions"] } },
+        "states": { "type": "array", "items": { "type": "string", "enum": ["backlog", "in-development", "in-review", "verified", "staged", "release-candidate", "ready-to-ship", "shipped", "decisions"] } },
         "deploy_gated": { "type": "boolean" },
         "in_review_cap": { "type": "integer" }
       }
