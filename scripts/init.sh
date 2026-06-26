@@ -9,7 +9,7 @@ PLUGIN_ROOT="$(cd "$SELF_DIR/.." && pwd)"                  # workbench
 . "$SELF_DIR/lib.sh"
 . "$SELF_DIR/levels.sh"
 
-NAME="" MISSION="" LAUNCH="" TARGET="$PWD" PROFILE="full" LEVEL="" LEVEL_EXPLICIT=0
+NAME="" MISSION="" LAUNCH="" TARGET="$PWD" PROFILE="full" LEVEL=""
 need_arg() { [ "$#" -ge 2 ] || { echo "init.sh: $1 requires a value" >&2; exit 64; }; }
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -18,7 +18,7 @@ while [ "$#" -gt 0 ]; do
     --launch)  need_arg "$@"; LAUNCH="$2"; shift 2 ;;
     --target)  need_arg "$@"; TARGET="$2"; shift 2 ;;
     --profile) need_arg "$@"; PROFILE="$2"; shift 2 ;;
-    --level)   need_arg "$@"; LEVEL="$2"; LEVEL_EXPLICIT=1; shift 2 ;;
+    --level)   need_arg "$@"; LEVEL="$2"; shift 2 ;;
     *) echo "init.sh: unknown arg '$1'" >&2; exit 64 ;;
   esac
 done
@@ -91,17 +91,17 @@ fi
 
 # 4. .workbench/config.json
 mkdir -p "$TARGET/.workbench"
-# Build level-derived blocks (used for both fresh write and re-stamp)
-DIALS_JSON="$(wb_level_dials "$LEVEL" | sed 's/^\([^=]*\)=\(.*\)$/    "\1": "\2",/' | sed '$ s/,$//')"
-STATES_JSON="$(wb_level_lifecycle "$LEVEL" | tr ' ' '\n' | grep -v '^decisions$' | sed 's/.*/"&"/' | tr '\n' ',' | sed 's/,$//')"
-case "$LEVEL" in
-  crew|fleet) DEPLOY_GATED=true ;;
-  *)          DEPLOY_GATED=false ;;
-esac
-
 if [ ! -f "$TARGET/.workbench/config.json" ]; then
-  # Fresh project: write a full config — always, regardless of LEVEL_EXPLICIT
   NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  # Build dials JSON block from level presets (sed-based, jq-free)
+  DIALS_JSON="$(wb_level_dials "$LEVEL" | sed 's/^\([^=]*\)=\(.*\)$/    "\1": "\2",/' | sed '$ s/,$//')"
+  # Build lifecycle states array from level (exclude decisions from the states array)
+  STATES_JSON="$(wb_level_lifecycle "$LEVEL" | tr ' ' '\n' | grep -v '^decisions$' | sed 's/.*/"&"/' | tr '\n' ',' | sed 's/,$//')"
+  # deploy_gated is true for crew and fleet
+  case "$LEVEL" in
+    crew|fleet) DEPLOY_GATED=true ;;
+    *)          DEPLOY_GATED=false ;;
+  esac
   cat > "$TARGET/.workbench/config.json" <<JSON
 {
   "workbench": { "version": "$VERSION", "initialized_at": "$NOW", "level": "$LEVEL" },
@@ -133,97 +133,6 @@ $DIALS_JSON
     "states": [$STATES_JSON],
     "deploy_gated": $DEPLOY_GATED,
     "in_review_cap": 10
-  }
-}
-JSON
-elif [ "$LEVEL_EXPLICIT" = 1 ]; then
-  # Existing config + --level explicitly given: re-stamp level-derived fields (level,
-  # dials, lifecycle.states, deploy_gated) while preserving all other fields (project,
-  # way_of_working, workbench.initialized_at, in_review_cap).
-  _CFG="$TARGET/.workbench/config.json"
-
-  # Extract preserved scalar fields using sed (jq-free)
-  _INIT_AT="$(sed -n 's/.*"initialized_at"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_CFG" | head -1)"
-  [ -n "$_INIT_AT" ] || _INIT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-  _IN_REVIEW_CAP="$(sed -n 's/.*"in_review_cap"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p' "$_CFG" | head -1)"
-  [ -n "$_IN_REVIEW_CAP" ] || _IN_REVIEW_CAP=10
-
-  # Extract multi-line blocks: project{}, way_of_working{}
-  # Strategy: read lines sequentially, capture from the line where "key": { is found
-  # through the line where brace depth returns to zero. Only works on well-formatted
-  # (multi-line) JSON; for single-line/minimal configs we fall back to defaults below.
-  _extract_block() { # <key> <file> — prints "  \"key\": { ... }" block or nothing
-    local key="$1" file="$2" depth=0 capturing=0 out=""
-    while IFS= read -r line; do
-      if [ "$capturing" = 0 ]; then
-        # Match a line that is ONLY the block opener (not an inline single-line JSON)
-        if printf '%s\n' "$line" | grep -qE "^[[:space:]]*\"$key\"[[:space:]]*:[[:space:]]*\{"; then
-          capturing=1
-          local opens closes
-          opens=$(printf '%s\n' "$line" | tr -cd '{' | wc -c)
-          closes=$(printf '%s\n' "$line" | tr -cd '}' | wc -c)
-          depth=$(( opens - closes ))
-          out="$line"
-          # Single-line block (depth already 0): done
-          [ "$depth" -le 0 ] && { printf '%s\n' "$out"; return; }
-        fi
-      else
-        local opens closes
-        opens=$(printf '%s\n' "$line" | tr -cd '{' | wc -c)
-        closes=$(printf '%s\n' "$line" | tr -cd '}' | wc -c)
-        depth=$(( depth + opens - closes ))
-        out="${out}"$'\n'"${line}"
-        [ "$depth" -le 0 ] && { printf '%s\n' "$out"; return; }
-      fi
-    done < "$file"
-  }
-
-  _PROJECT_BLOCK="$(_extract_block project "$_CFG")"
-  _WOW_BLOCK="$(_extract_block way_of_working "$_CFG")"
-
-  # For the project block: if not found (wizard-minimal path), try to preserve at least
-  # project.name from the existing config, then build a full block with defaults.
-  if [ -z "$_PROJECT_BLOCK" ]; then
-    _PROJ_NAME="$(sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_CFG" | head -1)"
-    [ -n "$_PROJ_NAME" ] || _PROJ_NAME="$(il_json_escape "$NAME")"
-    _PROJECT_BLOCK="  \"project\": {
-    \"name\": \"$(il_json_escape "$_PROJ_NAME")\",
-    \"mission\": \"$(il_json_escape "$MISSION")\",
-    \"launch_target\": \"$(il_json_escape "$LAUNCH")\",
-    \"kind\": \"existing\",
-    \"topology\": \"single\",
-    \"repos\": [],
-    \"prod\": {}
-  }"
-  fi
-  if [ -z "$_WOW_BLOCK" ]; then
-    _WOW_BLOCK="  \"way_of_working\": {
-    \"models\": \"recommended\",
-    \"verification\": \"recommended\",
-    \"review\": \"recommended\",
-    \"parallelism\": \"recommended\",
-    \"enforcement\": \"warn-default\",
-    \"continuity\": \"recommended\",
-    \"graphify\": \"off\",
-    \"codex\": \"off\",
-    \"remote\": \"off\",
-    \"inception_depth\": \"recommended\"
-  }"
-  fi
-
-  cat > "$_CFG" <<JSON
-{
-  "workbench": { "version": "$VERSION", "initialized_at": "$_INIT_AT", "level": "$LEVEL" },
-$_PROJECT_BLOCK,
-$_WOW_BLOCK,
-  "dials": {
-$DIALS_JSON
-  },
-  "lifecycle": {
-    "states": [$STATES_JSON],
-    "deploy_gated": $DEPLOY_GATED,
-    "in_review_cap": $_IN_REVIEW_CAP
   }
 }
 JSON
