@@ -18,6 +18,8 @@ echo "workbench drift — project manifest v${MAN_VER:-?} vs plugin v${PLUGIN_VE
 [ "$MAN_VER" != "$PLUGIN_VER" ] && echo "  (plugin version advanced — managed templates may have changed)"
 echo ""
 
+command -v python3 >/dev/null 2>&1 || { echo "drift: python3 is required to classify drift but was not found on PATH." >&2; exit 3; }
+
 python3 - "$M" "$P" <<'PY'
 import json, sys, hashlib, os
 man, proj = sys.argv[1], sys.argv[2]

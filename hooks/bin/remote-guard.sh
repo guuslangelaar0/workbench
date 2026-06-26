@@ -27,34 +27,42 @@ try:
 except Exception:
     pass' 2>/dev/null || true)"
 fi
-# fallback (no python3, or it failed): best-effort extract ONLY the command field —
-# never scan the whole payload, or a benign command's description naming a dangerous
-# one would false-block (and a trailing JSON quote would hide a real one).
-[ -n "$cmd" ] || cmd="$(printf '%s' "$input" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+# fallback (no python3, or it failed): best-effort extract ONLY the FIRST command
+# field — never scan the whole payload, or a benign command's description naming a
+# dangerous one would false-block. grep -o + head -1 takes the first occurrence so a
+# second decoy "command" key downstream can't hide the real one.
+[ -n "$cmd" ] || cmd="$(printf '%s' "$input" | grep -oE '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*:[[:space:]]*"([^"]*)"/\1/')"
 scan="$cmd"   # the command only; empty (unparseable) → no pattern matches → fails open
 
 block() { echo "workbench remote-guard: blocked — $1. If truly intended, run it locally with explicit approval (this guard protects remote-driven sessions)." >&2; exit 2; }
 
-# rm -rf / -fr targeting the ROOT (/ or /*) — a trailing slash still counts (// == /).
-rm_root_rf='rm[[:space:]]+-[a-z]*r[a-z]*f[a-z]*[[:space:]]+(--[a-z-]+[[:space:]]+)*(/|/\*)([[:space:]/]|$)'
-rm_root_fr='rm[[:space:]]+-[a-z]*f[a-z]*r[a-z]*[[:space:]]+(--[a-z-]+[[:space:]]+)*(/|/\*)([[:space:]/]|$)'
-# rm -rf / -fr targeting HOME itself (~, ~/, $HOME) as a WHOLE word, NOT a subpath —
-# so `rm -rf ~/project` and `rm -rf $HOME/build` are ordinary cleanup and allowed.
-rm_home_rf='rm[[:space:]]+-[a-z]*r[a-z]*f[a-z]*[[:space:]]+(--[a-z-]+[[:space:]]+)*(~|~/|\$\{?home\}?)([[:space:]]|$)'
-rm_home_fr='rm[[:space:]]+-[a-z]*f[a-z]*r[a-z]*[[:space:]]+(--[a-z-]+[[:space:]]+)*(~|~/|\$\{?home\}?)([[:space:]]|$)'
-if printf '%s' "$scan" | grep -Eiq "$rm_root_rf" \
-   || printf '%s' "$scan" | grep -Eiq "$rm_root_fr" \
-   || printf '%s' "$scan" | grep -Eiq "$rm_home_rf" \
-   || printf '%s' "$scan" | grep -Eiq "$rm_home_fr" \
-   || printf '%s' "$scan" | grep -Eiq 'rm[[:space:]].*--no-preserve-root'; then
-  block "catastrophic 'rm' on a root/home path"
+# Recursive + force `rm` on a top-level dangerous target, in ANY flag arrangement:
+# -rf, -fr, -r -f, -Rf, --recursive --force, or split/combined short clusters (-xrf).
+# The recursive and force flags are matched INDEPENDENTLY so order/joining doesn't
+# matter. Subpaths (~/project, $HOME/build, /usr) are ordinary cleanup and allowed;
+# only the bare root/home (/, /*, ~, ~/, $HOME, $HOME/, $HOME/*) trips the target.
+rm_recursive='(^|[[:space:]])(-[a-z]*r[a-z]*|--recursive)([[:space:]]|$)'
+rm_force='(^|[[:space:]])(-[a-z]*f[a-z]*|--force)([[:space:]]|$)'
+danger_target='(^|[[:space:]])(/|/\*|~|~/|\$\{?[Hh][Oo][Mm][Ee]\}?/?\*?)([[:space:]]|$)'
+if printf '%s' "$scan" | grep -Eq '(^|[;&|[:space:]])rm([[:space:]]|$)'; then
+  # --no-preserve-root exists only to defeat rm's built-in / protection → block outright
+  if printf '%s' "$scan" | grep -Eq -- '--no-preserve-root'; then
+    block "catastrophic 'rm --no-preserve-root'"
+  fi
+  if printf '%s' "$scan" | grep -Eiq "$rm_recursive" \
+     && printf '%s' "$scan" | grep -Eiq "$rm_force" \
+     && printf '%s' "$scan" | grep -Eq "$danger_target"; then
+    block "catastrophic recursive 'rm' on a root/home path"
+  fi
 fi
 
-# force-push (allow the safe --force-with-lease)
-if printf '%s' "$scan" | grep -Eq 'git[[:space:]]+push'; then
-  if printf '%s' "$scan" | grep -Eq -- '--force-with-lease'; then
-    :   # safe form — allow
-  elif printf '%s' "$scan" | grep -Eq -- '(--force([[:space:]]|=|$)|[[:space:]]-f([[:space:]]|$))'; then
+# force-push. The safe --force-with-lease (alone) is allowed; a plain --force or any
+# short flag cluster containing f (-f, -xf, --force-with-lease --force) is blocked.
+# `--force([[:space:]]|=|$)` does NOT match the substring inside --force-with-lease
+# (followed by '-'), so the lease form passes while a co-present plain --force trips.
+if printf '%s' "$scan" | grep -Eq '(^|[[:space:]])git[[:space:]]+push'; then
+  if printf '%s' "$scan" | grep -Eq -- '--force([[:space:]]|=|$)' \
+     || printf '%s' "$scan" | grep -Eq '(^|[[:space:]])-[a-z]*f[a-z]*([[:space:]]|$)'; then
     block "'git push --force' (use --force-with-lease locally instead)"
   fi
 fi

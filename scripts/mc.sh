@@ -78,7 +78,7 @@ fi
 section "Tasks"
 for d in $STATES; do
   n="$(find ".claude/tasks/$d" -maxdepth 1 -name '*.md' -type f 2>/dev/null | wc -l | tr -d ' ')"
-  ids="$(find ".claude/tasks/$d" -maxdepth 1 -name '*.md' -type f 2>/dev/null | sed 's#.*/##; s/\.md$//' | grep -oE '^[0-9]{4}' 2>/dev/null | sort -u | tr '\n' ' ' | sed 's/ $//' || true)"
+  ids="$(find ".claude/tasks/$d" -maxdepth 1 -name '*.md' -type f 2>/dev/null | sed 's#.*/##; s/\.md$//' | grep -oE '^[0-9]{4,}' 2>/dev/null | sort -u | tr '\n' ' ' | sed 's/ $//' || true)"
   color="$C_GREY"; warn=""
   case "$d" in
     in-development|decisions|staged) color="$C_AMBER" ;;
@@ -153,7 +153,7 @@ for r in json.load(open(sys.argv[1])).get("project",{}).get("repos",[]):
       [[ -n "$rp" ]] || continue
       repo="$ROOT/$rp"; name="$(basename "$rp")"
       if [[ -f "$repo/Cargo.toml" ]]; then
-        if (cd "$repo" && cargo check --quiet --message-format=short 2>&1 | tail -1 | grep -q error); then
+        if (cd "$repo" && cargo check --quiet --message-format=short 2>&1 | grep -qE '(^error|: error)'); then
           printf "  ${C_RED}%-12s${C_RESET} cargo check FAIL\n" "$name"
         else printf "  ${C_GREEN}%-12s${C_RESET} cargo check ok\n" "$name"; fi
       elif [[ -f "$repo/package.json" && -f "$repo/tsconfig.json" ]]; then
