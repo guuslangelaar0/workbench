@@ -28,4 +28,26 @@ sid="$(ls "$T4/.claude/tasks/backlog" | head -1 | sed 's/-.*//')"
 chk "solo: staged is rejected" "! bash \"$HERE/scripts/task-move.sh\" --target \"$T4\" \"$sid\" staged >/dev/null 2>&1"
 rm -rf "$T3" "$T4"
 
+# C2: re-stamp: init solo then re-run init with --level crew on the same target
+T5="$(mktemp -d)"
+bash "$HERE/scripts/init.sh" --profile full --level solo --name "ReSt" --mission "m" --target "$T5" >/dev/null 2>&1
+# Add a sentinel field to CLAUDE.md to verify it is preserved across re-run
+echo "# SENTINEL_MARKER" >> "$T5/CLAUDE.md"
+bash "$HERE/scripts/init.sh" --profile full --level crew --name "ReSt" --mission "m" --target "$T5" >/dev/null 2>&1
+chk "restamp: config level=crew"          "grep -q '\"level\": \"crew\"' '$T5/.workbench/config.json'"
+chk "restamp: dials loop_autonomy=suggest-wait" "grep -q '\"loop_autonomy\": \"suggest-wait\"' '$T5/.workbench/config.json'"
+chk "restamp: lifecycle has staged"       "grep -q '\"staged\"' '$T5/.workbench/config.json'"
+chk "restamp: CLAUDE.md sentinel preserved" "grep -q 'SENTINEL_MARKER' '$T5/CLAUDE.md'"
+rm -rf "$T5"
+
+# C3: wizard path — minimal config without dials/level; init.sh should insert them
+T6="$(mktemp -d)"
+mkdir -p "$T6/.workbench"
+printf '{"workbench":{"version":"0.1.0"},"project":{"name":"W"}}\n' > "$T6/.workbench/config.json"
+bash "$HERE/scripts/init.sh" --profile minimal --level pair --name "W" --target "$T6" >/dev/null 2>&1
+chk "wizard-path: dials inserted"         "grep -q '\"loop_autonomy\"' '$T6/.workbench/config.json'"
+chk "wizard-path: level=pair inserted"    "grep -q '\"level\": \"pair\"' '$T6/.workbench/config.json'"
+chk "wizard-path: project.name preserved" "grep -q '\"name\": \"W\"' '$T6/.workbench/config.json'"
+rm -rf "$T6"
+
 [ "$fail" = 0 ] && echo "PASS: lifecycle" || { echo "lifecycle test failed"; exit 1; }

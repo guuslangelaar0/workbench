@@ -91,8 +91,11 @@ If the user answers anything other than `yes`, print "Cancelled." and stop.
 Run `init.sh` in non-destructive mode (it only adds missing stage dirs and re-stamps level and dials; existing tasks are untouched):
 
 ```bash
+_wb_cfg="${CLAUDE_PROJECT_DIR}/.workbench/config.json"
+_wb_name="$(sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_wb_cfg" | head -1)"
+[ -n "$_wb_name" ] || _wb_name="project"
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/init.sh" \
-  --name "$(jq -r '.project.name // "project"' "${CLAUDE_PROJECT_DIR}/.workbench/config.json")" \
+  --name "$_wb_name" \
   --level "<target>" \
   --target "${CLAUDE_PROJECT_DIR}"
 ```
