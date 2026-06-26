@@ -1,13 +1,38 @@
 ---
 name: setup
-description: Use when running /workbench:setup, when bare /workbench finds no .workbench/config.json, or when any /workbench command is invoked in an unconfigured project. Runs the guided per-axis configuration wizard, writes .workbench/config.json, and scaffolds the project.
+description: Use when running /workbench:setup, when bare /workbench finds no .workbench/config.json, or when any /workbench command is invoked in an unconfigured project. Runs the level-aware adoption wizard: assesses existing repo signals, gives positive feedback, infers and recommends a maturity level, then runs the guided per-axis configuration wizard, writes .workbench/config.json, and scaffolds the project.
 ---
 
 # workbench setup wizard
 
-Configure a project's way of working, **one axis at a time**, each as an `AskUserQuestion` card. The user's battle-tested choice is the **Recommended** option (listed first); also offer **Better** (more thorough / pricier) and **Leaner** (cheaper / faster) with a plain-language cost note. Never dump all questions at once — walk them, but you MAY offer at the very start: "accept all Recommended and tune later, or walk each axis?" (a convenience; default is walk).
+## Step 0: Assess the existing project (run first, before asking any questions)
 
-## Flow
+Before prompting the user for anything, **read the project signals** to understand what's already in place:
+
+- **Git history**: `git log --oneline -20` — how many commits, how long running, branching patterns
+- **Branch model**: `git branch -a` — feature branches? main-only? tags?
+- **Tags**: `git tag` — are there versioned releases?
+- **Repo count**: is this a single repo or a multi-repo workspace?
+- **Existing tasks/docs**: does `.claude/tasks/` exist? `CLAUDE.md`? `AGENTS.md`? `SOUL.md`?
+
+Then **give positive feedback**: name what's already good. Example: "You have 87 commits with consistent message style, a feature-branch workflow, and two tagged releases — that's a solid foundation." Be specific, not generic. This is the first thing the user hears — make it feel like a colleague who's paying attention, not a form.
+
+## Step 0b: Infer level and recommend
+
+Map the signals to a maturity level using `wb_level_index` ordering (from `scripts/levels.sh`):
+
+| Level | Signals that suggest it |
+|-------|------------------------|
+| `solo` | Single committer, main-only or rare branches, no tags, no task system |
+| `pair` | 2–3 committers or consistent feature-branch pattern, some tags, light task tracking |
+| `crew` | 3–8 committers, tagged releases, CI, epics or milestones, multi-repo awareness |
+| `fleet` | 8+ committers, release trains, release-candidate branches, federated repos, formal decomposition |
+
+State the inferred level plainly: "Based on your git history, this looks like a **pair**-level project." Then recommend whether to stay at that level or move up, with one sentence of reasoning. Ask: "Does **pair** sound right, or would you like to adjust?" — this is the level override question. The chosen level becomes the `--level` argument to `init.sh`.
+
+The per-axis dial questions below remain available as the **override mechanism** — after level selection, offer to walk the axes for fine-tuning, or accept all level defaults and scaffold immediately.
+
+## Flow (continues after assessment)
 
 1. **Project basics** (not tiered — ask directly): project name; one-line mission; launch target (optional); greenfield or existing project; repo topology (single repo or multi-repo workspace) + repo names/stacks if known; production URLs if any.
 2. **Tiered axes** — ask each as an `AskUserQuestion` (Recommended first). The axis definitions:
@@ -33,7 +58,7 @@ Cost-note guidance: phrase Better as "more thorough / higher spend", Leaner as "
 
 4. **Write `.workbench/config.json`** with all answers (use the schema at `${CLAUDE_PLUGIN_ROOT}/templates/schemas/config.schema.json`; set `workbench.version` from the plugin's `plugin.json`, `initialized_at` to now). Write it BEFORE scaffolding.
 
-5. **Scaffold**: run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/init.sh" --name "<name>" --mission "<mission>" --launch "<launch>" --profile full --target "${CLAUDE_PROJECT_DIR}"`. init.sh is a **greenfield scaffold: it never overwrites a file that already exists** — your richer config and any existing CLAUDE.md/AGENTS.md/SOUL.md/coord scripts are preserved (it reports which), and it only writes the files that are missing, plus the manifest + git hook. To reconcile preserved files against the current templates, the user runs `/workbench:upgrade` — that is the only path that touches existing managed files.
+5. **Scaffold**: run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/init.sh" --name "<name>" --mission "<mission>" --launch "<launch>" --level "<chosen-level>" --profile full --target "${CLAUDE_PROJECT_DIR}"`. The `--level` flag uses the level chosen in Step 0b (solo/pair/crew/fleet). init.sh is a **greenfield scaffold: it never overwrites a file that already exists** — your richer config and any existing CLAUDE.md/AGENTS.md/SOUL.md/coord scripts are preserved (it reports which), and it only writes the files that are missing, plus the manifest + git hook. To reconcile preserved files against the current templates, the user runs `/workbench:upgrade` — that is the only path that touches existing managed files.
 
 6. **Next step**: greenfield → offer `/workbench:inception` (the product-genesis brainstorm). Existing → tell them `/workbench:boot` then `/workbench:loop`. Summarize what was configured (the chosen tiers) and what was scaffolded.
 
