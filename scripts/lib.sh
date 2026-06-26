@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared helpers for initlab scripts. No jq dependency.
+# Shared helpers for workbench scripts. No jq dependency.
 
 # Resolve the workbench config dir for a project root: prefer .workbench/,
 # fall back to a legacy .initlab/ so adopted projects keep working pre-migration.

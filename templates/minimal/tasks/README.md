@@ -45,7 +45,7 @@ Status is which subdirectory a task file is in. Transitions are `git mv`. Full h
 ```
 
 Required fields: ID in title, `**Status:**`, `**Repo(s):**`, `**Verification:**`, `## Why`.
-Optional fields: `**Track:**` (topic-lead scoping), `**Estimate:**` (surfaced in `/initlab:mc`), `**Created:**`. Create tasks with `/initlab:task "<title>"` — it allocates the ID and renders this format for you.
+Optional fields: `**Track:**` (topic-lead scoping), `**Estimate:**` (surfaced in `/workbench:mc`), `**Created:**`. Create tasks with `/workbench:task "<title>"` — it allocates the ID and renders this format for you.
 
 ## ID assignment
 
@@ -61,4 +61,4 @@ decisions/  (created any time the agent needs the human; answered -> moved to ba
 
 ## In-review cap
 
-`ls .claude/tasks/in-review | wc -l` is bounded by the cap (default 10, set in `.initlab/config.json` as `lifecycle.in_review_cap`). When the count nears the cap (cap − 3, i.e. 7 at the default), **hard-drain**: stop taking new work and verify oldest-first (by ID) until the count is cap − 6 (i.e. 4) or lower. An unbounded in-review queue is where "done" claims pile up and the directory stops reflecting reality.
+`ls .claude/tasks/in-review | wc -l` is bounded by the cap (default 10, set in `.workbench/config.json` as `lifecycle.in_review_cap`). When the count nears the cap (cap − 3, i.e. 7 at the default), **hard-drain**: stop taking new work and verify oldest-first (by ID) until the count is cap − 6 (i.e. 4) or lower. An unbounded in-review queue is where "done" claims pile up and the directory stops reflecting reality.

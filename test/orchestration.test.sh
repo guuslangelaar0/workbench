@@ -2,7 +2,7 @@
 # Presence + content checks for the orchestration layer: skills, agents, commands,
 # and the task template's Estimate field.
 set -uo pipefail
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # tools/initlab
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # workbench
 S="$HERE/skills"; A="$HERE/agents"; C="$HERE/commands"
 fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }

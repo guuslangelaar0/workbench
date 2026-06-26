@@ -1,9 +1,9 @@
 ---
 name: upgrade
-description: Use when running /initlab:upgrade — reconcile a project's initlab-generated files to the current plugin version, preserving user edits.
+description: Use when running /workbench:upgrade — reconcile a project's workbench-generated files to the current plugin version, preserving user edits.
 ---
 
-# initlab upgrade (reconcile)
+# workbench upgrade (reconcile)
 
 Bring a project's generated files up to the current plugin version without clobbering the user's edits. This is intelligent migration — you read each file and decide, you don't blindly copy.
 
@@ -17,12 +17,12 @@ Bring a project's generated files up to the current plugin version without clobb
    - **`merge` + edited**: **semantically merge.** Read the user's current file AND the current template. Produce a merged version that KEEPS the user's project-specific content and customizations while pulling in the new way-of-working structure/sections from the template. Present the result (or a diff) for approval before writing. You do not need the old template — the `edited` status already tells you they customized it; reconcile current ⊕ new-template by meaning, not by mechanical 3-way.
    - **`once`** (SESSION_STATE, _next-id): never touch.
    - **`missing`**: offer to regenerate it.
-4. After applying approved changes, re-stamp `.initlab/manifest.json`: update each touched file's `rendered_hash` to its new content hash and `from_version` to the current plugin version, and set top-level `plugin_version` to current.
+4. After applying approved changes, re-stamp `.workbench/manifest.json`: update each touched file's `rendered_hash` to its new content hash and `from_version` to the current plugin version, and set top-level `plugin_version` to current.
 5. Summarize what changed, what was preserved, and what you skipped.
 
 ## Rendering templates
 
-When you regenerate a file from a template (any `managed` or `merge` file whose body comes from a `${CLAUDE_PLUGIN_ROOT}/templates/...tmpl`), read the token values from `.initlab/config.json` before rendering:
+When you regenerate a file from a template (any `managed` or `merge` file whose body comes from a `${CLAUDE_PLUGIN_ROOT}/templates/...tmpl`), read the token values from `.workbench/config.json` before rendering:
 
 - `project.name` → `{{PROJECT_NAME}}`
 - `project.mission` → `{{MISSION}}`

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run every initlab test. Exits non-zero if any fail.
+# Run every workbench test. Exits non-zero if any fail.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 rc=0

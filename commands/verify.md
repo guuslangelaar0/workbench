@@ -7,7 +7,7 @@ argument-hint: "<id>"
 Run the verification gate for a task. Follow the `orchestration` and `task-lifecycle` skills.
 
 1. Parse the task `<id>` from `$ARGUMENTS`. Read its `**Verification:**` field and acceptance criteria.
-2. Apply the gate per `way_of_working.verification` in `.initlab/config.json`:
+2. Apply the gate per `way_of_working.verification` in `.workbench/config.json`:
    - `leaner` — run the verification yourself (the engineer already self-verified); spot-check.
    - `recommended` — spawn a `verifier` (Task tool, `subagent_type: verifier`, model per the `models` skill) to independently run it and return evidence.
    - `better` — spawn several verifiers with an adversarial framing; require a majority PASS.

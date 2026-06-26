@@ -2,7 +2,7 @@
 # Verifies the workbench plugin skeleton is well-formed and registered.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"        # tools/workbench
-MARKET="$HERE/../.claude-plugin/marketplace.json"             # tools/.claude-plugin/marketplace.json
+MARKET="$HERE/.claude-plugin/marketplace.json"               # workbench/.claude-plugin/marketplace.json
 fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
 

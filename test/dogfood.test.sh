@@ -3,7 +3,7 @@
 # (init → tasks → lifecycle → mc → coord claims → drift → ground-brief). Catches
 # integration regressions the per-unit suites miss.
 set -uo pipefail
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # tools/initlab
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # workbench
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 fail=0
@@ -31,10 +31,10 @@ chk "mc names the project"        "printf '%s' \"\$mc\" | grep -q Dogfood"
 chk "mc shows verified + backlog" "printf '%s' \"\$mc\" | grep -q verified && printf '%s' \"\$mc\" | grep -q backlog"
 
 # coordination claim is visible cross-session
-export BB_WORKSPACE_ROOT="$TMP"
-BB_SID_OVERRIDE=df1 bash "$TMP/scripts/coord/bb-coord" claim task:0002 >/dev/null 2>&1
-chk "coord claim visible cross-session" "BB_SID_OVERRIDE=df2 bash '$TMP/scripts/coord/bb-coord' claims task:0002 >/dev/null 2>&1"
-unset BB_WORKSPACE_ROOT
+export WB_WORKSPACE_ROOT="$TMP"
+WB_SID_OVERRIDE=df1 bash "$TMP/scripts/coord/wb-coord" claim task:0002 >/dev/null 2>&1
+chk "coord claim visible cross-session" "WB_SID_OVERRIDE=df2 bash '$TMP/scripts/coord/wb-coord' claims task:0002 >/dev/null 2>&1"
+unset WB_WORKSPACE_ROOT
 
 # the SessionStart operating brief reflects disk reality
 chk "ground brief names the project + counts" "gs_out=\$(CLAUDE_PROJECT_DIR='$TMP' bash '$HERE/hooks/bin/ground-session.sh' 2>/dev/null); printf '%s' \"\$gs_out\" | grep -q 'Dogfood'"

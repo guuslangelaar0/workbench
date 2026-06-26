@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# initlab SessionStart re-ground hook. Prints a disk-derived operating brief to
+# workbench SessionStart re-ground hook. Prints a disk-derived operating brief to
 # stdout (Claude Code injects SessionStart stdout as context). No-ops unless this
-# is an initlab project. Keep output well under the ~10k char cap.
+# is a workbench project. Keep output well under the ~10k char cap.
 set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SELF_DIR/../../scripts/lib.sh"
@@ -14,8 +14,8 @@ name="$(sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_cfg" |
 count() { ls -1 "$T/$1" 2>/dev/null | grep -c '\.md$' || true; }
 cap="$(sed -n 's/.*"in_review_cap"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p' "$_cfg" | head -1)"; [ -n "$cap" ] || cap=10
 
-echo "=== initlab operating brief: ${name:-this project} ==="
-echo "This project uses initlab. Embody .claude/SOUL.md; follow the loop in CLAUDE.md."
+echo "=== workbench operating brief: ${name:-this project} ==="
+echo "This project uses workbench. Embody .claude/SOUL.md; follow the loop in CLAUDE.md."
 echo "A task is NOT done until verified/ with evidence. 'In review' is not done."
 echo ""
 echo "Tasks: backlog $(count backlog) · in-development $(count in-development) · in-review $(count in-review)/$cap · verified $(count verified) · decisions $(count decisions)"
@@ -33,10 +33,10 @@ if [ -f "$P/.claude/SESSION_STATE.md" ]; then
   [ -n "$snap" ] && { echo ""; echo "SESSION_STATE 'Now' snapshot:"; printf '%s\n' "$snap"; }
 fi
 
-if [ -x "$P/scripts/coord/bb-coord" ]; then
+if [ -x "$P/scripts/coord/wb-coord" ]; then
   # Anchor presence on this project (CLAUDE_PROJECT_DIR), not the cwd — otherwise
-  # bb-coord re-derives the root from wherever the shell happens to be and would
+  # wb-coord re-derives the root from wherever the shell happens to be and would
   # surface sessions from an unrelated repo.
-  echo ""; echo "Other live sessions:"; BB_WORKSPACE_ROOT="$P" "$P/scripts/coord/bb-coord" who 2>/dev/null | sed 's/^/  /' | head -6
+  echo ""; echo "Other live sessions:"; WB_WORKSPACE_ROOT="$P" "$P/scripts/coord/wb-coord" who 2>/dev/null | sed 's/^/  /' | head -6
 fi
 exit 0

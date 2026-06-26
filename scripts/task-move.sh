@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# initlab: move a task between lifecycle states (git mv when tracked, else mv) and
+# workbench: move a task between lifecycle states (git mv when tracked, else mv) and
 # rewrite its **Status:** field to match. Deterministic + python-free. The lead
-# runs this for all lifecycle transitions (/initlab:dispatch, /initlab:verify).
+# runs this for all lifecycle transitions (/workbench:dispatch, /workbench:verify).
 #
 # Usage: task-move.sh <id> <to-state> [--target DIR]
 set -euo pipefail
@@ -18,7 +18,7 @@ done
 TARGET="${TARGET%/}"; [ -n "$TARGET" ] || TARGET="/"
 
 T="$TARGET/.claude/tasks"
-[ -d "$T" ] || { echo "task-move.sh: no $T (not an initlab project?)" >&2; exit 1; }
+[ -d "$T" ] || { echo "task-move.sh: no $T (not a workbench project?)" >&2; exit 1; }
 src="$(find "$T" -maxdepth 2 -type f \( -name "$ID-*.md" -o -name "$ID.md" \) 2>/dev/null | sort | head -1)"
 [ -n "$src" ] || { echo "task-move.sh: no task file for id $ID under $T" >&2; exit 1; }
 
@@ -45,4 +45,4 @@ if ! grep -q '^\*\*Status:\*\*' "$dest"; then
 fi
 
 from="$(basename "$(dirname "$src")")"
-echo "initlab: moved $ID  $from -> $TO  ($dest)"
+echo "workbench: moved $ID  $from -> $TO  ($dest)"

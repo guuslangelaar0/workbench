@@ -1,12 +1,12 @@
 ---
-description: Run the autonomous initlab teamlead loop (pick → dispatch → verify-gate → never stop)
+description: Run the autonomous workbench teamlead loop (pick → dispatch → verify-gate → never stop)
 allowed-tools: ["Bash", "Read", "Edit", "Write", "Glob", "Grep", "Task", "TodoWrite", "ScheduleWakeup"]
 ---
 
-Run the initlab orchestration loop for this project. **Invoke the `orchestration` skill and follow it exactly** — you are the lead coordinator and you never write code directly.
+Run the workbench orchestration loop for this project. **Invoke the `orchestration` skill and follow it exactly** — you are the lead coordinator and you never write code directly.
 
-1. Start with a reality check: `/initlab:mc` (task counts, in-review vs cap, decisions, build, prod). Trust disk over memory.
-2. Then run the loop from the `orchestration` skill: drain in-review (hard-drain at `cap − 3`) → pick the highest-impact unblocked task → `/initlab:dispatch` it to an engineer → gate and `/initlab:verify` → lifecycle `git mv` → surface honesty triggers to `decisions/` without stopping → checkpoint `SESSION_STATE.md` on cadence (`session-continuity`) → **never stop**; always pick the next task.
+1. Start with a reality check: `/workbench:mc` (task counts, in-review vs cap, decisions, build, prod). Trust disk over memory.
+2. Then run the loop from the `orchestration` skill: drain in-review (hard-drain at `cap − 3`) → pick the highest-impact unblocked task → `/workbench:dispatch` it to an engineer → gate and `/workbench:verify` → lifecycle `git mv` → surface honesty triggers to `decisions/` without stopping → checkpoint `SESSION_STATE.md` on cadence (`session-continuity`) → **never stop**; always pick the next task.
 3. Respect `way_of_working` tiers (models, verification, review, parallelism) and the in-review cap throughout.
 
 Keep 2–3 tasks queued per lane. Surface decisions to `.claude/tasks/decisions/` and keep going — do not park the loop waiting on the human.

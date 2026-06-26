@@ -32,7 +32,7 @@ case "$sub" in
       git -C "$top" worktree add -b "$br" "$wt"
     fi
     echo ""
-    echo "${BB_GRN}● worktree ready${BB_RST}  branch ${BB_BOLD}$br${BB_RST}"
+    echo "${WB_GRN}● worktree ready${WB_RST}  branch ${WB_BOLD}$br${WB_RST}"
     echo "  cd $wt"
     echo "  (work here; commits stay on '$br' and never collide with other tabs)"
     echo "  merge later:  git -C $top merge $br   (or open a PR)"

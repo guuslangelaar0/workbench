@@ -46,29 +46,29 @@ For task *ownership*, the task file + `git status` remain the coordination surfa
 
 Each open tab is an independent process sharing only the filesystem; there is no live supervisor. These tools (`scripts/coord/`) give isolation, enforcement, and visibility. State lives under `.claude/locks/` (gitignored).
 
-**C — presence / monitor.** Every Claude Code tab auto-registers via the initlab `PostToolUse` coord-ping hook (shipped by the plugin), so heartbeats stay fresh while you work — no discipline required. Inspect at any time:
-- `scripts/coord/bb-coord status` — live sessions + held locks + overlap warnings.
-- `scripts/coord/bb-coord who` — one-line roster. `scripts/coord/bb-coord ping <label>` — set a friendlier label.
-- A session is "live" if pinged within `BB_SESSION_TTL` (120s). `bb-coord prune` clears stale entries.
+**C — presence / monitor.** Every Claude Code tab auto-registers via the workbench PostToolUse coord-ping hook (shipped by the plugin), so heartbeats stay fresh while you work — no discipline required. Inspect at any time:
+- `scripts/coord/wb-coord status` — live sessions + held locks + overlap warnings.
+- `scripts/coord/wb-coord who` — one-line roster. `scripts/coord/wb-coord ping <label>` — set a friendlier label.
+- A session is "live" if pinged within `WB_SESSION_TTL` (120s). `wb-coord prune` clears stale entries.
 
 **B — commit guard + lock.** A pre-commit guard (`scripts/coord/precommit-guard.sh`, installed via `scripts/coord/install-hooks.sh`) detects the "commit swept my staged files" footgun: a **BULK commit while another live session has uncommitted changes in the same repo**. Default is **warn-only** — it prints a heads-up and the commit still proceeds, so parallel tabs keep working. The heads-up nudges you to either:
 - commit only your files: `git commit -- <path>…` (scoped commits can't sweep siblings), or
 - isolate with a worktree (A).
 
-Knobs: `BB_COORD_STRICT=1` hard-blocks bulk commits instead of warning; `BB_COMMIT_FORCE=1` proceeds despite a block; `BB_COORD_DISABLE=1` turns the guard off. Solo work is never flagged. `scripts/coord/with-lock.sh <name> -- <cmd>` serializes any action (deploys, migrations).
+Knobs: `WB_COORD_STRICT=1` hard-blocks bulk commits instead of warning; `WB_COMMIT_FORCE=1` proceeds despite a block; `WB_COORD_DISABLE=1` turns the guard off. Solo work is never flagged. `scripts/coord/with-lock.sh <name> -- <cmd>` serializes any action (deploys, migrations).
 
 Install the pre-commit guard with `scripts/coord/install-hooks.sh`.
 
-Note: warn-only *notifies* but does not *prevent* a sweep — for hard prevention use a worktree (A) or `BB_COORD_STRICT=1`.
+Note: warn-only *notifies* but does not *prevent* a sweep — for hard prevention use a worktree (A) or `WB_COORD_STRICT=1`.
 
 **A — worktrees (cleanest isolation).** For focused code work, give the tab its own worktree + branch so its index/HEAD can't collide: `scripts/coord/bb-worktree.sh new <name>` (→ a worktree on `wt/<name>`). Merge or PR later.
 
 **Protocol for agents:**
-1. You're auto-registered on session start. Before committing in the repo where `.claude/tasks/` lives, glance at `scripts/coord/bb-coord status`.
+1. You're auto-registered on session start. Before committing in the repo where `.claude/tasks/` lives, glance at `scripts/coord/wb-coord status`.
 2. If other sessions are live in that repo, commit with an explicit pathspec — never a bare `git add -A && git commit`.
 3. For substantial single-repo code work, prefer `scripts/coord/bb-worktree.sh new <name>`.
 
-**Limitation (be honest):** the guard/monitor only see sessions that have pinged. New Claude tabs auto-ping via the initlab coord-ping hook; a tab opened *before* the plugin was installed, or a non-Claude shell, won't appear until it runs `scripts/coord/bb-coord ping <label>` (or restarts). Worktrees (A) protect regardless of pinging.
+**Limitation (be honest):** the guard/monitor only see sessions that have pinged. New Claude tabs auto-ping via the workbench coord-ping hook; a tab opened *before* the plugin was installed, or a non-Claude shell, won't appear until it runs `scripts/coord/wb-coord ping <label>` (or restarts). Worktrees (A) protect regardless of pinging.
 
 ## Handoff Protocol
 

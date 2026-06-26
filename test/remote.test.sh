@@ -2,7 +2,7 @@
 # Behavioral: remote-guard.sh (block/allow exit codes) + notify.sh (gating + dryrun).
 # Presence: hooks.json wiring, the hook scripts, the remote skill + command.
 set -uo pipefail
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # tools/initlab
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # workbench
 S="$HERE/skills"; C="$HERE/commands"; B="$HERE/hooks/bin"; HJ="$HERE/hooks/hooks.json"
 GUARD="$B/remote-guard.sh"; NOTIFY="$B/notify.sh"
 TMP="$(mktemp -d)"
@@ -51,10 +51,10 @@ gtest "allows rm -rf \$HOME/build"   allow "rm -rf \$HOME/build"
 gtest "allows rm -rf ~/project/dist" allow "rm -rf ~/project/dist"
 
 # review #2 — the no-python fallback must extract ONLY the command field
-# (INITLAB_GUARD_NO_PYTHON forces the fallback path even when python3 is present)
+# (WORKBENCH_GUARD_NO_PYTHON forces the fallback path even when python3 is present)
 ngtest() { # <label> <block|allow> <full-json>
   local label="$1" expect="$2" json="$3"
-  printf '%s' "$json" | CLAUDE_PROJECT_DIR="$TMP" INITLAB_GUARD_NO_PYTHON=1 bash "$GUARD" >/dev/null 2>&1
+  printf '%s' "$json" | CLAUDE_PROJECT_DIR="$TMP" WORKBENCH_GUARD_NO_PYTHON=1 bash "$GUARD" >/dev/null 2>&1
   local rc=$?
   if { [ "$expect" = block ] && [ "$rc" -ne 0 ]; } || { [ "$expect" = allow ] && [ "$rc" -eq 0 ]; }; then
     echo "ok: $label"; else echo "FAIL: $label (rc=$rc, expected $expect)" >&2; fail=1; fi
@@ -65,15 +65,15 @@ ngtest "no-python allows benign w/ scary desc" allow '{"tool_name":"Bash","tool_
 # --- notify gating ---
 # remote=off → silent no-op
 TMP2="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --name "Off" --target "$TMP2" --profile full >/dev/null 2>&1
-o_off="$(CLAUDE_PROJECT_DIR="$TMP2" INITLAB_NOTIFY_DRYRUN=1 bash "$NOTIFY" 2>/dev/null || true)"
+o_off="$(CLAUDE_PROJECT_DIR="$TMP2" WORKBENCH_NOTIFY_DRYRUN=1 bash "$NOTIFY" 2>/dev/null || true)"
 chk "notify no-ops when remote=off"  "[ -z \"$o_off\" ]"
 rm -rf "$TMP2"
 # remote=telegram but no creds → no-op
-o_nc="$(CLAUDE_PROJECT_DIR="$TMP" INITLAB_TELEGRAM_ENV="$TMP/none.env" INITLAB_NOTIFY_DRYRUN=1 bash "$NOTIFY" 2>/dev/null || true)"
+o_nc="$(CLAUDE_PROJECT_DIR="$TMP" WORKBENCH_TELEGRAM_ENV="$TMP/none.env" WORKBENCH_NOTIFY_DRYRUN=1 bash "$NOTIFY" 2>/dev/null || true)"
 chk "notify no-ops without creds"    "[ -z \"$o_nc\" ]"
 # remote=telegram + creds + dryrun → prints a send target naming the project + chat
 ENVF="$TMP/tg.env"; printf 'TELEGRAM_BOT_TOKEN=DRYRUN\nTELEGRAM_CHAT_ID=123\n' > "$ENVF"
-o_send="$(CLAUDE_PROJECT_DIR="$TMP" INITLAB_TELEGRAM_ENV="$ENVF" INITLAB_NOTIFY_DRYRUN=1 bash "$NOTIFY" 2>/dev/null || true)"
+o_send="$(CLAUDE_PROJECT_DIR="$TMP" WORKBENCH_TELEGRAM_ENV="$ENVF" WORKBENCH_NOTIFY_DRYRUN=1 bash "$NOTIFY" 2>/dev/null || true)"
 chk "notify dryrun sends when set"   "printf '%s' \"$o_send\" | grep -q 'chat=123'"
 chk "notify names the project"       "printf '%s' \"$o_send\" | grep -q 'Acme'"
 

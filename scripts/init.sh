@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# initlab scaffolder (Plan 1, minimal). Deterministic; the interactive wizard
-# (/initlab:setup) is layered on top in Plan 4.
+# workbench scaffolder. Deterministic; the interactive wizard
+# (/workbench:setup) is layered on top.
 #
 # Usage: init.sh --name <NAME> [--mission <M>] [--launch <L>] [--target <DIR>]
 set -euo pipefail
-SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"   # tools/initlab/scripts
-PLUGIN_ROOT="$(cd "$SELF_DIR/.." && pwd)"                  # tools/initlab
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"   # workbench/scripts
+PLUGIN_ROOT="$(cd "$SELF_DIR/.." && pwd)"                  # workbench
 . "$SELF_DIR/lib.sh"
 
 NAME="" MISSION="" LAUNCH="" TARGET="$PWD" PROFILE="full"
@@ -34,7 +34,7 @@ TMPL_CODEX="$PLUGIN_ROOT/templates/codex"
 
 # init is a GREENFIELD scaffold: it must never overwrite a file that already
 # exists (the user's CLAUDE.md, edited coord scripts, etc.). Existing files are
-# preserved and reported; /initlab:upgrade is the path that reconciles them
+# preserved and reported; /workbench:upgrade is the path that reconciles them
 # against current templates. PRESERVED accumulates the relpaths we left alone.
 PRESERVED=""
 note_preserved() { PRESERVED="${PRESERVED:+$PRESERVED }$1"; }
@@ -61,14 +61,14 @@ if [ "$PROFILE" = full ]; then
     "PROJECT_NAME=$NAME" "MISSION=$MISSION" "LAUNCH=$LAUNCH" "REPO_MAP=${REPO_MAP:-(single repo)}"
   render_new "$TMPL_FULL/SOUL.md.tmpl"   "$TARGET/.claude/SOUL.md" ".claude/SOUL.md" "PROJECT_NAME=$NAME" "MISSION=$MISSION"
   render_new "$TMPL_FULL/AGENTS.md.tmpl" "$TARGET/AGENTS.md" "AGENTS.md" "PROJECT_NAME=$NAME"
-  for s in lib.sh bb-coord with-lock.sh precommit-guard.sh bb-worktree.sh install-hooks.sh; do
+  for s in lib.sh wb-coord with-lock.sh precommit-guard.sh bb-worktree.sh install-hooks.sh; do
     copy_new "$TMPL_COORD/$s" "$TARGET/scripts/coord/$s" "scripts/coord/$s"
   done
-  chmod +x "$TARGET/scripts/coord/bb-coord" 2>/dev/null || true
+  chmod +x "$TARGET/scripts/coord/wb-coord" 2>/dev/null || true
   # coordination runtime state (heartbeats, locks) must never be committed (idempotent)
   GI="$TARGET/.gitignore"
   if ! { [ -f "$GI" ] && grep -qxF '/.claude/locks/' "$GI"; }; then
-    printf '\n# initlab coordination runtime state (heartbeats, locks) — never commit\n/.claude/locks/\n' >> "$GI"
+    printf '\n# workbench coordination runtime state (heartbeats, locks) — never commit\n/.claude/locks/\n' >> "$GI"
   fi
   render_new "$TMPL_FULL/SESSION_STATE.md.tmpl" "$TARGET/.claude/SESSION_STATE.md" ".claude/SESSION_STATE.md" "PROJECT_NAME=$NAME"
 else
@@ -91,7 +91,7 @@ if [ ! -f "$TARGET/.workbench/config.json" ]; then
   NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   cat > "$TARGET/.workbench/config.json" <<JSON
 {
-  "initlab": { "version": "$VERSION", "initialized_at": "$NOW" },
+  "workbench": { "version": "$VERSION", "initialized_at": "$NOW" },
   "project": {
     "name": "$(il_json_escape "$NAME")",
     "mission": "$(il_json_escape "$MISSION")",
@@ -134,7 +134,7 @@ add_manifest ".claude/tasks/README.md" "minimal/tasks/README.md" "merge"
 if [ "$PROFILE" = full ]; then
   add_manifest ".claude/SOUL.md" "full/SOUL.md.tmpl" "merge"
   add_manifest "AGENTS.md" "full/AGENTS.md.tmpl" "merge"
-  for s in lib.sh bb-coord with-lock.sh precommit-guard.sh bb-worktree.sh install-hooks.sh; do
+  for s in lib.sh wb-coord with-lock.sh precommit-guard.sh bb-worktree.sh install-hooks.sh; do
     add_manifest "scripts/coord/$s" "coord/$s" "managed"
   done
   [ -f "$TARGET/.claude/SESSION_STATE.md" ] && add_manifest ".claude/SESSION_STATE.md" "full/SESSION_STATE.md.tmpl" "once"
@@ -157,10 +157,10 @@ if [ "$PROFILE" = full ] && [ -d "$TARGET/.git" ]; then
   bash "$TARGET/scripts/coord/install-hooks.sh" "$TARGET" >/dev/null || echo "init.sh: warning — pre-commit guard install reported an issue" >&2
 fi
 
-echo "initlab: scaffolded '$NAME' ($PROFILE) into $TARGET"
+echo "workbench: scaffolded '$NAME' ($PROFILE) into $TARGET"
 echo "  .claude/tasks/{backlog,in-development,in-review,verified,decisions}/"
 echo "  CLAUDE.md, .workbench/config.json, .workbench/manifest.json"
 if [ -n "$PRESERVED" ]; then
   echo "  preserved (already existed, not overwritten): $PRESERVED"
-  echo "  → run /initlab:upgrade to reconcile preserved files against the current templates."
+  echo "  → run /workbench:upgrade to reconcile preserved files against the current templates."
 fi

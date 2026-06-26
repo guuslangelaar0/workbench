@@ -1,11 +1,11 @@
 ---
 name: models
-description: Use when spawning a teammate, engineer, verifier, or utility subagent — resolves which model to use from the project's way_of_working.models tier in .initlab/config.json. Read it before dispatching so spend matches the configured policy.
+description: Use when spawning a teammate, engineer, verifier, or utility subagent — resolves which model to use from the project's way_of_working.models tier in .workbench/config.json. Read it before dispatching so spend matches the configured policy.
 ---
 
 # Model policy
 
-Resolve the model for any subagent/teammate from `way_of_working.models` in `.initlab/config.json`. Three tiers; the project picked one at setup. Read the config value, then apply the matching row.
+Resolve the model for any subagent/teammate from `way_of_working.models` in `.workbench/config.json`. Three tiers; the project picked one at setup. Read the config value, then apply the matching row.
 
 | Role | `leaner` (cheaper) | `recommended` (default) | `better` (pricier) |
 |---|---|---|---|
@@ -20,7 +20,7 @@ Resolve the model for any subagent/teammate from `way_of_working.models` in `.in
 - **When unsure, round up, not down.** A correctness miss costs more than the model delta. Opus for genuinely hard or risky work regardless of tier.
 
 ## How to apply
-1. Read `way_of_working.models` from `.initlab/config.json` (default `recommended` if absent).
+1. Read `way_of_working.models` from `.workbench/config.json` (default `recommended` if absent).
 2. Look up the role you are about to spawn in the table.
 3. Pass the resolved model to the `Task` tool (or the agent-teams spawn). For `recommended`, pass nothing — `inherit` is already the agent default.
 

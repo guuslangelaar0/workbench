@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# initlab drift classifier. Reads <project>/.workbench/manifest.json (or legacy
-# .initlab/manifest.json), recomputes each managed file's sha256, and prints:
+# workbench drift classifier. Reads <project>/.workbench/manifest.json (or legacy
+# .workbench/manifest.json from a migrated project), recomputes each managed file's sha256, and prints:
 # <path>  <mode>  <status>
 # status = ok (matches recorded hash) | edited (differs) | missing.
 # Dev-time tooling: python3 is used to parse the manifest (it is not on init.sh's
@@ -10,11 +10,11 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SELF_DIR/lib.sh"
 P="${1:-$PWD}"
 M="$(il_cfg_dir "$P")/manifest.json"
-[ -f "$M" ] || { echo "drift: no manifest at $M (not an initlab project?)" >&2; exit 2; }
+[ -f "$M" ] || { echo "drift: no manifest at $M (not a workbench project?)" >&2; exit 2; }
 PLUGIN_VER="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$(dirname "${BASH_SOURCE[0]}")/../.claude-plugin/plugin.json" | head -1)"
 MAN_VER="$(sed -n 's/.*"plugin_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$M" | head -1)"
 
-echo "initlab drift — project manifest v${MAN_VER:-?} vs plugin v${PLUGIN_VER:-?}"
+echo "workbench drift — project manifest v${MAN_VER:-?} vs plugin v${PLUGIN_VER:-?}"
 [ "$MAN_VER" != "$PLUGIN_VER" ] && echo "  (plugin version advanced — managed templates may have changed)"
 echo ""
 

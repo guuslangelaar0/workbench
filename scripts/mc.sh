@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# initlab Mission Control — a text dashboard for an initlab project. Generalized
+# workbench Mission Control — a text dashboard for a workbench project. Generalized
 # from mission-control/dashboard.sh: project name, lifecycle states, in-review cap,
-# repos, and prod URLs all come from .initlab/config.json. Runtime tooling — python3
+# repos, and prod URLs all come from .workbench/config.json. Runtime tooling — python3
 # is used opportunistically for JSON arrays/objects and degrades to defaults if absent.
 #
 # Usage: mc.sh [--no-prod] [--no-build]

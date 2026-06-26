@@ -12,7 +12,7 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/lib.sh"
 
-MARKER="# >>> bb-coord commit guard (B) >>>"
+MARKER="# >>> wb-coord commit guard (B) >>>"
 
 install_one() {
   local top; top="$(git -C "$1" rev-parse --show-toplevel 2>/dev/null || true)"
@@ -21,7 +21,7 @@ install_one() {
   local hook="$hookdir/pre-commit"
   mkdir -p "$hookdir"
   if [ -f "$hook" ] && grep -qF "$MARKER" "$hook"; then
-    echo "already installed: ${top#"$BB_ROOT"/}"
+    echo "already installed: ${top#"$WB_ROOT"/}"
     return
   fi
   # path to the guard relative to nothing — use absolute so it works from any worktree
@@ -32,17 +32,17 @@ install_one() {
   {
     printf '\n%s\n' "$MARKER"
     printf '"%s" || exit 1\n' "$guard"
-    printf '# <<< bb-coord commit guard (B) <<<\n'
+    printf '# <<< wb-coord commit guard (B) <<<\n'
   } >> "$hook"
   chmod +x "$hook"
-  echo "installed: ${top#"$BB_ROOT"/}  ($hook)"
+  echo "installed: ${top#"$WB_ROOT"/}  ($hook)"
 }
 
 case "${1:-}" in
   --all)
-    install_one "$BB_ROOT"
-    for r in "$BB_ROOT"/repos/*/; do [ -d "$r/.git" ] && install_one "$r"; done
+    install_one "$WB_ROOT"
+    for r in "$WB_ROOT"/repos/*/; do [ -d "$r/.git" ] && install_one "$r"; done
     ;;
-  "" ) install_one "$BB_ROOT" ;;
+  "" ) install_one "$WB_ROOT" ;;
   * )  install_one "$1" ;;
 esac

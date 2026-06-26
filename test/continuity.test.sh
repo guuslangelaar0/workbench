@@ -16,12 +16,12 @@ echo "EDITED-BY-USER" >> "$TMP/.claude/SESSION_STATE.md"
 bash "$HERE/scripts/init.sh" --name "Acme" --mission "Private." --target "$TMP" >/dev/null 2>&1
 chk "SESSION_STATE preserved"     "grep -q 'EDITED-BY-USER' '$TMP/.claude/SESSION_STATE.md'"
 
-# the grounding hook prints a useful brief for an initlab project, and no-ops elsewhere
+# the grounding hook prints a useful brief for a workbench project, and no-ops elsewhere
 BRIEF="$(CLAUDE_PROJECT_DIR="$TMP" bash "$HERE/hooks/bin/ground-session.sh" </dev/null 2>/dev/null)"
 chk "brief mentions project"   "printf '%s' \"\$BRIEF\" | grep -q 'Acme'"
 chk "brief shows task counts"  "printf '%s' \"\$BRIEF\" | grep -qi 'backlog'"
 chk "brief points to SOUL"     "printf '%s' \"\$BRIEF\" | grep -q 'SOUL.md'"
 NOOP="$(CLAUDE_PROJECT_DIR="$(mktemp -d)" bash "$HERE/hooks/bin/ground-session.sh" </dev/null 2>/dev/null; echo "rc=$?")"
-chk "no-op in non-initlab dir"  "[ \"\$NOOP\" = 'rc=0' ]"
+chk "no-op in non-workbench dir"  "[ \"\$NOOP\" = 'rc=0' ]"
 
 [ "$fail" = 0 ] && echo "PASS: continuity" || { echo "continuity test failed"; exit 1; }

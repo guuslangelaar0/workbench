@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "initlab managed-file manifest",
+  "title": "workbench managed-file manifest",
   "type": "object",
   "required": ["plugin_version", "files"],
   "properties": {

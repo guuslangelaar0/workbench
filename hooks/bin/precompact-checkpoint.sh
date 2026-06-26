@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# initlab PreCompact hook. Fires BEFORE compaction. stdout is NOT injected, so
+# workbench PreCompact hook. Fires BEFORE compaction. stdout is NOT injected, so
 # this only writes a durable marker to disk; re-grounding happens on the next
-# SessionStart (matcher "compact"). No-ops unless this is an initlab project.
+# SessionStart (matcher "compact"). No-ops unless this is a workbench project.
 set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SELF_DIR/../../scripts/lib.sh"

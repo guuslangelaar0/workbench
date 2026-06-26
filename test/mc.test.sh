@@ -2,7 +2,7 @@
 # Behavioral test for mc.sh: runs the dashboard in a scaffolded project and
 # asserts it surfaces the project name, lifecycle states, and a task by id.
 set -uo pipefail
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # tools/initlab
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # workbench
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 fail=0

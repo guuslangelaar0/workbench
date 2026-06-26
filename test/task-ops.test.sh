@@ -2,7 +2,7 @@
 # Behavioral tests for task-new.sh (ID allocation, slug, fields, _next-id bump)
 # and task-move.sh (mv + git-mv lifecycle transitions, Status update).
 set -uo pipefail
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # tools/initlab
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # workbench
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 fail=0

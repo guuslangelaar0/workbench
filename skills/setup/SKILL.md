@@ -1,9 +1,9 @@
 ---
 name: setup
-description: Use when running /initlab:setup, when bare /initlab finds no .initlab/config.json, or when any /initlab command is invoked in an unconfigured project. Runs the guided per-axis configuration wizard, writes .initlab/config.json, and scaffolds the project.
+description: Use when running /workbench:setup, when bare /workbench finds no .workbench/config.json, or when any /workbench command is invoked in an unconfigured project. Runs the guided per-axis configuration wizard, writes .workbench/config.json, and scaffolds the project.
 ---
 
-# initlab setup wizard
+# workbench setup wizard
 
 Configure a project's way of working, **one axis at a time**, each as an `AskUserQuestion` card. The user's battle-tested choice is the **Recommended** option (listed first); also offer **Better** (more thorough / pricier) and **Leaner** (cheaper / faster) with a plain-language cost note. Never dump all questions at once — walk them, but you MAY offer at the very start: "accept all Recommended and tune later, or walk each axis?" (a convenience; default is walk).
 
@@ -31,11 +31,11 @@ Cost-note guidance: phrase Better as "more thorough / higher spend", Leaner as "
 
 3. **Remote setup help** — if `remote` is `telegram`/`both`, tell the user the install steps for the official plugin (`/plugin install telegram@claude-plugins-official` → `/telegram:configure <BotFather token>` → launch with `--channels` in a persistent terminal → pair + `/telegram:access policy allowlist`); keep the bot token in `~/.claude/channels/telegram/.env`, never in git.
 
-4. **Write `.initlab/config.json`** with all answers (use the schema at `${CLAUDE_PLUGIN_ROOT}/templates/schemas/config.schema.json`; set `initlab.version` from the plugin's `plugin.json`, `initialized_at` to now). Write it BEFORE scaffolding.
+4. **Write `.workbench/config.json`** with all answers (use the schema at `${CLAUDE_PLUGIN_ROOT}/templates/schemas/config.schema.json`; set `workbench.version` from the plugin's `plugin.json`, `initialized_at` to now). Write it BEFORE scaffolding.
 
-5. **Scaffold**: run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/init.sh" --name "<name>" --mission "<mission>" --launch "<launch>" --profile full --target "${CLAUDE_PROJECT_DIR}"`. init.sh is a **greenfield scaffold: it never overwrites a file that already exists** — your richer config and any existing CLAUDE.md/AGENTS.md/SOUL.md/coord scripts are preserved (it reports which), and it only writes the files that are missing, plus the manifest + git hook. To reconcile preserved files against the current templates, the user runs `/initlab:upgrade` — that is the only path that touches existing managed files.
+5. **Scaffold**: run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/init.sh" --name "<name>" --mission "<mission>" --launch "<launch>" --profile full --target "${CLAUDE_PROJECT_DIR}"`. init.sh is a **greenfield scaffold: it never overwrites a file that already exists** — your richer config and any existing CLAUDE.md/AGENTS.md/SOUL.md/coord scripts are preserved (it reports which), and it only writes the files that are missing, plus the manifest + git hook. To reconcile preserved files against the current templates, the user runs `/workbench:upgrade` — that is the only path that touches existing managed files.
 
-6. **Next step**: greenfield → offer `/initlab:inception` (the product-genesis brainstorm). Existing → tell them `/initlab:boot` then `/initlab:loop`. Summarize what was configured (the chosen tiers) and what was scaffolded.
+6. **Next step**: greenfield → offer `/workbench:inception` (the product-genesis brainstorm). Existing → tell them `/workbench:boot` then `/workbench:loop`. Summarize what was configured (the chosen tiers) and what was scaffolded.
 
 ## Principles
 - The wizard is the first defense against the "ideator" failure: it makes the cost/quality tradeoffs explicit and forces intentional choices rather than silent maximalism.

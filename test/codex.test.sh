@@ -16,7 +16,7 @@ bash "$HERE/scripts/init.sh" --name "Acme" --mission "x" --target "$TMP" >/dev/n
 chk "codex off: no coord file"  "[ ! -f '$TMP/.claude/CODEX_COORDINATION.md' ]"
 # codex ON → rendered (via --codex flag the wizard would set, or a pre-written config)
 TMP2="$(mktemp -d)"; mkdir -p "$TMP2/.workbench"
-printf '{ "initlab":{"version":"0.1.0","initialized_at":"x"}, "project":{"name":"Acme","kind":"existing"}, "way_of_working":{"codex":"rescue-only"}, "lifecycle":{"states":["backlog"],"in_review_cap":10} }' > "$TMP2/.workbench/config.json"
+printf '{ "workbench":{"version":"0.1.0","initialized_at":"x"}, "project":{"name":"Acme","kind":"existing"}, "way_of_working":{"codex":"rescue-only"}, "lifecycle":{"states":["backlog"],"in_review_cap":10} }' > "$TMP2/.workbench/config.json"
 bash "$HERE/scripts/init.sh" --name "Acme" --mission "x" --target "$TMP2" >/dev/null 2>&1
 chk "codex on: coord rendered"  "[ -f '$TMP2/.claude/CODEX_COORDINATION.md' ] && grep -q 'Acme' '$TMP2/.claude/CODEX_COORDINATION.md'"
 rm -rf "$TMP2"

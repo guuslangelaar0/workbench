@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# initlab: create a new task file in <state> (default backlog), allocate the next
+# workbench: create a new task file in <state> (default backlog), allocate the next
 # ID from .claude/tasks/_next-id, render the canonical template, and bump the ID.
-# Deterministic + python-free (the /initlab:task command wraps this).
+# Deterministic + python-free (the /workbench:task command wraps this).
 #
 # Usage: task-new.sh --title "<title>" [--target DIR] [--state backlog]
 #        [--track T] [--repos "a,b"] [--estimate "~1 day"] [--verification "<how>"]
 set -euo pipefail
-SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"   # tools/initlab/scripts
-PLUGIN_ROOT="$(cd "$SELF_DIR/.." && pwd)"                  # tools/initlab
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"   # workbench/scripts
+PLUGIN_ROOT="$(cd "$SELF_DIR/.." && pwd)"                  # workbench
 . "$SELF_DIR/lib.sh"
 
 TITLE="" TARGET="$PWD" STATE="backlog"
@@ -30,7 +30,7 @@ TARGET="${TARGET%/}"; [ -n "$TARGET" ] || TARGET="/"
 
 T="$TARGET/.claude/tasks"
 NID="$T/_next-id"
-[ -f "$NID" ] || { echo "task-new.sh: no $NID (run /initlab:init first?)" >&2; exit 1; }
+[ -f "$NID" ] || { echo "task-new.sh: no $NID (run /workbench:init first?)" >&2; exit 1; }
 ID="$(tr -d ' \n' < "$NID")"
 case "$ID" in ''|*[!0-9]*) echo "task-new.sh: _next-id is not numeric: '$ID'" >&2; exit 1 ;; esac
 
@@ -46,4 +46,4 @@ il_render "$PLUGIN_ROOT/templates/minimal/tasks/task.md.tmpl" "$OUT" \
   "ESTIMATE=$ESTIMATE" "CREATED=$CREATED" "VERIFICATION=$VERIF"
 
 printf '%04d\n' "$((10#$ID + 1))" > "$NID"
-echo "initlab: created $OUT (id $ID)"
+echo "workbench: created $OUT (id $ID)"

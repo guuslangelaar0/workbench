@@ -1,5 +1,5 @@
 {
-  "description": "initlab continuity hooks — re-ground on session start, checkpoint before compaction, coord presence",
+  "description": "workbench continuity hooks — re-ground on session start, checkpoint before compaction, coord presence",
   "hooks": {
     "SessionStart": [
       {

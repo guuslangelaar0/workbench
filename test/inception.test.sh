@@ -3,7 +3,7 @@
 # composition (brainstorming / grill-me / frontend-design), the genesis sequence,
 # the output (spec + seeded backlog + Mermaid), and depth tiers.
 set -uo pipefail
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # tools/initlab
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # workbench
 S="$HERE/skills"; C="$HERE/commands"
 fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
@@ -29,8 +29,8 @@ chk "inception covers delivery"          "grep -qiE 'github|ci/cd|ci |deploy' '$
 # --- output + handoff ---
 chk "inception outputs a spec"           "grep -qi 'spec' '$S/inception/SKILL.md'"
 chk "inception requires Mermaid"         "grep -qi 'mermaid' '$S/inception/SKILL.md'"
-chk "inception seeds the backlog"        "grep -qiE 'seed the backlog|/initlab:task|seed .* backlog' '$S/inception/SKILL.md'"
-chk "inception hands off to the loop"    "grep -q '/initlab:loop' '$S/inception/SKILL.md'"
+chk "inception seeds the backlog"        "grep -qiE 'seed the backlog|/workbench:task|seed .* backlog' '$S/inception/SKILL.md'"
+chk "inception hands off to the loop"    "grep -q '/workbench:loop' '$S/inception/SKILL.md'"
 
 # --- depth tiers ---
 chk "inception reads inception_depth"    "grep -q 'inception_depth' '$S/inception/SKILL.md'"
