@@ -22,7 +22,7 @@ You are the **lead**. You coordinate; **you never write code directly**. Every c
    - `leaner` — engineer self-verifies; lead spot-checks.
    - `recommended` — spawn a `verifier` (`subagent_type: verifier`) to independently run the verification and return evidence.
    - `better` — spawn several verifiers with an adversarial "find why this ISN'T done" framing; a majority must confirm.
-   Per `way_of_working.review`, also request code review (`superpowers:requesting-code-review`) on significant tasks (`recommended`) or run the multi-agent / `/code-review ultra` path (`better`). On pass → `/workbench:verify` moves it to `verified/` (or `ready-to-ship/` if deploy-gated) with evidence captured. On fail → back to `in-development/`.
+   Per `way_of_working.review`, also request code review (`superpowers:requesting-code-review`) on significant tasks (`recommended`) or run the multi-agent / `/code-review ultra` path (`better`). On pass → `/workbench:verify` moves it to `verified/` (or `staged/` when the level is deploy-gated and a prod deploy is still pending) with evidence captured. On fail → back to `in-development/`.
 6. **Lifecycle is yours.** You run every `git mv` (via `/workbench:dispatch` / `/workbench:verify` → `task-move.sh`). Engineers and verifiers report; they never move task files.
 7. **Honesty triggers → `decisions/`, then keep going.** When one fires, write a `decisions/` task and move on to other work — **never stop the loop for a decision**. The triggers (from `.claude/SOUL.md`):
    - architectural fork (schema, crypto, public API, dependency swap, infra topology),

@@ -123,16 +123,32 @@ if [ ! -f "$CFG" ]; then
 }
 JSON
 elif [ "$LEVEL_EXPLICIT" = 1 ]; then
-  # Existing config + explicit --level: upsert the level scalar only.
-  # Every other field is preserved byte-for-byte.
-  if sed -n '/"workbench"[[:space:]]*:/,/}/p' "$CFG" | grep -q '"level"[[:space:]]*:'; then
-    # scope the replace to the workbench object (single- or multi-line) so a stray
-    # "level" key elsewhere (e.g. a logging config) is never touched
-    sed -i '/"workbench"[[:space:]]*:/,/}/ s/"level"[[:space:]]*:[[:space:]]*"[^"]*"/"level": "'"$LEVEL"'"/' "$CFG"
-  else
-    # inject level before the closing brace of the "workbench": { ... } object
-    sed -i 's/\("workbench"[[:space:]]*:[[:space:]]*{[^}]*\)}/\1, "level": "'"$LEVEL"'" }/' "$CFG"
-  fi
+  # Existing config + explicit --level: upsert the level scalar within the
+  # workbench object ONLY; every other field is preserved byte-for-byte.
+  # Done with POSIX awk (portable, no gawk-only features, no `sed -i` flavor
+  # differences) so it is correct for single- AND multi-line layouts and never
+  # touches a stray "level" key in some other object (e.g. a logging config).
+  # The workbench object is flat (scalar fields), so its first `}` closes it.
+  awk -v lvl="$LEVEL" '
+    done { print; next }
+    !inwb && /"workbench"[[:space:]]*:/ { inwb=1 }
+    inwb {
+      p = index($0, "}")                # workbench is flat, so its first } closes it
+      if (p > 0) {                       # workbench closes on this line
+        head = substr($0, 1, p-1); tail = substr($0, p)
+        if (head ~ /"level"[[:space:]]*:[[:space:]]*"[^"]*"/)
+          sub(/"level"[[:space:]]*:[[:space:]]*"[^"]*"/, "\"level\": \"" lvl "\"", head)
+        else
+          head = head ", \"level\": \"" lvl "\" "   # inject before the closing brace
+        print head tail; done=1; next
+      }
+      if (/"level"[[:space:]]*:[[:space:]]*"[^"]*"/) {   # level on its own line inside workbench
+        sub(/"level"[[:space:]]*:[[:space:]]*"[^"]*"/, "\"level\": \"" lvl "\""); done=1; print; next
+      }
+      print; next
+    }
+    { print }
+  ' "$CFG" > "$CFG.tmp" && mv "$CFG.tmp" "$CFG"
 fi
 
 # 5. .workbench/manifest.json — record managed files with hashes + modes (jq-free accumulator)

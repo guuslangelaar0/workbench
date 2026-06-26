@@ -8,7 +8,7 @@ description: Use when creating, moving, or verifying tasks in .claude/tasks/ —
 Tasks are markdown files under `.claude/tasks/`. **Status is the subdirectory the file lives in**; transitions are `git mv`; full history is in git. The format spec is `.claude/tasks/README.md` in the project.
 
 ## States
-`backlog → in-development → in-review → verified`, plus `decisions/` (needs the human; the lead never blocks on it). If `lifecycle.deploy_gated` is true in `.workbench/config.json`, two terminal states are added: `in-review → ready-to-ship → shipped` (locally verified + staged parks in `ready-to-ship/`; only a prod deploy + smoke reaches `shipped/`). Read `lifecycle.states` from config for the project's actual set.
+The baseline is `backlog → in-development → in-review → verified`, plus `decisions/` (needs the human; the lead never blocks on it). The exact set is **derived from the project's maturity level** — it is not stored in config. Solo drops `in-review`; deploy-gated levels (Crew, Fleet) add `staged` then `shipped` (`verified → staged → shipped` — locally-verified work parks in `staged/` for build-on-staging + smoke; only a prod deploy reaches `shipped/`), and Fleet additionally has `release-candidate`. Get the project's actual stage dirs from its level via `wb_level_lifecycle <level>` (in `scripts/levels.sh`), or just `ls .claude/tasks/`.
 
 ## Create a task
 Use `/workbench:task "<title>"`, or directly:

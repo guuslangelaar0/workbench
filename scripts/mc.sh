@@ -81,7 +81,7 @@ for d in $STATES; do
   ids="$(find ".claude/tasks/$d" -maxdepth 1 -name '*.md' -type f 2>/dev/null | sed 's#.*/##; s/\.md$//' | grep -oE '^[0-9]{4}' 2>/dev/null | sort -u | tr '\n' ' ' | sed 's/ $//' || true)"
   color="$C_GREY"; warn=""
   case "$d" in
-    in-development|decisions|ready-to-ship) color="$C_AMBER" ;;
+    in-development|decisions|staged) color="$C_AMBER" ;;
     verified|shipped) color="$C_GREEN" ;;
     in-review) color="$C_AMBER"
       if   [[ "${n:-0}" -ge "$CAP" ]];        then warn=" ${C_RED}(at/over cap $CAP!)${C_RESET}"
