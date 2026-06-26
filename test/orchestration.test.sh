@@ -53,4 +53,11 @@ chk "loop invokes orchestration"    "grep -qi 'orchestration' '$C/loop.md'"
 chk "task template has Estimate token" "grep -q '{{ESTIMATE}}' '$HERE/templates/minimal/tasks/task.md.tmpl'"
 chk "task README documents Estimate"   "grep -q 'Estimate' '$HERE/templates/minimal/tasks/README.md'"
 
+# --- loop engineering rule (Task E2) ---
+OS="$HERE/skills/orchestration/SKILL.md"; LC="$HERE/commands/loop.md"
+chk "loop rule: bugs auto-file"        "grep -qi 'bug' '$OS' && grep -qi 'auto.?file\|automatically.*task' '$OS'"
+chk "loop rule: features suggested"    "grep -qi 'suggest' '$OS' && grep -qi 'never auto-built\|not auto-built\|never automatically build' '$OS'"
+chk "loop reads autonomy policy"       "grep -q 'loop-policy.sh' '$OS' || grep -q 'loop-policy.sh' '$LC'"
+chk "loop: autonomy modes named"       "grep -qi 'auto-continue' '$OS' && grep -qi 'suggest-wait' '$OS'"
+
 [ "$fail" = 0 ] && echo "PASS: orchestration" || { echo "orchestration test failed"; exit 1; }

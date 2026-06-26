@@ -12,3 +12,11 @@ Run the workbench orchestration loop for this project. **Invoke the `orchestrati
 Keep 2–3 tasks queued per lane. Surface decisions to `.claude/tasks/decisions/` and keep going — do not park the loop waiting on the human.
 
 **Never wait blind on a completion notification.** After dispatching background work (engineers/verifiers/workflows), schedule a self-paced fallback heartbeat (`ScheduleWakeup` — the `/loop` mechanism) so a dropped signal or a silently-dead agent can't strand you. On wake, reconcile against disk (commits, branches, task `## Notes`), gate what finished, and **re-dispatch what died** — don't re-wait. Cadence is cache-aware: ~`1200s` for in-process subagents, `≤270s` only for fast external state. See the `orchestration` skill, Step 4b.
+
+**When the backlog drains**, read the autonomy mode before deciding what to do next:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/loop-policy.sh" "${CLAUDE_PROJECT_DIR}"
+```
+
+The script returns `auto-continue`, `suggest-wait`, or `suggest-review`. Follow the **Loop engineering** section of the `orchestration` skill for what each mode means. Never hard-code the behavior — always read it from the script.

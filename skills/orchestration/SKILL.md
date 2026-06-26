@@ -34,6 +34,33 @@ You are the **lead**. You coordinate; **you never write code directly**. Every c
    When stuck or wanting a second opinion, hand the investigation to Codex (`codex:rescue`) if `way_of_working.codex` is not `off`, rather than looping.
 8. **Never stop. Checkpoint.** The default is CONTINUE — there is almost always real, safe, beneficial next work. Checkpoint `SESSION_STATE.md` on cadence (see `session-continuity`), push per batch, run `graphify update` after code changes. The only things that truly wait are the physically impossible and the irreversible-without-authorization. And "waiting on a lane" is never *idle* waiting — you always hold a scheduled heartbeat (Step 4b) so a dropped completion signal can't silently strand the loop.
 
+## Loop engineering
+
+The queue is not a static pile — it breathes. The cycle is: **brainstorm → plan → loop-to-build → replenish**. When `backlog/` empties, generate the next batch from specs and the roadmap; never idle.
+
+### The carved rule
+
+- **Bugs are auto-filed as tasks.** When a bug surfaces during a run — from a test failure, a build error, a verifier report, or your own observation — you *immediately* `git mv` a new task into `in-development/` (or `backlog/` if it must queue). You do **not** merely suggest it: bugs are automatically converted to tasks without asking.
+- **New features and improvements are suggested, never auto-built.** When you spot a worthwhile enhancement, you write it as a suggestion (in `decisions/` or a comment) and surface it for the human to prioritize — you never automatically build it. The human controls the scope; you control the execution.
+
+### Queue-drain autonomy
+
+When `backlog/` drains completely, resolve the loop's continuation mode by running:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/loop-policy.sh" "${CLAUDE_PROJECT_DIR}"
+```
+
+The script returns one of three modes:
+
+| Mode | Behavior |
+|------|----------|
+| `auto-continue` | Auto-promote the top suggestion into a task and keep the loop running without asking. |
+| `suggest-wait` | Present the ranked suggestions and wait for the human to pick the next direction. |
+| `suggest-review` | Present the suggestions and route them through the review gate before proceeding. |
+
+The mode comes from an explicit `dials.loop_autonomy` override in `.workbench/config.json`; if absent, the project's `level` preset is used (Solo → `suggest-wait`, Pair → `suggest-wait`, Crew → `auto-continue`, Fleet → `auto-continue`). Never hard-code the behavior — always read it from the script.
+
 ## What "done" means
 Only `verified/` (or `shipped/`) with evidence is done. "In review" is "code committed, awaiting verification." Never "should work." Claim only what you checked against the source of truth — git, disk, a passing command, a real browser. This is the bar in `.claude/SOUL.md`; embody it.
 
