@@ -125,8 +125,10 @@ JSON
 elif [ "$LEVEL_EXPLICIT" = 1 ]; then
   # Existing config + explicit --level: upsert the level scalar only.
   # Every other field is preserved byte-for-byte.
-  if grep -q '"level"[[:space:]]*:' "$CFG"; then
-    sed -i 's/"level"[[:space:]]*:[[:space:]]*"[^"]*"/"level": "'"$LEVEL"'"/' "$CFG"
+  if sed -n '/"workbench"[[:space:]]*:/,/}/p' "$CFG" | grep -q '"level"[[:space:]]*:'; then
+    # scope the replace to the workbench object (single- or multi-line) so a stray
+    # "level" key elsewhere (e.g. a logging config) is never touched
+    sed -i '/"workbench"[[:space:]]*:/,/}/ s/"level"[[:space:]]*:[[:space:]]*"[^"]*"/"level": "'"$LEVEL"'"/' "$CFG"
   else
     # inject level before the closing brace of the "workbench": { ... } object
     sed -i 's/\("workbench"[[:space:]]*:[[:space:]]*{[^}]*\)}/\1, "level": "'"$LEVEL"'" }/' "$CFG"

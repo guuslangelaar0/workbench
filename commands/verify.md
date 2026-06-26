@@ -14,7 +14,7 @@ Run the verification gate for a task. Follow the `orchestration` and `task-lifec
    Always: review the diff, build, and run the declared verification before advancing.
 3. **On PASS** — capture the evidence (command output / screenshot path) into the task's `## Verification evidence` section, then move it:
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-move.sh" <id> verified --target "${CLAUDE_PROJECT_DIR}"`
-   (Use `ready-to-ship` instead of `verified` if `lifecycle.deploy_gated` is true and a prod deploy is still pending.)
+   (Use `staged` instead of `verified` when the level's lifecycle includes a `staged` stage — Crew and Fleet are deploy-gated — and a prod deploy is still pending.)
 4. **On FAIL** — note exactly what's missing in `## Notes`, then move it back:
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-move.sh" <id> in-development --target "${CLAUDE_PROJECT_DIR}"`
 

@@ -59,7 +59,7 @@ The script returns one of three modes:
 | `suggest-wait` | Present the ranked suggestions and wait for the human to pick the next direction. |
 | `suggest-review` | Present the suggestions and route them through the review gate before proceeding. |
 
-The mode comes from an explicit `dials.loop_autonomy` override in `.workbench/config.json`; if absent, the project's `level` preset is used (Solo → `suggest-wait`, Pair → `suggest-wait`, Crew → `auto-continue`, Fleet → `auto-continue`). Never hard-code the behavior — always read it from the script.
+The mode comes from an explicit `dial_overrides.loop_autonomy` in `.workbench/config.json`; if absent, the project's `level` preset is used (Solo → `auto-continue`, Pair → `auto-continue`, Crew → `suggest-wait`, Fleet → `suggest-review`) — autonomy is highest at Solo and most gated at Fleet. Never hard-code the behavior — always read it from the script.
 
 ## What "done" means
 Only `verified/` (or `shipped/`) with evidence is done. "In review" is "code committed, awaiting verification." Never "should work." Claim only what you checked against the source of truth — git, disk, a passing command, a real browser. This is the bar in `.claude/SOUL.md`; embody it.

@@ -22,5 +22,14 @@ PY
 chk "dial_overrides beats preset"  "[ \"\$(bash \"$HERE/scripts/loop-policy.sh\" \"$S\")\" = suggest-wait ]"
 chk "config still valid JSON after override" "python3 -m json.tool '$S/.workbench/config.json' >/dev/null"
 
-rm -rf "$S" "$C"
+# Regression: dial_overrides written on a SINGLE line — the exact shape init.sh
+# writes ("dial_overrides": {}) and /workbench:level's sed produces. A prior
+# line-oriented parser silently dropped single-line overrides while the multi-line
+# case above stayed green. Emulate level.md's sed edit, not python3 pretty-print.
+O="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --profile full --level solo --name O --mission m --target "$O" >/dev/null 2>&1
+sed -i 's/"dial_overrides"[[:space:]]*:[[:space:]]*{}/"dial_overrides": { "loop_autonomy": "suggest-review" }/' "$O/.workbench/config.json"
+chk "single-line dial_overrides beats preset" "[ \"\$(bash \"$HERE/scripts/loop-policy.sh\" \"$O\")\" = suggest-review ]"
+chk "single-line override config still valid JSON" "python3 -m json.tool '$O/.workbench/config.json' >/dev/null"
+
+rm -rf "$S" "$C" "$O"
 [ "$fail" = 0 ] && echo "PASS: loop-policy" || { echo "loop-policy test failed"; exit 1; }

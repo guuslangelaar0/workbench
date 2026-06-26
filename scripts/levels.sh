@@ -45,17 +45,13 @@ wb_dial() { # <project_root> <dial_name> -> resolved value (dial_overrides.<dial
   fi
   cfg="$(il_cfg_dir "$p")/config.json"
   lvl="$(sed -n 's/.*"level"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$cfg" 2>/dev/null | head -1)"
-  # Read dial_overrides: look for the key only within the dial_overrides object.
-  # We use a two-pass approach: find the line containing "dial_overrides" and
-  # then look for the dial key in the lines immediately following, until closing }.
-  override="$(awk '
-    /"dial_overrides"[[:space:]]*:/ { in_block=1; next }
-    in_block && /}/ { in_block=0; next }
-    in_block && /"'"$d"'"[[:space:]]*:[[:space:]]*"[^"]*"/ {
-      match($0, /"'"$d"'"[[:space:]]*:[[:space:]]*"([^"]*)"/, arr)
-      if (arr[1] != "") { print arr[1]; exit }
-    }
-  ' "$cfg" 2>/dev/null)"
+  # Resolve dial_overrides.<dial> independent of single-/multi-line formatting and
+  # without gawk: dial_overrides is a FLAT object (string values only), so flatten
+  # newlines to spaces, isolate the object body between its braces, then read the
+  # dial key from that body. An absent override / empty object yields nothing.
+  local body
+  body="$(tr '\n' ' ' < "$cfg" 2>/dev/null | sed -n 's/.*"dial_overrides"[[:space:]]*:[[:space:]]*{\([^}]*\)}.*/\1/p')"
+  override="$(printf '%s' "$body" | sed -n 's/.*"'"$d"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
   if [ -n "$override" ]; then
     printf '%s\n' "$override"
     return 0
