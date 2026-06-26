@@ -22,6 +22,7 @@ while [[ "$ROOT" != "/" ]] && [[ ! -d "$ROOT/.claude/tasks" ]]; do ROOT="$(dirna
 cd "$ROOT"
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SELF_DIR/lib.sh"
+. "$SELF_DIR/levels.sh"
 CFG="$(il_cfg_dir "$ROOT")/config.json"
 
 SHOW_PROD=1 SHOW_BUILD=1
@@ -35,8 +36,10 @@ NAME=""; CAP=10; STATES="backlog in-development in-review verified decisions"
 if [[ -f "$CFG" ]]; then
   NAME="$(cfg_scalar name)"
   ci="$(cfg_int in_review_cap)"; [[ -n "$ci" ]] && CAP="$ci"
-  if [[ $HAVE_PY -eq 1 ]]; then
-    s="$(python3 -c 'import json,sys;print(" ".join(json.load(open(sys.argv[1]))["lifecycle"]["states"]))' "$CFG" 2>/dev/null || true)"
+  # Derive lifecycle states from the level scalar (not persisted lifecycle.states)
+  lvl="$(cfg_scalar level)"
+  if [[ -n "$lvl" ]]; then
+    s="$(wb_level_lifecycle "$lvl" 2>/dev/null || true)"
     [[ -n "$s" ]] && STATES="$s"
   fi
 fi

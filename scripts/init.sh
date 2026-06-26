@@ -9,7 +9,7 @@ PLUGIN_ROOT="$(cd "$SELF_DIR/.." && pwd)"                  # workbench
 . "$SELF_DIR/lib.sh"
 . "$SELF_DIR/levels.sh"
 
-NAME="" MISSION="" LAUNCH="" TARGET="$PWD" PROFILE="full" LEVEL=""
+NAME="" MISSION="" LAUNCH="" TARGET="$PWD" PROFILE="full" LEVEL="" LEVEL_EXPLICIT=0
 need_arg() { [ "$#" -ge 2 ] || { echo "init.sh: $1 requires a value" >&2; exit 64; }; }
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -18,7 +18,7 @@ while [ "$#" -gt 0 ]; do
     --launch)  need_arg "$@"; LAUNCH="$2"; shift 2 ;;
     --target)  need_arg "$@"; TARGET="$2"; shift 2 ;;
     --profile) need_arg "$@"; PROFILE="$2"; shift 2 ;;
-    --level)   need_arg "$@"; LEVEL="$2"; shift 2 ;;
+    --level)   need_arg "$@"; LEVEL="$2"; LEVEL_EXPLICIT=1; shift 2 ;;
     *) echo "init.sh: unknown arg '$1'" >&2; exit 64 ;;
   esac
 done
@@ -91,18 +91,10 @@ fi
 
 # 4. .workbench/config.json
 mkdir -p "$TARGET/.workbench"
-if [ ! -f "$TARGET/.workbench/config.json" ]; then
+CFG="$TARGET/.workbench/config.json"
+if [ ! -f "$CFG" ]; then
   NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  # Build dials JSON block from level presets (sed-based, jq-free)
-  DIALS_JSON="$(wb_level_dials "$LEVEL" | sed 's/^\([^=]*\)=\(.*\)$/    "\1": "\2",/' | sed '$ s/,$//')"
-  # Build lifecycle states array from level (exclude decisions from the states array)
-  STATES_JSON="$(wb_level_lifecycle "$LEVEL" | tr ' ' '\n' | grep -v '^decisions$' | sed 's/.*/"&"/' | tr '\n' ',' | sed 's/,$//')"
-  # deploy_gated is true for crew and fleet
-  case "$LEVEL" in
-    crew|fleet) DEPLOY_GATED=true ;;
-    *)          DEPLOY_GATED=false ;;
-  esac
-  cat > "$TARGET/.workbench/config.json" <<JSON
+  cat > "$CFG" <<JSON
 {
   "workbench": { "version": "$VERSION", "initialized_at": "$NOW", "level": "$LEVEL" },
   "project": {
@@ -126,16 +118,19 @@ if [ ! -f "$TARGET/.workbench/config.json" ]; then
     "remote": "off",
     "inception_depth": "recommended"
   },
-  "dials": {
-$DIALS_JSON
-  },
-  "lifecycle": {
-    "states": [$STATES_JSON],
-    "deploy_gated": $DEPLOY_GATED,
-    "in_review_cap": 10
-  }
+  "dial_overrides": {},
+  "lifecycle": { "in_review_cap": 10 }
 }
 JSON
+elif [ "$LEVEL_EXPLICIT" = 1 ]; then
+  # Existing config + explicit --level: upsert the level scalar only.
+  # Every other field is preserved byte-for-byte.
+  if grep -q '"level"[[:space:]]*:' "$CFG"; then
+    sed -i 's/"level"[[:space:]]*:[[:space:]]*"[^"]*"/"level": "'"$LEVEL"'"/' "$CFG"
+  else
+    # inject level before the closing brace of the "workbench": { ... } object
+    sed -i 's/\("workbench"[[:space:]]*:[[:space:]]*{[^}]*\)}/\1, "level": "'"$LEVEL"'" }/' "$CFG"
+  fi
 fi
 
 # 5. .workbench/manifest.json — record managed files with hashes + modes (jq-free accumulator)

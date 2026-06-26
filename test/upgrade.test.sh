@@ -6,7 +6,8 @@ chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; 
 S="$HERE/templates/schemas"
 
 chk "manifest hash has pattern"   "grep -q 'sha256:' '$S/manifest.schema.json' && grep -q 'pattern' '$S/manifest.schema.json'"
-chk "config states has enum"      "python3 -c \"import json;p=json.load(open('$S/config.schema.json'))['properties']['lifecycle']['properties']['states']['items'];exit(0 if 'enum' in p else 1)\""
+chk "config lifecycle has in_review_cap" "python3 -c \"import json;p=json.load(open('$S/config.schema.json'))['properties']['lifecycle']['properties'];exit(0 if 'in_review_cap' in p else 1)\""
+chk "config level required enum"  "python3 -c \"import json;p=json.load(open('$S/config.schema.json'))['properties']['workbench'];exit(0 if 'level' in p.get('required',[]) else 1)\""
 chk "config wow has required"     "python3 -c \"import json;p=json.load(open('$S/config.schema.json'))['properties']['way_of_working'];exit(0 if 'required' in p else 1)\""
 chk "schemas still valid JSON"    "python3 -m json.tool '$S/config.schema.json' >/dev/null && python3 -m json.tool '$S/manifest.schema.json' >/dev/null"
 # a real scaffolded config + manifest validate against the (hardened) schemas

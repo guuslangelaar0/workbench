@@ -8,8 +8,19 @@ S="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --profile full --level solo  --na
 C="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --profile full --level crew  --name C --mission m --target "$C" >/dev/null 2>&1
 chk "solo -> auto-continue" "[ \"\$(bash \"$HERE/scripts/loop-policy.sh\" \"$S\")\" = auto-continue ]"
 chk "crew -> suggest-wait"  "[ \"\$(bash \"$HERE/scripts/loop-policy.sh\" \"$C\")\" = suggest-wait ]"
-# dial override beats the level preset
-sed -i 's/"loop_autonomy": "auto-continue"/"loop_autonomy": "suggest-wait"/' "$S/.workbench/config.json"
-chk "override beats preset"  "[ \"\$(bash \"$HERE/scripts/loop-policy.sh\" \"$S\")\" = suggest-wait ]"
+
+# dial_overrides.loop_autonomy beats the level preset
+# Inject override using python3 to keep the config valid JSON
+python3 - "$S/.workbench/config.json" <<'PY'
+import json, sys
+cfg = json.load(open(sys.argv[1]))
+if "dial_overrides" not in cfg:
+    cfg["dial_overrides"] = {}
+cfg["dial_overrides"]["loop_autonomy"] = "suggest-wait"
+json.dump(cfg, open(sys.argv[1], 'w'), indent=2)
+PY
+chk "dial_overrides beats preset"  "[ \"\$(bash \"$HERE/scripts/loop-policy.sh\" \"$S\")\" = suggest-wait ]"
+chk "config still valid JSON after override" "python3 -m json.tool '$S/.workbench/config.json' >/dev/null"
+
 rm -rf "$S" "$C"
 [ "$fail" = 0 ] && echo "PASS: loop-policy" || { echo "loop-policy test failed"; exit 1; }

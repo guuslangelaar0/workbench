@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$HERE/scripts/lib.sh"
 . "$HERE/scripts/levels.sh"
 fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
@@ -22,5 +23,26 @@ chk "level command exists"              "[ -f '$HERE/commands/level.md' ]"
 chk "level command: status/up/down"     "grep -qi 'status' '$HERE/commands/level.md' && grep -qi 'up' '$HERE/commands/level.md' && grep -qi 'down' '$HERE/commands/level.md'"
 chk "level command: shows dial changes before applying" "grep -qi 'which dials\|dials change\|before applying\|confirm' '$HERE/commands/level.md'"
 chk "levels skill exists"               "[ -f '$HERE/skills/levels/SKILL.md' ]"
+chk "level command: no jq usage"        "! grep -q 'jq ' '$HERE/commands/level.md'"
+
+# wb_dial: preset resolution
+TPRESET="$(mktemp -d)"
+bash "$HERE/scripts/init.sh" --profile full --level solo --name "DialTest" --mission m --target "$TPRESET" >/dev/null 2>&1
+chk "wb_dial: solo loop_autonomy preset" "[ \"\$(wb_dial '$TPRESET' loop_autonomy)\" = auto-continue ]"
+chk "wb_dial: solo release preset"       "[ \"\$(wb_dial '$TPRESET' release)\" = push-to-main ]"
+
+# wb_dial: override beats preset
+python3 - "$TPRESET/.workbench/config.json" <<'PY'
+import json, sys
+cfg = json.load(open(sys.argv[1]))
+if "dial_overrides" not in cfg:
+    cfg["dial_overrides"] = {}
+cfg["dial_overrides"]["loop_autonomy"] = "suggest-wait"
+json.dump(cfg, open(sys.argv[1], 'w'), indent=2)
+PY
+chk "wb_dial: override beats preset"   "[ \"\$(wb_dial '$TPRESET' loop_autonomy)\" = suggest-wait ]"
+chk "wb_dial: non-overridden dial still uses preset" "[ \"\$(wb_dial '$TPRESET' release)\" = push-to-main ]"
+chk "wb_dial: config still valid JSON" "python3 -m json.tool '$TPRESET/.workbench/config.json' >/dev/null"
+rm -rf "$TPRESET"
 
 [ "$fail" = 0 ] && echo "PASS: levels" || { echo "levels test failed"; exit 1; }

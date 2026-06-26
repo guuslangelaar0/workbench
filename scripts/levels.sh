@@ -33,3 +33,33 @@ wb_level_dials() { # <level> -> key=value lines
   printf 'team=%s\nrelease=%s\ndecomposition=%s\narchitecture=%s\nsurfaces=%s\ngraphify=%s\nloop_autonomy=%s\n' \
     "$team" "$release" "$decomp" "$arch" "$surfaces" "$graphify" "$loop"
 }
+
+wb_dial() { # <project_root> <dial_name> -> resolved value (dial_overrides.<dial> if set, else level preset)
+  local p="$1" d="$2"
+  local cfg lvl preset override
+  # lib.sh must be sourced by the caller, or we source it here if il_cfg_dir is not available
+  if ! command -v il_cfg_dir >/dev/null 2>&1; then
+    local _self_dir; _self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    # shellcheck source=lib.sh
+    . "$_self_dir/lib.sh"
+  fi
+  cfg="$(il_cfg_dir "$p")/config.json"
+  lvl="$(sed -n 's/.*"level"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$cfg" 2>/dev/null | head -1)"
+  # Read dial_overrides: look for the key only within the dial_overrides object.
+  # We use a two-pass approach: find the line containing "dial_overrides" and
+  # then look for the dial key in the lines immediately following, until closing }.
+  override="$(awk '
+    /"dial_overrides"[[:space:]]*:/ { in_block=1; next }
+    in_block && /}/ { in_block=0; next }
+    in_block && /"'"$d"'"[[:space:]]*:[[:space:]]*"[^"]*"/ {
+      match($0, /"'"$d"'"[[:space:]]*:[[:space:]]*"([^"]*)"/, arr)
+      if (arr[1] != "") { print arr[1]; exit }
+    }
+  ' "$cfg" 2>/dev/null)"
+  if [ -n "$override" ]; then
+    printf '%s\n' "$override"
+    return 0
+  fi
+  preset="$(wb_level_dials "${lvl:-solo}" 2>/dev/null | sed -n 's/^'"$d"'=//p')"
+  printf '%s\n' "${preset:-}"
+}

@@ -11,13 +11,17 @@ You are the `/workbench:level` command. Read `$ARGUMENTS` and act on it.
 Read `${CLAUDE_PROJECT_DIR}/.workbench/config.json`. If it does not exist, tell the user:
 "This project isn't configured yet. Run `/workbench` to set it up." and stop.
 
-Parse:
-- `workbench.level` — the current level (e.g. `"solo"`)
-- `dials` — the current dial map (JSON object)
-
-Source the levels library with Bash so you can call `wb_level_index`, `wb_level_dials`, and `wb_level_lifecycle`:
+Parse `workbench.level` using sed — no `jq`:
 
 ```bash
+CFG="${CLAUDE_PROJECT_DIR}/.workbench/config.json"
+level="$(sed -n 's/.*"level"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CFG" | head -1)"
+```
+
+Source the levels library with Bash so you can call `wb_level_index`, `wb_level_dials`, `wb_level_lifecycle`, and `wb_dial`:
+
+```bash
+. "${CLAUDE_PLUGIN_ROOT}/scripts/lib.sh"
 . "${CLAUDE_PLUGIN_ROOT}/scripts/levels.sh"
 ```
 
@@ -25,12 +29,14 @@ Source the levels library with Bash so you can call `wb_level_index`, `wb_level_
 
 ## `status` (default when no argument is given)
 
+Read the level preset via `wb_level_dials "$level"` and check for any `dial_overrides` in the config.
+
 Print:
 
 ```
 Level:  <current_level>
 Dials:
-  team             = <value>
+  team             = <value>   [override]   ← only show [override] when dial_overrides has this key
   release          = <value>
   decomposition    = <value>
   architecture     = <value>
@@ -38,6 +44,8 @@ Dials:
   graphify         = <value>
   loop_autonomy    = <value>
 ```
+
+Use `wb_dial "${CLAUDE_PROJECT_DIR}" <dial>` to resolve each dial (override-in-dial_overrides beats level preset automatically).
 
 Tell the user:
 - The ladder order: **solo → pair → crew → fleet**
@@ -88,11 +96,19 @@ If the user answers anything other than `yes`, print "Cancelled." and stop.
 
 ### Apply
 
-Run `init.sh` in non-destructive mode (it only adds missing stage dirs and re-stamps level and dials; existing tasks are untouched):
+Read the project name with sed — no `jq`:
+
+```bash
+CFG="${CLAUDE_PROJECT_DIR}/.workbench/config.json"
+proj_name="$(sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CFG" | head -1)"
+proj_name="${proj_name:-project}"
+```
+
+Run `init.sh` in non-destructive mode (it only adds missing stage dirs and upserts the `level` scalar; existing config fields and tasks are untouched):
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/init.sh" \
-  --name "$(jq -r '.project.name // "project"' "${CLAUDE_PROJECT_DIR}/.workbench/config.json")" \
+  --name "$proj_name" \
   --level "<target>" \
   --target "${CLAUDE_PROJECT_DIR}"
 ```
@@ -101,9 +117,21 @@ After `init.sh` succeeds, report:
 
 ```
 Level updated: <current> → <target>
-Dials re-stamped in .workbench/config.json.
+Level re-stamped in .workbench/config.json (dials are derived at read-time from the level).
 Lifecycle dirs added (if any): <list>
 Existing tasks are untouched.
 ```
 
 If `init.sh` exits non-zero, show its output and tell the user the change was NOT applied.
+
+### Single-dial override
+
+To override a single dial without changing the level, write directly into `dial_overrides` in the config:
+
+```bash
+# Example: override loop_autonomy to suggest-wait on a solo project
+# Use sed to either update an existing key in dial_overrides, or inject it.
+# The lead should do this via a targeted sed or python3 one-liner that preserves all other content.
+```
+
+Report what was written and remind the user that `wb_dial` will now return the override value for that dial.
