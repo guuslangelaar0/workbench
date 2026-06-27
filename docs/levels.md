@@ -129,6 +129,10 @@ Moving **up** adds the missing directories non-destructively — existing tasks 
 
 ---
 
+## Adopting into an existing repo — detected for you
+
+When you run `/workbench` on a repo that already has history, it doesn't make you guess your level. `scripts/detect-level.sh` reads your git + repo signals — distinct committers, release tags, non-trunk branches, and repositories under `repos/` — and recommends a starting level, taking the *strongest* signal (a two-person repo split across five sub-repos is `crew`, not `pair`). The setup wizard states the recommendation and the reasoning, and you confirm or override. It is recommend-only; you always decide.
+
 ## Graduating between levels
 
 ```text

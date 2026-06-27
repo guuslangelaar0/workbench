@@ -36,7 +36,7 @@ Start Claude Code in your project directory and run the front door:
 
 On an unconfigured project this launches the **setup wizard** — a short series of cards. You pick:
 
-1. **A maturity level** — `solo`, `pair`, `crew`, or `fleet`. Start where your *coordination surface* actually is; you can graduate later. (See [levels.md](levels.md) — read "the struggle each level solves" to place yourself.)
+1. **A maturity level** — `solo`, `pair`, `crew`, or `fleet`. On an existing repo, workbench **detects a recommendation for you** from your git history (committers, release tags, branches, repo count) and explains why — you just confirm or adjust. Start where your *coordination surface* actually is; you can graduate later. (See [levels.md](levels.md) — read "the struggle each level solves" to place yourself.)
 2. **Your operational axes** — verification depth, review, models, graphify, remote control, and so on. Each card offers a *leaner / recommended / better* choice with a plain-language note on the trade-off. (See [configuration.md](configuration.md).)
 
 When you finish, workbench writes `.workbench/config.json` and scaffolds your way of working:

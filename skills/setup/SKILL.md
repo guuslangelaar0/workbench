@@ -19,16 +19,22 @@ Then **give positive feedback**: name what's already good. Example: "You have 87
 
 ## Step 0b: Infer level and recommend
 
-Map the signals to a maturity level using `wb_level_index` ordering (from `scripts/levels.sh`):
+**Run the detector — don't eyeball it.** It maps the same git/repo signals to a level deterministically:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect-level.sh" "${CLAUDE_PROJECT_DIR}"
+```
+
+Its first line is `recommended=<level>`; the lines below are the signals it weighed (committers, release tags, non-trunk branches, repo count). It takes the *strongest* signal — e.g. a 2-committer repo with 5 repos under `repos/` recommends `crew`. For reference, the mapping it encodes:
 
 | Level | Signals that suggest it |
 |-------|------------------------|
 | `solo` | Single committer, main-only or rare branches, no tags, no task system |
-| `pair` | 2–3 committers or consistent feature-branch pattern, some tags, light task tracking |
-| `crew` | 3–8 committers, tagged releases, CI, epics or milestones, multi-repo awareness |
-| `fleet` | 8+ committers, release trains, release-candidate branches, federated repos, formal decomposition |
+| `pair` | 2–3 committers or a feature-branch pattern, some tags, light task tracking |
+| `crew` | 3–8 committers, tagged releases, epics/milestones, multi-repo |
+| `fleet` | 8+ committers, release trains, release-candidate branches, federated repos |
 
-State the inferred level plainly: "Based on your git history, this looks like a **pair**-level project." Then recommend whether to stay at that level or move up, with one sentence of reasoning. Ask: "Does **pair** sound right, or would you like to adjust?" — this is the level override question. The chosen level becomes the `--level` argument to `init.sh`.
+State the recommendation plainly using its output: "Based on your git history — *<the signals it printed>* — this looks like a **<recommended>**-level project." Then ask: "Does **<recommended>** sound right, or would you like to adjust?" — the level override question. The chosen level becomes the `--level` argument to `init.sh`. (The detector is recommend-only; the human always decides.)
 
 The per-axis dial questions below remain available as the **override mechanism** — after level selection, offer to walk the axes for fine-tuning, or accept all level defaults and scaffold immediately.
 

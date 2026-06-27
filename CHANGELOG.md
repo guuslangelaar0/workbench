@@ -7,6 +7,7 @@ All notable changes to workbench are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Adoption level detection** (Spec 3): `scripts/detect-level.sh` recommends a starting maturity level for an existing repo from git/repo signals (committers, release tags, non-trunk branches, repo count), taking the strongest signal. The setup wizard runs it and recommends — recommend-only, you decide.
 - **Epics** (Spec 2): group related tasks under one outcome via `.claude/epics/NNNN-title.md`. `/workbench:epic` to create/list; `/workbench:task --epic <id>` to link; live `done/total` rollup in `/workbench:mc`. Epics draw from the shared task ID counter (no collisions) and are gated to levels whose `decomposition` is grouped (pair+). `solo` stays flat.
 - Maturity ladder (`solo` / `pair` / `crew` / `fleet`) as the spine: each level is a preset over seven coordination dials, with single-dial `dial_overrides`.
 - `/workbench` single front door (context-aware: setup if unconfigured, else status).

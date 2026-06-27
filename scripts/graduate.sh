@@ -7,19 +7,19 @@ P="${1:-$PWD}"
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; . "$SELF/lib.sh"; . "$SELF/levels.sh"
 CFG="$(il_cfg_dir "$P")/config.json"; [ -f "$CFG" ] || exit 0
 level="$(sed -n 's/.*"level"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CFG" | head -1)"
-idx="$(wb_level_index "$level" 2>/dev/null || echo 0)"
+idx="$(wb_level_index "$level" 2>/dev/null)"
 
 signals=""
 add() { signals="${signals:+$signals; }$1"; }
 # observed signals
-tags="$(git -C "$P" tag 2>/dev/null | grep -c . || echo 0)"
+tags="$(git -C "$P" tag 2>/dev/null | grep -c .)"
 [ "${tags:-0}" -gt 0 ] && [ "$idx" -lt 2 ] && add "release tag(s) present"
-committers="$(git -C "$P" log --format='%ae' 2>/dev/null | sort -u | grep -c . || echo 0)"
+committers="$(git -C "$P" log --format='%ae' 2>/dev/null | sort -u | grep -c .)"
 [ "${committers:-0}" -gt 1 ] && [ "$idx" -lt 1 ] && add "more than one committer"
-ir="$(ls -1 "$P/.claude/tasks/in-review" 2>/dev/null | grep -c '\.md$' || echo 0)"
+ir="$(ls -1 "$P/.claude/tasks/in-review" 2>/dev/null | grep -c '\.md$')"
 cap="$(sed -n 's/.*"in_review_cap"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p' "$CFG" | head -1)"; [ -n "$cap" ] || cap=10
 [ "${ir:-0}" -ge "$cap" ] && add "in-review cap reached"
-repos="$(ls -d "$P"/repos/*/ 2>/dev/null | grep -c . || echo 0)"
+repos="$(ls -d "$P"/repos/*/ 2>/dev/null | grep -c .)"
 [ "${repos:-0}" -gt 1 ] && [ "$idx" -lt 2 ] && add "multiple repos"
 
 [ -z "$signals" ] && exit 0
