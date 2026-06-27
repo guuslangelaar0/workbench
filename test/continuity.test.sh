@@ -21,6 +21,8 @@ BRIEF="$(CLAUDE_PROJECT_DIR="$TMP" bash "$HERE/hooks/bin/ground-session.sh" </de
 chk "brief mentions project"   "printf '%s' \"\$BRIEF\" | grep -q 'Acme'"
 chk "brief shows task counts"  "printf '%s' \"\$BRIEF\" | grep -qi 'backlog'"
 chk "brief points to SOUL"     "printf '%s' \"\$BRIEF\" | grep -q 'SOUL.md'"
+chk "brief injects prime directive"      "printf '%s' \"\$BRIEF\" | grep -q 'prime directive: forward motion'"
+chk "prime directive bans permission-asking" "printf '%s' \"\$BRIEF\" | grep -qi 'do not ask permission'"
 NOOP="$(CLAUDE_PROJECT_DIR="$(mktemp -d)" bash "$HERE/hooks/bin/ground-session.sh" </dev/null 2>/dev/null; echo "rc=$?")"
 chk "no-op in non-workbench dir"  "[ \"\$NOOP\" = 'rc=0' ]"
 
