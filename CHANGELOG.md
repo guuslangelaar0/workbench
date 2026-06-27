@@ -6,6 +6,12 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-27
+
+First public release. The full foundation roadmap (Specs 1–5) is implemented,
+covered by 30 offline test suites plus a 6-scenario live-plugin e2e harness, and
+validated as publishable.
+
 ### Added
 - **Context backbone** (Spec 4): C4-style architecture docs in `.claude/architecture/`, scaffolded cumulatively per the `architecture` dial (pair=context → crew=+containers → fleet=+components; solo=none) and added non-destructively on level-up. Models authored intent (the docs) vs. graphify-extracted reality, with drift as a first-class signal. `/workbench:architecture [view|drift]` + the `architecture` skill. (Automated intent-vs-extracted diffing is the next layer.)
 - **Marketplace distribution** (Spec 5): `scripts/validate-plugin.sh` publishability gate — validates the manifests (JSON, required fields, name/version consistency, license matches the LICENSE file, plugin exposes surfaces). Fixed plugin.json metadata for publication (MIT license to match the LICENSE file, correct homepage/repository, keywords).
@@ -19,11 +25,11 @@ All notable changes to workbench are documented here. The format follows
 - Session & compaction continuity (`SessionStart` re-ground, `PreCompact` checkpoint, `SESSION_STATE.md` handoff).
 - Multi-session coordination (presence, task claims, pre-commit collision guard, worktrees).
 - `/workbench:inception` scope-controlled greenfield genesis; `/workbench:remote` Telegram control with a catastrophic-command guard.
-- Live-plugin end-to-end test harness (`test/e2e/run.sh`) that loads the real plugin into a headless Claude session via `claude -p --plugin-dir`.
+- Live-plugin end-to-end test harness (`test/e2e/run.sh`) that loads the real plugin into a headless Claude session via `claude -p --plugin-dir` — 6 scenarios / 9 checks covering `task`, `mc`, `level`, the front door, `epic`, and `architecture`.
 - User documentation: getting-started, levels, concepts, commands, configuration.
 
 ### Changed
 - Config model is **level-only**: `.workbench/config.json` stores `workbench.level` and the seven dials + lifecycle stages are derived from it at read-time. No persisted `dials` block or `lifecycle.states` array to drift.
 
 ### Notes
-- This is the `0.x` foundation. The deeper context-backbone implementation, epics/lifecycle file model, and marketplace polish are on the roadmap (see [docs/design/](docs/design/)).
+- This is the `0.x` foundation: the full Spec 1–5 roadmap ships here (see [docs/design/](docs/design/)). The next layer is automated intent-vs-extracted drift diffing for the context backbone.
