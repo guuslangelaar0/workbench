@@ -79,6 +79,21 @@ if [ "$PROFILE" = full ]; then
     printf '\n# workbench coordination runtime state (heartbeats, locks) — never commit\n/.claude/locks/\n' >> "$GI"
   fi
   render_new "$TMPL_FULL/SESSION_STATE.md.tmpl" "$TARGET/.claude/SESSION_STATE.md" ".claude/SESSION_STATE.md" "PROJECT_NAME=$NAME"
+  # context backbone (C4 authored-intent docs) — scaled to the architecture dial.
+  # Cumulative: context → +containers → +components. none (solo) gets nothing.
+  _arch="$(wb_level_dials "$LEVEL" | sed -n 's/^architecture=//p')"
+  if [ -n "$_arch" ] && [ "$_arch" != none ]; then
+    mkdir -p "$TARGET/.claude/architecture"
+    render_new "$TMPL_FULL/architecture/context.md.tmpl" "$TARGET/.claude/architecture/context.md" ".claude/architecture/context.md" "PROJECT_NAME=$NAME"
+    case "$_arch" in
+      containers|components)
+        render_new "$TMPL_FULL/architecture/containers.md.tmpl" "$TARGET/.claude/architecture/containers.md" ".claude/architecture/containers.md" "PROJECT_NAME=$NAME" ;;
+    esac
+    case "$_arch" in
+      components)
+        render_new "$TMPL_FULL/architecture/components.md.tmpl" "$TARGET/.claude/architecture/components.md" ".claude/architecture/components.md" "PROJECT_NAME=$NAME" ;;
+    esac
+  fi
 else
   render_new "$TMPL_MIN/CLAUDE.md.tmpl" "$TARGET/CLAUDE.md" "CLAUDE.md" \
     "PROJECT_NAME=$NAME" "MISSION=$MISSION" "LAUNCH=$LAUNCH"

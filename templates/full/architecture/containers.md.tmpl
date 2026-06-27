@@ -1,0 +1,18 @@
+# {{PROJECT_NAME}} — Containers (C4: L2)
+
+_Authored intent. The major runnable/deployable units inside the system and how they talk to each other — apps, services, datastores, clients. One level below [context](context.md)._
+
+## Containers
+| Container | Responsibility | Stack | Talks to |
+|-----------|----------------|-------|----------|
+| <name> | <what it does> | <lang/framework> | <other containers> |
+
+## Container diagram
+```mermaid
+flowchart LR
+    client["Client app"] -->|API| api["API service"]
+    api --> db[("Database")]
+```
+
+## Drift vs. extracted reality
+graphify's per-repo / workspace graphs reveal the **actual** call edges and dependencies between units. When a container, an edge, or a datastore exists in the code but not above (or vice versa), that is authored-intent ↔ reality **drift** — record it here and reconcile. At `crew`+ this map is expected to stay current; treat unexplained drift as a task.

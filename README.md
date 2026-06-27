@@ -120,6 +120,7 @@ Five capabilities, all configured from the level you pick:
 | `/workbench:mc` | Mission Control: a text dashboard of tasks, cap, build, and prod |
 | `/workbench:teamlead <topic>` | Scope this session to one track and lock tasks so leads don't collide |
 | `/workbench:inception` | Scope-controlled product genesis: an idea → a v1 spec + seeded backlog |
+| `/workbench:architecture` | View or reconcile the C4 context backbone (authored intent ↔ graphify-extracted reality, drift) |
 | `/workbench:boot` | Boot protocol: verify reality from disk, reconcile, then brief |
 | `/workbench:checkpoint` | Write a `SESSION_STATE` checkpoint now for the next session |
 | `/workbench:upgrade` | Reconcile this project's workbench files to the current plugin version (preserves your edits) |

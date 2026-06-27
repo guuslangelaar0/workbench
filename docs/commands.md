@@ -60,6 +60,9 @@ Designate this session a topic lead. Scopes task-picking to one `**Track:**` and
 ### `/workbench:inception`
 Scope-controlled product genesis for a greenfield project: turns an idea into a v1 spec and a seeded backlog, refusing to proceed until you name what's explicitly **out** of v1.
 
+### `/workbench:architecture [view | drift]`
+View or reconcile the **context backbone** in `.claude/architecture/` — C4-style authored-intent docs (context → containers → components) scaled by the `architecture` dial. `view` summarizes the intended shape; `drift` compares it against graphify's extracted reality and surfaces divergences (dependencies in code but not docs, god-nodes, intent with no code) to reconcile. `none` at solo; enabled by `/workbench:level up`. See [concepts.md](concepts.md#the-context-backbone-architecture).
+
 ---
 
 ## Continuity & maintenance

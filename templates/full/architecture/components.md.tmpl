@@ -1,0 +1,19 @@
+# {{PROJECT_NAME}} — Components (C4: L3)
+
+_Authored intent. The internal building blocks within a container — the major modules/packages and their responsibilities. One level below [containers](containers.md). The lowest authored level; C4's "code" level (L4) is left to graphify — it is extracted, never hand-maintained._
+
+## Components (per container)
+### <container name>
+| Component | Responsibility | Depends on |
+|-----------|----------------|------------|
+| <module> | <what it owns> | <other components> |
+
+## Component diagram
+```mermaid
+flowchart TD
+    handler["Request handler"] --> svc["Service layer"]
+    svc --> repo["Repository"]
+```
+
+## Drift vs. extracted reality (the C4 boundary)
+This is where authored intent hands off to graphify. graphify extracts the **real** module graph (the L4 "code" level) — actual imports, call edges, god-modules, community structure. Compare it to the components above: a module that has grown into a god-node, a dependency that shouldn't exist, a component that's pure intent with no code yet — each is **drift**. At `fleet`, the federated graph spans repos; reconcile drift as first-class work, don't let intent and reality silently diverge.

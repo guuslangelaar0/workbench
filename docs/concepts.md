@@ -90,7 +90,14 @@ Workbench leans on the [superpowers](https://github.com/obra/superpowers) skills
 
 ## The context backbone (architecture)
 
-The `architecture` dial sets how formally a project maps itself, scaling with level: `none` → `context` → `containers` → `components` (a [C4](https://c4model.com)-style progression). The design intent is a two-sided model — *authored intent* (what you meant to build) versus *extracted reality* (what the code actually is, via knowledge graphs) — with the **drift between them treated as a first-class signal**. Higher levels and the `graphify` axis turn more of this on. (The deeper implementation of the context backbone is on the roadmap; see [docs/design/](design/) for the design rationale.)
+The `architecture` dial sets how formally a project maps itself, scaling with level: `none` (solo) → `context` (pair) → `containers` (crew) → `components` (fleet) — a [C4](https://c4model.com)-style progression. `init.sh` scaffolds the matching docs into `.claude/architecture/` (cumulative: context → +containers → +components), and `/workbench:level up` adds the next one non-destructively.
+
+The model is two-sided, and the gap is the point:
+
+- **Authored intent** — the hand-written `.claude/architecture/*.md` docs (C4 levels L1–L3): what you *mean* the system to be.
+- **Extracted reality** — what the code *actually is* (the L4 "code" level + real edges), read from graphify's graphs per the `graphify` dial. Never hand-maintained.
+
+**Drift between them is a first-class signal, not a failure** — a dependency in the code but not the docs, a component that's pure intent with no code, a module grown into a god-node. `/workbench:architecture drift` reconciles the two; real drift becomes a task. (Today the comparison is a disciplined read against the graph; automated intent-vs-extracted diffing is the next layer.) See the `architecture` skill.
 
 ---
 

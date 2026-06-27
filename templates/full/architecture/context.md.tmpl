@@ -1,0 +1,22 @@
+# {{PROJECT_NAME}} — System Context (C4: L1)
+
+_Authored intent. The highest-level view: what this system is, who uses it, and what it depends on. This is what you **mean** the system to be; graphify extracts what it **actually** is (the lower C4 levels). Where they diverge is **drift** — a signal, not a failure._
+
+## What it is
+(one paragraph: the system's purpose, in plain language)
+
+## Users / actors
+- **<actor>** — what they do with it
+
+## External dependencies
+- **<system>** — why we depend on it / what flows across the boundary
+
+## Context diagram
+```mermaid
+flowchart TD
+    user["User"] -->|uses| sys["{{PROJECT_NAME}}"]
+    sys -->|depends on| ext["External service"]
+```
+
+## Drift vs. extracted reality
+graphify (per the `graphify` dial) maps the **actual** external integrations and boundaries from the code. When the real dependencies diverge from the list above — a new external call, a removed integration — record the gap here and reconcile (update intent, or fix the code). Intended-vs-actual is the scope-drift signal.
