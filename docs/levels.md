@@ -77,6 +77,8 @@ The level name is shorthand; the dials are the real configuration. Workbench der
 | `graphify` | Knowledge-graph scope | off | per-repo | workspace | federated |
 | `loop_autonomy` | How autonomous the loop runs | auto-continue | auto-continue | suggest-wait | suggest-review |
 
+> `graphify` also appears as a `way_of_working` axis. The **dial above is authoritative for scope**; the axis is a coarse on/off toggle the setup wizard keeps aligned. See [configuration.md](configuration.md#way_of_working).
+
 ### Overriding a single dial
 
 You can keep a level's preset but override exactly one dial — e.g. you're a `crew` but don't want full-workspace graphify yet. Add it to the optional flat `dial_overrides` object in `.workbench/config.json`:

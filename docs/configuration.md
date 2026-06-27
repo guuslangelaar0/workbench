@@ -90,6 +90,8 @@ These are your **operational axes** — cross-cutting choices the setup wizard w
 
 All ten axes are required once a project is configured.
 
+> **`graphify` appears in two places — here's which wins.** The `way_of_working.graphify` axis above is a coarse *operational toggle* (is the knowledge graph on, and roughly how broad). The level also derives a `graphify` **dial** with a finer scope vocabulary (`off` → `per-repo` → `workspace` → `federated`). The **dial is authoritative for scope** — resolved as `dial_overrides.graphify` first, then the level preset — while the axis records the on/off intent the setup wizard captured. The wizard keeps the two aligned; if you hand-edit, change the level (or `dial_overrides.graphify`) rather than relying on the axis alone. (Knowledge-graph integration itself is on the roadmap; today both values are declarative.)
+
 ---
 
 ## `dial_overrides`

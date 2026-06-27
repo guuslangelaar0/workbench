@@ -94,6 +94,19 @@ out="$(cd "$D3" && drive "$D3" 'Run /workbench:level status and tell me the curr
 printf '%s' "$out" | grep -qi "fleet" && ok "reports the configured level (fleet)" || bad "did not report level fleet"
 rm -rf "$D3"
 
+# ---- scenario 4: the bare /workbench front door reports status on a configured project
+note "4) /workbench front door reports status (no setup) on a configured project"
+D4="$(scaffold "E2E Four" crew)"
+out="$(cd "$D4" && drive "$D4" 'Run /workbench and show me the status it reports.')"
+printf '%s' "$out" | grep -qi "crew" && ok "front door reports the configured level (crew)" || bad "front door did not report the level"
+rm -rf "$D4"
+
+# NOTE — known coverage gap: SessionStart / PreCompact hooks do NOT fire (or their
+# injected context is not surfaced) under `claude -p`, so this harness cannot assert
+# hook behavior. Hooks are covered structurally by test/hooks.test.sh and behaviorally
+# by the interactive smoke test in docs/getting-started.md (relaunch a real session and
+# confirm the operating brief prints).
+
 # ---- summary ----------------------------------------------------------------
 note "----"
 if [ "$fail" = 0 ]; then note "E2E PASS ($pass checks)"; else note "E2E FAILED ($pass passed)"; fi
