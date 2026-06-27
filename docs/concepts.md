@@ -97,7 +97,7 @@ The model is two-sided, and the gap is the point:
 - **Authored intent** — the hand-written `.claude/architecture/*.md` docs (C4 levels L1–L3): what you *mean* the system to be.
 - **Extracted reality** — what the code *actually is* (the L4 "code" level + real edges), read from graphify's graphs per the `graphify` dial. Never hand-maintained.
 
-**Drift between them is a first-class signal, not a failure** — a dependency in the code but not the docs, a component that's pure intent with no code, a module grown into a god-node. `/workbench:architecture drift` reconciles the two; real drift becomes a task. (Today the comparison is a disciplined read against the graph; automated intent-vs-extracted diffing is the next layer.) See the `architecture` skill.
+**Drift between them is a first-class signal, not a failure** — a dependency in the code but not the docs, a component that's pure intent with no code, a module grown into a god-node. `/workbench:architecture drift` reconciles the two: it runs `scripts/arch-drift.sh` to align your declared containers/components against graphify's extracted god-nodes and prints which abstractions are named in your docs (`yes`/`no`) and which declared components have no extracted counterpart. The alignment is deliberately heuristic and **never asserts a verdict** — graphify's hubs include runtime/framework noise that doesn't belong in a C4 model — so the script aligns and you judge; real drift becomes a task. See the `architecture` skill.
 
 ---
 

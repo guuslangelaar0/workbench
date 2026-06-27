@@ -100,5 +100,7 @@ The commands are thin markdown wrappers over the scripts in `scripts/`, which yo
 | `mc.sh` | Render the Mission Control dashboard |
 | `levels.sh` | The maturity-ladder source of truth (presets, dial resolution) |
 | `loop-policy.sh` | Resolve the loop autonomy mode for the current level |
-| `graduate.sh` | Suggest a level from git signals (recommend-only) |
+| `detect-level.sh` | Recommend a *starting* level for a project being adopted, from git signals (recommend-only) |
+| `graduate.sh` | Detect when a *configured* project has outgrown its level (recommend-only) |
 | `drift.sh` | Classify scaffolded files as ok / edited / missing |
+| `arch-drift.sh` | Align authored C4 docs against graphify-extracted reality (architecture drift) |
