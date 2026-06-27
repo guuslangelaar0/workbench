@@ -32,18 +32,23 @@ il_render() {
   local tmpl="$1" out="$2"; shift 2
   local content pair k v
   local S1=$'\x01' S2=$'\x02'
+  # bash 5.2+ defaults `patsub_replacement` ON, which makes `&` in a ${//} replacement
+  # expand to the MATCHED text (sed-like) — that would corrupt any value containing `&`.
+  # Disable it for the duration (scoped save/restore) so replacement is purely literal;
+  # then values containing `&`, `\`, etc. need no escaping. No-op on bash < 5.2.
+  local _patsub; _patsub="$(shopt -p patsub_replacement 2>/dev/null || true)"
+  shopt -u patsub_replacement 2>/dev/null || true
   content="$(cat "$tmpl")"
   # phase 1: replace each template {{KEY}} with a unique sentinel (no user values yet)
   for pair in "$@"; do
     k="${pair%%=*}"
     content="${content//\{\{$k\}\}/$S1$k$S2}"
   done
-  # phase 2: replace sentinels with escaped values (values are not re-scanned for tokens)
+  # phase 2: replace sentinels with values, literally (values are not re-scanned for tokens)
   for pair in "$@"; do
     k="${pair%%=*}"; v="${pair#*=}"
-    v="${v//\\/\\\\}"   # escape backslash first
-    v="${v//&/\\&}"     # then & — bash treats & in ${//} replacement as the matched text
     content="${content//$S1$k$S2/$v}"
   done
+  [ -n "$_patsub" ] && eval "$_patsub" 2>/dev/null || true   # restore prior shopt state
   printf '%s\n' "$content" > "$out"
 }
