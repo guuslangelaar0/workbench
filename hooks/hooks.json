@@ -40,6 +40,13 @@
           { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/remote-guard.sh\"", "timeout": 10 }
         ]
       }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/teammate-idle-guard.sh\"", "timeout": 10 }
+        ]
+      }
     ]
   }
 }

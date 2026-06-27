@@ -2,6 +2,9 @@
 # Spec 2 — epics & lifecycle file model: epic creation, task↔epic linkage, the shared
 # global ID counter, level-gating of the epics dir, and the mc rollup.
 set -uo pipefail
+# this suite exercises lifecycle MOVE mechanics, not the verification contract
+# (covered by verification-gate.test.sh) — bypass the ->verified gate
+export WB_SKIP_VERIFY_GATE=1
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # workbench
 fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }

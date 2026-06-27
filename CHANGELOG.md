@@ -7,7 +7,12 @@ All notable changes to workbench are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Verification contract** (loop hardening): the task template now carries an enforceable definition of done — acceptance criteria, scenarios (happy + edge), and a verification ladder (self-test → unit → integration → e2e/Playwright → evidence). `scripts/verify-gate.sh` checks it, and `task-move.sh` **refuses** to move a task into `verified`/`staged`/`shipped` without real criteria + captured evidence (level-scaled: enforced at crew/fleet, advisory at solo/pair; `WB_SKIP_VERIFY_GATE=1` overrides). A `TeammateIdle` hook nudges teammates not to idle on unverifiable in-review work. Makes "verified" structurally unfakeable.
+
 - **Automated architecture-drift assembler** (`scripts/arch-drift.sh`, wired into `/workbench:architecture drift`): aligns the declared containers/components in your C4 tables against graphify's extracted god-nodes and prints a `yes`/`no` "named in your docs?" comparison plus declared-but-unextracted components. Deliberately a heuristic *assembler*, not a verdict engine — graphify's hubs include runtime/framework noise (wasm shims, UI toasts) that doesn't belong in a C4 model, so the script aligns and the human judges. Falls back to a manual read when no graph is present.
+
+### Changed
+- **Loop hardening — correctness:** dropped the removed `TeamCreate`/`TeamDelete` instruction from the orchestration skill (Claude Code v2.1.178 auto-forms teams on first spawn; `team_name` is ignored).
 
 ## [0.1.0] - 2026-06-27
 

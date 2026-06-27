@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -uo pipefail
+# exercises lifecycle MOVE mechanics, not the verification contract
+# (covered by verification-gate.test.sh) — bypass the ->verified gate
+export WB_SKIP_VERIFY_GATE=1
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }

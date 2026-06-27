@@ -3,6 +3,9 @@
 # (init → tasks → lifecycle → mc → coord claims → drift → ground-brief). Catches
 # integration regressions the per-unit suites miss.
 set -uo pipefail
+# exercises lifecycle MOVE mechanics, not the verification contract
+# (covered by verification-gate.test.sh) — bypass the ->verified gate
+export WB_SKIP_VERIFY_GATE=1
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # workbench
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

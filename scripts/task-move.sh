@@ -45,6 +45,21 @@ T="$TARGET/.claude/tasks"
 src="$(find "$T" -maxdepth 2 -type f \( -name "$ID-*.md" -o -name "$ID.md" \) 2>/dev/null | sort | head -1)"
 [ -n "$src" ] || { echo "task-move.sh: no task file for id $ID under $T" >&2; exit 1; }
 
+# verification-contract gate: a move into a "done" stage requires real acceptance
+# criteria + captured evidence. verify-gate.sh is level-scaled (enforces at crew/fleet,
+# advisory at solo/pair) and fails open. Override the rare legit case with WB_SKIP_VERIFY_GATE=1.
+case "$TO" in
+  verified|staged|shipped)
+    if [ "${WB_SKIP_VERIFY_GATE:-0}" != 1 ] && [ -x "$SELF_DIR/verify-gate.sh" ]; then
+      if ! "$SELF_DIR/verify-gate.sh" "$src" --target "$TARGET" >/dev/null; then
+        echo "task-move: refusing to move $ID to '$TO' — verification contract unmet (see above)." >&2
+        echo "  Fill in real acceptance criteria + the '## Verification evidence' section, or set WB_SKIP_VERIFY_GATE=1 to override." >&2
+        exit 3
+      fi
+    fi
+    ;;
+esac
+
 mkdir -p "$T/$TO"
 dest="$T/$TO/$(basename "$src")"
 if [ "$src" = "$dest" ]; then echo "task-move.sh: $ID already in $TO"; exit 0; fi
