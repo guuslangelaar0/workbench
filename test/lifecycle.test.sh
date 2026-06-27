@@ -79,4 +79,15 @@ chk "rich: repos array length preserved" "python3 -c \"import json; c=json.load(
 chk "rich: release-candidate dir exists" "[ -d '$TRICH/.claude/tasks/release-candidate' ]"
 rm -rf "$TRICH"
 
+# C5: idempotency — a re-move into the same stage is a safe no-op (resume-after-crash safety).
+# A resumed/retried loop iteration must not double-apply a lifecycle transition.
+TIDEM="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --profile full --level crew --name Idem --mission m --target "$TIDEM" >/dev/null 2>&1
+bash "$HERE/scripts/task-new.sh" --target "$TIDEM" --title "idem" >/dev/null 2>&1
+iid="$(ls "$TIDEM/.claude/tasks/backlog" | head -1 | sed 's/-.*//')"
+bash "$HERE/scripts/task-move.sh" --target "$TIDEM" "$iid" in-development >/dev/null 2>&1
+bash "$HERE/scripts/task-move.sh" --target "$TIDEM" "$iid" in-development >/dev/null 2>&1; rc=$?
+chk "idempotent re-move exits 0"            "[ $rc -eq 0 ]"
+chk "idempotent re-move keeps exactly one"  "[ \"\$(ls '$TIDEM/.claude/tasks/in-development/'*.md 2>/dev/null | wc -l)\" -eq 1 ]"
+rm -rf "$TIDEM"
+
 [ "$fail" = 0 ] && echo "PASS: lifecycle" || { echo "lifecycle test failed"; exit 1; }
