@@ -42,4 +42,10 @@ D5="$(mkbad '{"name":"w" "version":}' "$GOOD_MK" 1)"
 chk "rejects invalid JSON"              "! bash '$V' '$D5' >/dev/null 2>&1"
 rm -rf "$D1" "$D2" "$D3" "$D4" "$D5"
 
+# --- a commands-only plugin (no skills/agents) is valid (regression: surface check
+#     used to reject any single-surface plugin) ---
+D6="$(mkbad '{"name":"w","version":"0.1.0","description":"d","license":"MIT"}' "$GOOD_MK" 1)"
+chk "commands-only plugin is publishable" "bash '$V' '$D6' >/dev/null 2>&1"
+rm -rf "$D6"
+
 [ "$fail" = 0 ] && echo "PASS: marketplace" || { echo "marketplace test failed"; exit 1; }

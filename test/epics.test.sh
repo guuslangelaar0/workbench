@@ -44,6 +44,14 @@ chk "mc shows Epics section"          "printf '%s' \"\$MC\" | grep -q 'Epics'"
 chk "mc rollup: epic + 2 child tasks" "printf '%s' \"\$MC\" | grep -qE '${EID}.*Folder Sharing & Links.*2 tasks'"
 chk "mc rollup: 1 of 2 done"          "printf '%s' \"\$MC\" | grep -qE '${EID}.*1/2 tasks done'"
 
+# --- regression: a stray non-epic file in .claude/epics/ must NOT inflate the rollup
+#     (an empty epic id would otherwise match every unassigned task) ---
+touch "$C/.claude/epics/readme.md"
+MC2="$(cd "$C" && NO_COLOR=1 bash "$HERE/scripts/mc.sh" --no-prod --no-build 2>/dev/null)"
+chk "stray epics file does not appear as an epic" "! printf '%s' \"\$MC2\" | grep -qE 'readme'"
+chk "real epic rollup still correct after stray"  "printf '%s' \"\$MC2\" | grep -qE '${EID}.*1/2 tasks done'"
+rm -f "$C/.claude/epics/readme.md"
+
 # --- validation: bad status rejected ---
 chk "epic-new rejects bad status" "! bash '$HERE/scripts/epic-new.sh' --title x --status bogus --target '$C' >/dev/null 2>&1"
 

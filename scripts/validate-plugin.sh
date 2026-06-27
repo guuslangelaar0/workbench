@@ -68,11 +68,13 @@ if pj is not None and mk is not None:
         if mv and pv and mv != pv:
             err(f"version mismatch: plugin.json {pv} vs marketplace.json {mv}")
 
-# referenced surfaces exist (commands/skills/agents are how the plugin is useful)
-for d, label in (("commands", "commands/*.md"), ("skills", "skills/*/SKILL.md"), ("agents", "agents/*.md")):
-    if not glob.glob(os.path.join(root, d, "*" if d != "skills" else "*/SKILL.md")) and \
-       not glob.glob(os.path.join(root, label)):
-        err(f"no {label} found — plugin would expose nothing")
+# the plugin must expose at least ONE surface (commands / skills / agents); a plugin
+# with only commands is perfectly valid, so error only if ALL are absent.
+surfaces = (glob.glob(os.path.join(root, "commands", "*.md"))
+            + glob.glob(os.path.join(root, "skills", "*", "SKILL.md"))
+            + glob.glob(os.path.join(root, "agents", "*.md")))
+if not surfaces:
+    err("plugin exposes nothing — found no commands/*.md, skills/*/SKILL.md, or agents/*.md")
 
 if problems:
     print("PLUGIN NOT PUBLISHABLE:")

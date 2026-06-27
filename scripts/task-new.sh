@@ -36,7 +36,7 @@ ID="$(tr -d ' \n' < "$NID")"
 case "$ID" in ''|*[!0-9]*) echo "task-new.sh: _next-id is not numeric: '$ID'" >&2; exit 1 ;; esac
 
 # slug: lowercase, runs of non-alphanumerics -> single '-', trim leading/trailing '-'
-slug="$(printf '%s' "$TITLE" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')"
+slug="$(printf '%s' "$TITLE" | tr '\n' ' ' | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')"
 [ -n "$slug" ] || slug="task"
 
 mkdir -p "$T/$STATE"

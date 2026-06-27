@@ -31,7 +31,7 @@ NID="$TARGET/.claude/tasks/_next-id"
 ID="$(tr -d ' \n' < "$NID")"
 case "$ID" in ''|*[!0-9]*) echo "epic-new.sh: _next-id is not numeric: '$ID'" >&2; exit 1 ;; esac
 
-slug="$(printf '%s' "$TITLE" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')"
+slug="$(printf '%s' "$TITLE" | tr '\n' ' ' | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')"
 [ -n "$slug" ] || slug="epic"
 
 E="$TARGET/.claude/epics"
