@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: offline test suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure git
+        # the suites scaffold throwaway repos (git init / status / mv)
+        run: |
+          git config --global user.email "ci@workbench.test"
+          git config --global user.name "workbench ci"
+          git config --global init.defaultBranch main
+
+      - name: Run offline test suite
+        # the live-plugin e2e (test/e2e/) is intentionally NOT run here — it needs an
+        # authenticated `claude` CLI and costs tokens. all.sh is fully offline + free.
+        run: bash test/all.sh
