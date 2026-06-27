@@ -53,4 +53,21 @@ chk "documented component NOT flagged as orphan"     "! printf '%s' \"\$OUT\" | 
 chk "honesty caveat present (not a verdict)"         "printf '%s' \"\$OUT\" | grep -qi 'heuristic'"
 rm -rf "$C"
 
+# --- partial docs: pair level has ONLY context.md (no containers/components tables).
+#     The declared-component logic runs against missing files — it must degrade
+#     gracefully (exit 0, no crash), not error on the absent docs. ---
+PAIR="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --name "Pair" --level pair --target "$PAIR" >/dev/null 2>&1
+mkdir -p "$PAIR/graphify-out"
+cat > "$PAIR/graphify-out/GRAPH_REPORT.md" <<'REP'
+# Graph Report - test
+## Summary
+- 50 nodes · 100 edges · 3 communities detected
+## God Nodes (most connected - your core abstractions)
+1. `request()` - 40 edges
+REP
+OUT_PAIR="$(bash "$S" "$PAIR" 2>/dev/null)"; PAIR_RC=$?
+chk "pair (context-only docs) exits 0, no crash" "[ $PAIR_RC -eq 0 ]"
+chk "pair: still emits the god-node comparison" "printf '%s' \"\$OUT_PAIR\" | grep -qi 'core abstractions'"
+rm -rf "$PAIR"
+
 [ "$fail" = 0 ] && echo "PASS: arch-drift" || { echo "arch-drift test failed"; exit 1; }
