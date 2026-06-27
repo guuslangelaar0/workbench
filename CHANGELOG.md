@@ -6,6 +6,9 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Automated architecture-drift assembler** (`scripts/arch-drift.sh`, wired into `/workbench:architecture drift`): aligns the declared containers/components in your C4 tables against graphify's extracted god-nodes and prints a `yes`/`no` "named in your docs?" comparison plus declared-but-unextracted components. Deliberately a heuristic *assembler*, not a verdict engine — graphify's hubs include runtime/framework noise (wasm shims, UI toasts) that doesn't belong in a C4 model, so the script aligns and the human judges. Falls back to a manual read when no graph is present.
+
 ## [0.1.0] - 2026-06-27
 
 First public release. The full foundation roadmap (Specs 1–5) is implemented,

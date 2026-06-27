@@ -20,11 +20,19 @@ Read each present doc (`context.md`, `containers.md`, `components.md`) and give 
 
 ## `drift`
 
-Reconcile **authored intent** (the docs) against **extracted reality** (graphify):
+Reconcile **authored intent** (the docs) against **extracted reality** (graphify). Start with the automated assembler, which aligns the two for you:
 
-1. Read the authored docs in `.claude/architecture/`.
-2. Read the extracted graph if present — `graphify-out/GRAPH_REPORT.md` (and per-repo graphs for multi-repo). If graphify isn't set up, say so and point at the `graphify` dial.
-3. Compare: dependencies/containers/components in the code but not the docs (or vice versa), god-nodes, components with no code yet. List each divergence under the doc's "Drift vs. extracted reality" framing.
-4. For each real drift, recommend the reconciliation (update intent vs. fix code) and, if it's work, offer to file it with `/workbench:task`. Drift is a signal — surface it, don't hide it.
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/arch-drift.sh" "${CLAUDE_PROJECT_DIR}"
+```
 
-Keep it honest: if there's no graph to compare against, say the drift check is a manual read, not an automated diff.
+It parses the declared containers/components from your C4 tables and graphify's god-nodes (from `graphify-out/GRAPH_REPORT.md`, including per-repo graphs one level down), and prints an aligned comparison: which extracted core abstractions are named in your docs (`yes`/`no`) and which declared components have no extracted counterpart. **It does not pronounce verdicts** — its name-matching is a heuristic hint, because graphify's god-nodes include runtime/framework noise (wasm shims, UI toasts) that legitimately doesn't belong in a C4 model. If there's no graph, it says so and the check falls back to a manual read.
+
+Then **you** do the judging the script deliberately won't:
+
+1. For each god-node marked `no`, decide: real drift (a core abstraction you never documented → update intent) or just noise (ignore it).
+2. For each declared component with no extracted match, decide: not-built-yet (fine), or stale intent (remove/revise).
+3. Look past names too — dependencies/edges/datastores in the code but not in your diagram, god-nodes that have outgrown their box. Frame each under the docs' "Drift vs. extracted reality" section.
+4. For each *real* drift, recommend the reconciliation (update intent vs. fix code) and, if it's work, offer to file it with `/workbench:task`.
+
+Keep it honest: surface real drift, don't manufacture it from heuristic name mismatches, and don't hide it either.

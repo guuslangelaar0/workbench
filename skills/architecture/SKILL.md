@@ -30,6 +30,7 @@ The backbone has two sides, and the gap between them is the point:
 - **Before architectural work or answering "how does X relate to Y":** read the relevant `.claude/architecture/*.md` for intent, then the graphify graph for reality. Prefer graphify's `query`/`path`/`explain` over grepping files.
 - **After a structural change:** update the affected architecture doc's intent, and (per the `graphify` dial) refresh the graph so reality stays current.
 - **When they disagree:** treat it as drift — log it, decide which side is right, reconcile. Don't let intent and reality silently diverge.
+- **To find drift:** run `/workbench:architecture drift` — it calls `scripts/arch-drift.sh` to align the declared containers/components (your C4 tables) against graphify's extracted god-nodes and print a `yes`/`no` "named in docs?" comparison plus declared-but-unextracted components. The assembler is deliberately heuristic and **never asserts a verdict** (graphify's hubs include runtime/framework noise that doesn't belong in a C4 model); you judge which mismatches are real drift.
 
 ## Composes with
-`levels` (the dial that sets the depth) · `graphify` integration (extracted reality) · `task-lifecycle` (drift that needs fixing becomes a task). Automated intent-vs-extracted drift *detection* is the next layer of this backbone; today the comparison is a disciplined manual read against the graph.
+`levels` (the dial that sets the depth) · `graphify` integration (extracted reality) · `task-lifecycle` (drift that needs fixing becomes a task). Automated intent-vs-extracted alignment ships via `scripts/arch-drift.sh` (`/workbench:architecture drift`); it does the mechanical comparison, you do the judging.
