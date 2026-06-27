@@ -15,6 +15,35 @@ The through-line: **a long-running orchestrator must never trust its own memory.
 
 ---
 
+## 1.5 The core mechanism: an external supervisor (why prose isn't enough)
+
+**Instructions cannot fix the loop.** A directive in `SOUL.md`/`CLAUDE.md` ("never stop", "re-check liveness") only runs while the agent is alive and executing. The three worst failures happen precisely when it *isn't*: the process died on an API error (it can't read "resume yourself"), the context drifted/compacted (it no longer believes the instruction), or it's wedged. **A thing cannot supervise itself.** Self-referential prose is the weakest possible mechanism for the strongest failures.
+
+The fix is to **invert the control structure.** Today the loop is *one long-lived agent told to never stop* — fragile: it dies with its process, rots with its context, and has no watcher. Replace it with:
+
+> **A small, dumb, near-bulletproof external supervisor that owns the loop's liveness, and an agent that is a (mostly) stateless worker it invokes per iteration against durable disk state.**
+
+This is the pattern every durable system already uses — Erlang/OTP supervisors, Kubernetes controllers, Temporal workers — applied to an agent loop. The supervisor is plain bash under `cron`/`systemd`/`tmux` (no LLM, ~nothing to crash). Each **tick** it:
+
+1. **Reconciles disk state** — reap dead lanes (stale `.lane` heartbeats), read the charter + `in-development/` + `in-review` count + `SESSION_STATE.md`.
+2. **Launches/relaunches a FRESH agent** — `claude -p --resume <sid>` (or a fresh session) with a **state-aware re-entry prompt built from disk**: "charter = X; in-dev tasks Y whose lanes died → re-dispatch; in-review at cap → drain first."
+3. **Detects the deaths the agent can't fix from inside:** process exit (crash / API outage) → backoff + relaunch; **stall** (git HEAD and `SESSION_STATE.md` haven't advanced in N minutes → kill + relaunch); restart-intensity / budget exhaustion → **escalate to the human** (push), don't thrash.
+
+Why this dissolves the failures instead of papering over them:
+
+| Failure | Why prose fails | Why the supervisor fixes it |
+|---|---|---|
+| Servers down → loop stops | dead process can't obey "resume" | external process relaunches it on backoff |
+| Phantom teammates | stale in-memory registry | fresh context each tick + lane reconciliation from disk |
+| Context lost / too large | the goal got summarized away | the agent never runs long enough to rot; **disk is the state**, re-grounded every tick |
+| Wedged / repeating | it can't tell it's stuck | external stall-detector (no HEAD movement) kills + restarts |
+
+**The novel part for workbench:** the supervisor isn't a generic watchdog — it is **stateful over workbench's file-based control plane.** The git-tracked file tree (`tasks/`, `.workbench/lanes/`, `loop-charter.md`, `SESSION_STATE.md`) *is* the durable workflow state — workbench's equivalent of Temporal's event history — and the supervisor is a thin engine that drives **ephemeral, replaceable agent contexts** against it. Fresh agent per tick ⇒ no drift; durable external supervisor ⇒ no death; reconcile-from-disk ⇒ no phantoms. The in-agent prose (charter, prime directive, Reflexion) is the *within-a-tick* behavior; the supervisor guarantees *across-tick* continuity. **Both are needed, but the supervisor is the spine** — which is why P0-5 is being elevated from "self-heal footnote" to the centerpiece: a first-class `scripts/wb-supervisor.sh` + `/workbench:supervise`, layered as:
+
+1. **In-session heartbeat** (`ScheduleWakeup`) — handles idle-but-alive. Weakest; dies with the session. *(have)*
+2. **Stop/StopFailure hooks** — record state + write a recovery marker on turn-end/error. *(P0-5 hook, building)*
+3. **External supervisor** — survives session death, relaunches, detects stall, escalates. **The spine.** *(P0-5, elevated)*
+
 ## 2. What workbench already does (the honest baseline)
 
 We are not starting from zero. The current `orchestration` skill and continuity hooks already implement a meaningful chunk of the hardening:
@@ -115,7 +144,7 @@ A concrete, checkable backlog. P0 = directly addresses a named pain and is high-
 - [ ] **Verification contract** in the task template + `/workbench:verify` enforcement, **enforced by `TaskCompleted`/`TeammateIdle` hooks** (acceptance criteria + scenarios + verification ladder + evidence; block "done" on empty criteria/evidence; level-scaled). *(Cat. C)*
 - [ ] **Lane heartbeat files + lease-based liveness** + a `scripts/lane.sh` helper; lead reconciles by mtime, not memory. Pair with **`SubagentStart`/`SubagentStop`** hooks for a live registry. *(Cat. A)*
 - [ ] **Boot-time registry reconciliation** — `SessionStart(resume)` hook + `/workbench:boot` GC stale lanes before the first pick. *(Cat. A)*
-- [ ] **Hard-crash self-heal** — `StopFailure` hook writes a recovery marker + alert; a scaffolded **external** watchdog (cron/systemd, or cloud Routine) relaunches `claude --resume … -p` (because in-session `ScheduleWakeup` crons die with the session). *(Cat. B)*
+- [ ] **External supervisor — the spine** (§1.5). `scripts/wb-supervisor.sh` + `/workbench:supervise`: a plain-bash loop under cron/systemd/tmux that owns liveness — relaunches a fresh `claude -p --resume` on crash/outage (backoff), detects **stall** (no git-HEAD / `SESSION_STATE.md` movement in N min → kill + relaunch), reconciles dead lanes, builds a **state-aware re-entry prompt** from disk, and **escalates to the human** on restart-intensity/budget exhaustion. Fed by the `StopFailure` hook (recovery marker + alert). This is the real fix for "servers down → never came back" and context drift; the in-agent prose is only within-a-tick behavior. *(Cat. B)*
 
 **P1**
 - [ ] **Retry/backoff policy** note in the skill — but scoped correctly: CC already retries transient codes intra-turn (`api_retry`); document the *single-level retry + retry budget* discipline and the after-exhaustion resume path. *(Cat. B)*
