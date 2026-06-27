@@ -129,6 +129,28 @@ printf '%s' "$out" | grep -qiE 'context|container|architecture' \
   || bad "architecture view did not surface the backbone (model output: $(printf '%s' "$out" | tail -3 | tr '\n' ' '))"
 rm -rf "$D6"
 
+# ---- scenario 7: /workbench:architecture drift runs the automated assembler ------
+# Seed a filled container row + a graphify report, then drive the model through the
+# drift subcommand. It must run arch-drift.sh and surface the aligned comparison
+# (the assembler's output), not just re-read the docs.
+note "7) /workbench:architecture drift aligns docs vs. extracted reality"
+D7="$(scaffold "E2E Seven" crew)"
+mkdir -p "$D7/graphify-out"
+cat > "$D7/graphify-out/GRAPH_REPORT.md" <<'REP'
+# Graph Report - e2e seven
+## Summary
+- 80 nodes · 150 edges · 4 communities detected
+## God Nodes (most connected - your core abstractions)
+1. `request()` - 44 edges
+2. `passArray8ToWasm0()` - 22 edges
+REP
+printf '| request | API client | TS | api |\n' >> "$D7/.claude/architecture/containers.md"
+out="$(cd "$D7" && drive "$D7" 'Run /workbench:architecture drift and show me the comparison it prints.')"
+printf '%s' "$out" | grep -qiE 'abstraction|declared|god.?node|named in|drift|request' \
+  && ok "drift surfaces the assembler's aligned comparison" \
+  || bad "drift did not surface the comparison (model output: $(printf '%s' "$out" | tail -3 | tr '\n' ' '))"
+rm -rf "$D7"
+
 # NOTE — known coverage gap: SessionStart / PreCompact hooks do NOT fire (or their
 # injected context is not surfaced) under `claude -p`, so this harness cannot assert
 # hook behavior. Hooks are covered structurally by test/hooks.test.sh and behaviorally
