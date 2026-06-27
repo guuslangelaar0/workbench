@@ -44,6 +44,16 @@ A change that touches a script should come with a test that would have failed be
 3. `bash test/all.sh` green.
 4. Open the PR with a clear description of the behavior change.
 
+## Releasing / publishing
+
+Before tagging a release or submitting to a marketplace, run the publishability gate:
+
+```sh
+bash scripts/validate-plugin.sh
+```
+
+It checks that `.claude-plugin/plugin.json` and `marketplace.json` are valid JSON, carry the required fields, agree on name + version, declare a real OSI license that matches the `LICENSE` file, and that the plugin actually exposes commands/skills/agents. Bump `version` in **both** manifests together; `test/marketplace.test.sh` enforces they match.
+
 ## Documentation
 
 If you change a command, dial, lifecycle stage, or config field, update the relevant doc under `docs/` and the `README.md` table in the same PR. Stale docs are bugs.
