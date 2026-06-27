@@ -117,7 +117,7 @@ if [ -z "$reason" ]; then
   fi
 fi
 
-RESUME_PROMPT="Recover the workbench loop. Read .workbench/loop-charter.md and .claude/SESSION_STATE.md, then continue /workbench:loop."
+RESUME_PROMPT="Recover the workbench loop. First run /workbench:boot to reconcile from disk — it reaps phantom lanes and reads .workbench/loop-charter.md + .claude/SESSION_STATE.md — then continue /workbench:loop, re-dispatching any task whose lane died while the session was down."
 
 if [ -z "$reason" ]; then
   echo "loop healthy — no resume needed (session ${SESSION_ID})"
@@ -129,6 +129,9 @@ set -- claude --resume "$SESSION_ID" -p "$RESUME_PROMPT"
 
 if [ "$EXEC" = 1 ]; then
   echo "watchdog: resuming — $reason"
+  # reconcile phantom lanes on disk before handing control to a fresh agent, so the
+  # resumed loop sees dead workers marked rather than trusting a stale registry.
+  [ -x "$SELF_DIR/lane.sh" ] && bash "$SELF_DIR/lane.sh" reap --mark --target "$PROJECT" >/dev/null 2>&1 || true
   echo "+ claude --resume \"$SESSION_ID\" -p \"$RESUME_PROMPT\""
   if "$@"; then
     mkdir -p "$REC_DIR" 2>/dev/null || true
