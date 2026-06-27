@@ -47,6 +47,13 @@
           { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/teammate-idle-guard.sh\"", "timeout": 10 }
         ]
       }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/stopfailure-recover.sh\"", "timeout": 10 }
+        ]
+      }
     ]
   }
 }
