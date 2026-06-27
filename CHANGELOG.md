@@ -7,6 +7,7 @@ All notable changes to workbench are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Epics** (Spec 2): group related tasks under one outcome via `.claude/epics/NNNN-title.md`. `/workbench:epic` to create/list; `/workbench:task --epic <id>` to link; live `done/total` rollup in `/workbench:mc`. Epics draw from the shared task ID counter (no collisions) and are gated to levels whose `decomposition` is grouped (pair+). `solo` stays flat.
 - Maturity ladder (`solo` / `pair` / `crew` / `fleet`) as the spine: each level is a preset over seven coordination dials, with single-dial `dial_overrides`.
 - `/workbench` single front door (context-aware: setup if unconfigured, else status).
 - `/workbench:level` to show or change the level (graduation is recommend-only).

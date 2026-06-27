@@ -15,6 +15,16 @@ Use `/workbench:task "<title>"`, or directly:
 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-new.sh" --title "<t>" --target "${CLAUDE_PROJECT_DIR}" [--track T] [--repos "a,b"] [--estimate "~1 day"]`
 It allocates the next ID from `_next-id`, renders the canonical template, and bumps the counter atomically. Never hand-edit `_next-id`.
 
+## Epics (pair level and up)
+
+When the `decomposition` dial is grouped (pair = light-epics, crew = epics, fleet = themes-epics), related tasks group under an **epic** — a file in `.claude/epics/NNNN-title.md` describing one user-facing outcome. `solo` (decomposition = tasks) is flat and has no epics dir.
+
+- **Create:** `/workbench:epic "<title>"` → `scripts/epic-new.sh`. Epics draw from the **same** `.claude/tasks/_next-id` counter as tasks, so an epic ID and a task ID are never the same number.
+- **Link:** a task joins an epic via `**Epic:** <epic-id>` in its header — set at creation with `/workbench:task "<t>" --epic <id>`, or added by hand.
+- **Status:** an epic is `open` until you mark it `done` (edit the file when all its child tasks are verified/shipped). Progress (`done/total` child tasks) rolls up live in `/workbench:mc` and `/workbench:epic list` — it is derived by scanning task `**Epic:**` fields, not stored.
+
+Epics are a grouping lens, not a lifecycle stage: child tasks still flow through the normal stages independently.
+
 ## Move a task (lead-only)
 Use `/workbench:dispatch` and `/workbench:verify`, or directly:
 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-move.sh" <id> <to-state> --target "${CLAUDE_PROJECT_DIR}"`

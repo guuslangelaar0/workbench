@@ -28,6 +28,8 @@ Which stages exist depends on your [level](levels.md#lifecycle-stages-per-level)
 
 The CLI behind it: `scripts/task-new.sh` (allocates the next ID, renders the template) and `scripts/task-move.sh` (the `git mv` + status-field rewrite). The lead owns all transitions.
 
+**Epics** group related tasks under one user-facing outcome once your `decomposition` dial is grouped (pair and up). An epic is a file in `.claude/epics/NNNN-title.md`; a task joins it via an `**Epic:**` field, and the epic's `done/total` progress rolls up live in `/workbench:mc`. Epics and tasks share one ID counter (no collisions). It's a grouping lens, not a lifecycle stage — child tasks still flow through the stages independently. `solo` stays flat (no epics). See [commands.md](commands.md#workbenchepic-title---theme-t--workbenchepic-list).
+
 ---
 
 ## The orchestration loop

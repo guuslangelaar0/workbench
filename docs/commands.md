@@ -38,6 +38,9 @@ Run the autonomous teamlead loop: pick the highest-impact unblocked task → dis
 ### `/workbench:task "<title>"`
 Create a task. Allocates the next ID from `_next-id`, renders the canonical task format into `backlog/`. Optional fields: track, repos, estimate.
 
+### `/workbench:epic "<title>" [--theme <t>]` / `/workbench:epic list`
+Create or list **epics** — groups of related tasks under one user-facing outcome (`.claude/epics/NNNN-title.md`). Available at levels whose `decomposition` dial is grouped (pair = light-epics, crew = epics, fleet = themes-epics); `solo` uses flat tasks and has no epics. Epics draw from the shared `.claude/tasks/_next-id` counter, so epic and task IDs never collide. Link a task with `/workbench:task "<t>" --epic <id>`; the epic's `done/total` rollup shows in `/workbench:mc`. See [concepts.md](concepts.md#task-lifecycle).
+
 ### `/workbench:dispatch <id> [lane]`
 Move a task to `in-development/` and dispatch it to an engineer subagent in the given lane.
 

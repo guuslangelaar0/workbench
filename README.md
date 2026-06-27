@@ -114,6 +114,7 @@ Five capabilities, all configured from the level you pick:
 | `/workbench:level` | Show the level + dials, or move `up` / `down` / to a named level |
 | `/workbench:loop` | Run the autonomous teamlead loop (pick → dispatch → verify-gate → never stop) |
 | `/workbench:task "<title>"` | Create a task (allocates the next ID, renders the canonical format) |
+| `/workbench:epic "<title>"` | Create or list epics — groups of related tasks with a live task rollup (pair level and up) |
 | `/workbench:dispatch <id>` | Move a task to in-development and dispatch it to an engineer |
 | `/workbench:verify <id>` | Run a task's verification and gate it to `verified/` (or back) |
 | `/workbench:mc` | Mission Control: a text dashboard of tasks, cap, build, and prod |

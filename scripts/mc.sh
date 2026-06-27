@@ -93,12 +93,27 @@ for d in $STATES; do
 done
 
 shopt -s nullglob
+# ----- epics (rollup of child-task status) -----
+epics=(.claude/epics/*.md)
+if [[ ${#epics[@]} -gt 0 ]]; then
+  section "Epics"
+  for f in "${epics[@]}"; do
+    eid="$(basename "$f" .md | grep -oE '^[0-9]{4,}')"
+    etitle="$(head -1 "$f" | sed 's/^# *[Ee]pic *[0-9]* *— *//')"
+    estatus="$(grep -m1 -E '^\*\*Status:\*\*' "$f" | sed 's/^\*\*Status:\*\* *//' | tr -d ' ' || true)"
+    nchild="$(grep -rlE "^\*\*Epic:\*\* *${eid}([^0-9]|$)" .claude/tasks 2>/dev/null | wc -l | tr -d ' ')"
+    ndone="$(grep -rlE "^\*\*Epic:\*\* *${eid}([^0-9]|$)" .claude/tasks/verified .claude/tasks/shipped 2>/dev/null | wc -l | tr -d ' ')"
+    col="$C_GREY"; [[ "$estatus" == done ]] && col="$C_GREEN"
+    printf "  ${col}%s${C_RESET}  %-40s  ${C_DIM}[%s] %s/%s tasks done${C_RESET}\n" "$eid" "${etitle:0:40}" "${estatus:-open}" "${ndone:-0}" "${nchild:-0}"
+  done
+fi
+
 # ----- in-development with Track / Estimate -----
 indev=(.claude/tasks/in-development/*.md)
 if [[ ${#indev[@]} -gt 0 ]]; then
   section "In Development"
   for f in "${indev[@]}"; do
-    id="$(basename "$f" .md | grep -oE '^[0-9]{4}')"
+    id="$(basename "$f" .md | grep -oE '^[0-9]{4,}')"
     title="$(head -1 "$f" | sed 's/^# *[0-9]* *— *//')"
     track="$(grep -m1 -E '^\*\*Track:\*\*' "$f" | sed 's/^\*\*Track:\*\* *//' || true)"
     est="$(grep -m1 -E '^\*\*Estimate:\*\*' "$f" | sed 's/^\*\*Estimate:\*\* *//' || true)"
@@ -111,7 +126,7 @@ dec=(.claude/tasks/decisions/*.md)
 if [[ ${#dec[@]} -gt 0 ]]; then
   section "Decisions awaiting"
   for f in "${dec[@]}"; do
-    id="$(basename "$f" .md | grep -oE '^[0-9]{4}')"
+    id="$(basename "$f" .md | grep -oE '^[0-9]{4,}')"
     title="$(head -1 "$f" | sed 's/^# *[0-9]* *— *//; s/\[DECISION\] *//')"
     printf "  ${C_AMBER}%s${C_RESET}  %s\n" "$id" "$title"
   done
@@ -123,7 +138,7 @@ if [[ ${#inrev[@]} -gt 0 ]]; then
   section "In Review"
   printf "  ${C_DIM}cap %d · current %d${C_RESET}\n" "$CAP" "${#inrev[@]}"
   for f in "${inrev[@]}"; do
-    id="$(basename "$f" .md | grep -oE '^[0-9]{4}')"
+    id="$(basename "$f" .md | grep -oE '^[0-9]{4,}')"
     title="$(head -1 "$f" | sed 's/^# *[0-9]* *— *//')"
     est="$(grep -m1 -E '^\*\*Estimate:\*\*' "$f" | sed 's/^\*\*Estimate:\*\* *//' || true)"
     printf "  ${C_AMBER}%s${C_RESET}  %-44s  ${C_DIM}%s${C_RESET}\n" "$id" "${title:0:44}" "$est"

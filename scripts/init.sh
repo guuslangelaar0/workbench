@@ -55,6 +55,10 @@ copy_new() { # <src> <dest> <relpath>
 for d in $(wb_level_lifecycle "$LEVEL"); do
   mkdir -p "$TARGET/.claude/tasks/$d"
 done
+# 1b. epics dir — only for levels whose decomposition is grouped (pair/crew/fleet);
+# solo uses flat tasks (decomposition=tasks) and gets no epics dir.
+_dec="$(wb_level_dials "$LEVEL" | sed -n 's/^decomposition=//p')"
+[ -n "$_dec" ] && [ "$_dec" != tasks ] && mkdir -p "$TARGET/.claude/epics"
 # 2. task README (merge) + _next-id (once) — never clobber existing
 copy_new "$TMPL_MIN/tasks/README.md" "$TARGET/.claude/tasks/README.md" ".claude/tasks/README.md"
 copy_new "$TMPL_MIN/tasks/_next-id"  "$TARGET/.claude/tasks/_next-id"  ".claude/tasks/_next-id"
