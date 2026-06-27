@@ -106,6 +106,29 @@ printf '%s' "$out" | grep -qiE 'crew|configured|in-review|backlog|staged|cap|lev
   || bad "front door did not report status"
 rm -rf "$D4"
 
+# ---- scenario 5: /workbench:epic creates an epic (crew has the .claude/epics/ dir)
+note "5) /workbench:epic creates an epic"
+D5="$(scaffold "E2E Five" crew)"
+out="$(cd "$D5" && drive "$D5" 'Run the /workbench:epic command to create an epic titled "live e2e backbone". Do it directly; do not ask me anything.')"
+if ls "$D5"/.claude/epics/*.md >/dev/null 2>&1; then
+  ok "epic file created in .claude/epics/"
+  grep -rqi "live e2e backbone" "$D5"/.claude/epics/ && ok "epic title written into the file" || bad "epic title not found in file"
+else
+  bad "no epic file created (model output: $(printf '%s' "$out" | tail -3 | tr '\n' ' '))"
+fi
+rm -rf "$D5"
+
+# ---- scenario 6: /workbench:architecture view summarizes the C4 backbone ---------
+# crew's architecture dial = containers, so init scaffolds context.md + containers.md;
+# the command reads them and summarizes — assert on any C4 signal in the prose.
+note "6) /workbench:architecture view reports the backbone"
+D6="$(scaffold "E2E Six" crew)"
+out="$(cd "$D6" && drive "$D6" 'Run /workbench:architecture view and tell me which architecture docs it finds.')"
+printf '%s' "$out" | grep -qiE 'context|container|architecture' \
+  && ok "architecture view surfaces the C4 docs" \
+  || bad "architecture view did not surface the backbone (model output: $(printf '%s' "$out" | tail -3 | tr '\n' ' '))"
+rm -rf "$D6"
+
 # NOTE — known coverage gap: SessionStart / PreCompact hooks do NOT fire (or their
 # injected context is not surfaced) under `claude -p`, so this harness cannot assert
 # hook behavior. Hooks are covered structurally by test/hooks.test.sh and behaviorally
