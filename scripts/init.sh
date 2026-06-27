@@ -79,6 +79,9 @@ if [ "$PROFILE" = full ]; then
     printf '\n# workbench coordination runtime state (heartbeats, locks) — never commit\n/.claude/locks/\n' >> "$GI"
   fi
   render_new "$TMPL_FULL/SESSION_STATE.md.tmpl" "$TARGET/.claude/SESSION_STATE.md" ".claude/SESSION_STATE.md" "PROJECT_NAME=$NAME"
+  # durable loop charter — the stable north star, re-injected at SessionStart + kept across compaction
+  mkdir -p "$TARGET/.workbench"
+  render_new "$TMPL_FULL/loop-charter.md.tmpl" "$TARGET/.workbench/loop-charter.md" ".workbench/loop-charter.md" "PROJECT_NAME=$NAME" "MISSION=$MISSION"
   # context backbone (C4 authored-intent docs) — scaled to the architecture dial.
   # Cumulative: context → +containers → +components. none (solo) gets nothing.
   _arch="$(wb_level_dials "$LEVEL" | sed -n 's/^architecture=//p')"
@@ -186,6 +189,7 @@ if [ "$PROFILE" = full ]; then
     add_manifest "scripts/coord/$s" "coord/$s" "managed"
   done
   [ -f "$TARGET/.claude/SESSION_STATE.md" ] && add_manifest ".claude/SESSION_STATE.md" "full/SESSION_STATE.md.tmpl" "once"
+  [ -f "$TARGET/.workbench/loop-charter.md" ] && add_manifest ".workbench/loop-charter.md" "full/loop-charter.md.tmpl" "once"
 fi
 add_manifest ".claude/tasks/_next-id" "minimal/tasks/_next-id" "once"
 # codex bridge manifest entries (only when codex was rendered above)

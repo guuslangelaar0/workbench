@@ -11,6 +11,9 @@ chk "SESSION_STATE rendered"      "[ -f '$TMP/.claude/SESSION_STATE.md' ]"
 chk "SESSION_STATE has name"      "grep -q 'Acme' '$TMP/.claude/SESSION_STATE.md'"
 chk "SESSION_STATE no tokens"     "! grep -q '{{' '$TMP/.claude/SESSION_STATE.md'"
 chk "manifest SESSION_STATE once" "[ \"\$(jmode '$TMP/.workbench/manifest.json' '.claude/SESSION_STATE.md')\" = once ]"
+chk "loop charter rendered"       "[ -f '$TMP/.workbench/loop-charter.md' ]"
+chk "charter carries the goal"    "grep -q 'Goal' '$TMP/.workbench/loop-charter.md'"
+chk "charter no tokens left"      "! grep -q '{{' '$TMP/.workbench/loop-charter.md'"
 # once: a re-run must not clobber edits
 echo "EDITED-BY-USER" >> "$TMP/.claude/SESSION_STATE.md"
 bash "$HERE/scripts/init.sh" --name "Acme" --mission "Private." --target "$TMP" >/dev/null 2>&1
@@ -23,6 +26,7 @@ chk "brief shows task counts"  "printf '%s' \"\$BRIEF\" | grep -qi 'backlog'"
 chk "brief points to SOUL"     "printf '%s' \"\$BRIEF\" | grep -q 'SOUL.md'"
 chk "brief injects prime directive"      "printf '%s' \"\$BRIEF\" | grep -q 'prime directive: forward motion'"
 chk "prime directive bans permission-asking" "printf '%s' \"\$BRIEF\" | grep -qi 'do not ask permission'"
+chk "brief re-injects the loop charter"  "printf '%s' \"\$BRIEF\" | grep -q 'loop charter'"
 NOOP="$(CLAUDE_PROJECT_DIR="$(mktemp -d)" bash "$HERE/hooks/bin/ground-session.sh" </dev/null 2>/dev/null; echo "rc=$?")"
 chk "no-op in non-workbench dir"  "[ \"\$NOOP\" = 'rc=0' ]"
 

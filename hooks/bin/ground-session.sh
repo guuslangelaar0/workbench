@@ -37,6 +37,15 @@ echo ""
 echo "=== workbench operating brief: ${name:-this project} ==="
 echo "This project uses workbench. Embody .claude/SOUL.md; follow the loop in CLAUDE.md."
 echo "A task is NOT done until verified/ with evidence. 'In review' is not done."
+
+# the loop charter — the stable north star, re-injected every session so compaction
+# can never summarize the goal away. Pinned near the top (a context edge), bounded.
+_charter="$(il_cfg_dir "$P")/loop-charter.md"
+if [ -f "$_charter" ]; then
+  echo ""
+  echo "=== loop charter (the north star — re-read it, do not drift) ==="
+  sed -n '1,40p' "$_charter"
+fi
 echo ""
 echo "Tasks: backlog $(count backlog) · in-development $(count in-development) · in-review $(count in-review)/$cap · verified $(count verified) · decisions $(count decisions)"
 

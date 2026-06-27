@@ -1,0 +1,23 @@
+# {{PROJECT_NAME}} — loop charter
+
+_The north star for the autonomous loop. The SessionStart hook **re-injects this every
+session** and the PreCompact hook preserves it, so it survives resumption and compaction —
+the goal can never be summarized away. Keep it ≤1 page. This is the **stable** goal +
+guardrails; `.claude/SESSION_STATE.md` holds the **volatile** progress. Edit this when the
+mission or constraints change — not every iteration._
+
+## Goal
+{{MISSION}}
+
+## Hard constraints (never violate)
+- Stay on localhost / non-production unless the human explicitly authorizes a specific action.
+- Never commit secrets; never log keys, tokens, or passwords.
+- One state change at a time; verify each before the next.
+- <!-- add project-specific constraints here -->
+
+## Definition of done
+- A task is done only at `verified/` (or `shipped/`) **with captured evidence** — never "should work".
+- Every task carries acceptance criteria + scenarios + a verification ladder, written before dispatch.
+
+## Out of scope / do-not-touch
+- <!-- list anything the loop must not change without asking first -->
