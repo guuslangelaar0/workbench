@@ -147,6 +147,17 @@ if [[ ${#inrev[@]} -gt 0 ]]; then
 fi
 shopt -u nullglob
 
+# ----- suggestions (recommend-only; ranked warn>recommend>info) -----
+if [[ -x "$SELF_DIR/suggest.sh" ]]; then
+  sug="$(bash "$SELF_DIR/suggest.sh" list --target "$ROOT" 2>/dev/null)"
+  if [[ -n "$sug" && "$sug" != "No suggestions." ]]; then
+    section "Suggestions"
+    # drop the script's own header/footer lines; show the body, amber-tinted
+    printf '%s\n' "$sug" | sed '1,2d; /^act:  /d' | sed 's/^/  /' | sed "s/^/${C_AMBER}/; s/$/${C_RESET}/"
+    printf "  ${C_DIM}act/dismiss: /workbench:suggest${C_RESET}\n"
+  fi
+fi
+
 # ----- recent commits -----
 section "Recent commits"
 git -C "$ROOT" log --oneline -5 2>/dev/null | sed 's/^/  /' || true

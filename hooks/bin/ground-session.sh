@@ -69,8 +69,14 @@ if [ -x "$P/scripts/coord/wb-coord" ]; then
   echo ""; echo "Other live sessions:"; WB_WORKSPACE_ROOT="$P" "$P/scripts/coord/wb-coord" who 2>/dev/null | sed 's/^/  /' | head -6
 fi
 
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -x "$CLAUDE_PLUGIN_ROOT/scripts/graduate.sh" ]; then
-  grad="$(bash "$CLAUDE_PLUGIN_ROOT/scripts/graduate.sh" "$P" 2>/dev/null)"
-  [ -n "$grad" ] && { echo ""; printf '%s\n' "$grad"; }
+# Refresh producers (they file keyed, deduped suggestions as a side effect), then
+# surface the top open suggestions — the recommend-only "here's what I'd consider"
+# the loop opens with instead of silence. Everything routes through the one surface.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  [ -x "$CLAUDE_PLUGIN_ROOT/scripts/graduate.sh" ] && bash "$CLAUDE_PLUGIN_ROOT/scripts/graduate.sh" "$P" >/dev/null 2>&1
+  if [ -x "$CLAUDE_PLUGIN_ROOT/scripts/suggest.sh" ]; then
+    sug="$(bash "$CLAUDE_PLUGIN_ROOT/scripts/suggest.sh" top 3 --target "$P" 2>/dev/null)"
+    [ -n "$sug" ] && { echo ""; printf '%s\n' "$sug"; }
+  fi
 fi
 exit 0

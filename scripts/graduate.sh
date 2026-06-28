@@ -24,6 +24,17 @@ repos="$(ls -d "$P"/repos/*/ 2>/dev/null | grep -c .)"
 
 [ -z "$signals" ] && exit 0
 next="$(wb_levels | tr ' ' '\n' | sed -n "$((idx+2))p")"; [ -n "$next" ] || exit 0
+
+# File a keyed, deduped suggestion onto the surface (the unified home for recommendations).
+# Keyed by the target level so the same graduation never piles up; best-effort.
+if [ -x "$SELF/suggest.sh" ]; then
+  bash "$SELF/suggest.sh" add \
+    --key "graduate-${next}" --severity recommend \
+    --title "Consider graduating ${level} → ${next}" \
+    --why "$signals" --how "/workbench:level up" --source graduate \
+    --target "$P" >/dev/null 2>&1 || true
+fi
+
 echo "▲ workbench: consider graduating ${level} → ${next}"
 echo "  signals: $signals"
 echo "  run /workbench:level up to see exactly which dials change (recommend-only — nothing changes without you)."
