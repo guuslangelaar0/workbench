@@ -6,6 +6,10 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-28
+
+The loop-engineering release: the way of working now stays alive, honest, economical, and on-target across long autonomous runs. Two designs land here — **loop hardening** (liveness, the verification contract, the external supervisor) and **loop quality & economics** (a suggestion surface, anti-gaming, cost governance, optional cross-model verification, a regression gate, dependency graph, and a value-drift audit). 42 offline test suites; publishable. See [docs/design/2026-06-27-loop-hardening-design.md](docs/design/2026-06-27-loop-hardening-design.md) and [docs/design/2026-06-28-loop-quality-economics-design.md](docs/design/2026-06-28-loop-quality-economics-design.md).
+
 ### Added
 - **Value/north-star drift audit** (loop quality): closing tasks isn't the goal — moving the charter's outcomes is. `scripts/value-audit.sh` is a cadence trigger (not a judge): when N tasks have closed since the last audit (`--cadence`, config `audit.cadence`, default 6) it surfaces a recommend-only suggestion carrying the data packet — the recent close titles + the charter's goal — and the loop/human makes the call (re-prioritize if drifting), then `value-audit.sh done` resets the cadence. Auto-resolves when not due; wired into the SessionStart scan and the orchestration loop.
 - **Task dependency graph** (loop quality): tasks can declare `**Blocked-by:** <ids>` (in the template + `task-new.sh --blocked-by`). `scripts/deps.sh` resolves it — `status <id>`, `ready` (backlog tasks whose deps are all in `verified`/`shipped`), `blocked`, and `cycles` (cycle detection, exit 3). The orchestration picker consults `deps.sh ready` so it never grabs work whose prerequisite isn't done; `/workbench:mc` shows a **Blocked** section and `/workbench:doctor` flags dependency cycles.
