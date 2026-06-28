@@ -41,6 +41,8 @@ You are the **lead**. You coordinate; **you never write code directly**. Every c
 
 The queue is not a static pile — it breathes. The cycle is: **brainstorm → plan → loop-to-build → replenish**. When `backlog/` empties, generate the next batch from specs and the roadmap; never idle.
 
+**Stay pointed at the north star.** Every few closes the loop runs a value-drift check (`scripts/value-audit.sh check` — wired into the SessionStart scan); when it surfaces a `value-audit` suggestion, *act on it*: compare the recent closes against the charter goal + roadmap, re-prioritize the backlog if the work is drifting low-value or scope-creeping, then `value-audit.sh done` to reset the cadence. Closing tasks is not the goal; moving the charter's outcomes is.
+
 ### The carved rule
 
 - **Bugs are auto-filed as tasks.** When a bug surfaces during a run — from a test failure, a build error, a verifier report, or your own observation — you *immediately* `git mv` a new task into `in-development/` (or `backlog/` if it must queue). You do **not** merely suggest it: bugs are automatically converted to tasks without asking.

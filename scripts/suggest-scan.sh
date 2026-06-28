@@ -63,6 +63,9 @@ else
     "fill in .workbench/loop-charter.md — goal, hard constraints, definition of done, out of scope"
 fi
 
+# --- value / north-star drift audit (cadence trigger; files its own suggestion) ---
+[ -x "$SELF_DIR/value-audit.sh" ] && bash "$SELF_DIR/value-audit.sh" check --target "$TARGET" >/dev/null 2>&1 || true
+
 # --- plugin version drift (config recorded version != installed plugin version) ---
 if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/.claude-plugin/plugin.json" ]; then
   pv="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CLAUDE_PLUGIN_ROOT/.claude-plugin/plugin.json" | head -1)"
