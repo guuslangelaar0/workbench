@@ -25,3 +25,20 @@ Resolve the model for any subagent/teammate from `way_of_working.models` in `.wo
 3. Pass the resolved model to the `Task` tool (or the agent-teams spawn). For `recommended`, pass nothing — `inherit` is already the agent default.
 
 This is the policy the `orchestration` skill consults every time it dispatches an engineer or a verifier.
+
+## Cross-model verification (optional)
+
+A verifier on the *same* model as the implementer shares its blind spots and tends to rubber-stamp (LLM-as-judge self-enhancement bias). When `way_of_working.cross_model_verification` is `on`, the verifier must run on a model **different from the implementer**. The important part: this needs **no second tool** — a different Claude *tier* (one step up, a stronger skeptic) already breaks "the judge is the player". Codex or another provider is one option, never a requirement.
+
+Resolve the verifier model with the helper rather than by hand:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/verifier-model.sh" \
+  --implementer <model-the-engineer-used> --target "${CLAUDE_PROJECT_DIR}"
+# prints:  model=<resolved>   note=<rationale>
+```
+
+- **off** (default) → the per-tier verifier from the table above. At `crew`/`fleet` the helper (with `--suggest-if-off`) files a recommend-only suggestion to turn it on.
+- **on** → Codex if the `codex` dial is on; else a Claude tier one above the implementer (`sonnet`→`opus`, `haiku`→`sonnet`; if the implementer is already `opus`, use a fresh adversarial verifier context and consider enabling the `codex` dial for a genuinely different provider).
+
+Pass the resolved `model=` to the verifier `Task` spawn. This is recommend-only to adopt — the human turns it on; the loop just surfaces the option.

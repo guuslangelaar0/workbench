@@ -131,6 +131,7 @@ if [ ! -f "$CFG" ]; then
   "way_of_working": {
     "models": "recommended",
     "verification": "recommended",
+    "cross_model_verification": "off",
     "review": "recommended",
     "parallelism": "recommended",
     "enforcement": "warn-default",

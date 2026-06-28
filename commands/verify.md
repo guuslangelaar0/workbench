@@ -11,6 +11,7 @@ Run the verification gate for a task. Follow the `orchestration` and `task-lifec
    - `leaner` — run the verification yourself (the engineer already self-verified); spot-check.
    - `recommended` — spawn a `verifier` (Task tool, `subagent_type: verifier`, model per the `models` skill) to independently run it and return evidence.
    - `better` — spawn several verifiers with an adversarial framing; require a majority PASS.
+   **Cross-model (optional):** resolve the verifier's model with `bash "${CLAUDE_PLUGIN_ROOT}/scripts/verifier-model.sh" --implementer <engineer-model> --target "${CLAUDE_PROJECT_DIR}" --suggest-if-off` and spawn the verifier with the printed `model=`. When `way_of_working.cross_model_verification` is `on` this gives you an independent skeptic (a different Claude tier, or Codex if that dial is on) — no second tool required. When it's off the helper surfaces a recommend-only suggestion to enable it at `crew`/`fleet`.
    Always: review the diff, build, and run the declared verification before advancing.
 2.5. **Anti-gaming check.** Before advancing, inspect the task's code diff for reward-hacking — a test deleted, skipped/ignored, or weakened to a trivial pass while the task claims its tests are green. Run the guard over the task's commit range (the range the engineer's work landed in, e.g. the baseline the task started from to `HEAD`):
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/gate-integrity.sh" --range <baseline>..HEAD --task <task-file> --key gaming-<id> --target "${CLAUDE_PROJECT_DIR}"`
