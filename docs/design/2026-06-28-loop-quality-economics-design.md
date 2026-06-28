@@ -1,6 +1,6 @@
 # Loop quality, economics & a suggestion surface — the next frontier
 
-**Status:** Proposal (planning + tasks created; not yet built)
+**Status:** Implemented — SQ-1..SQ-8 shipped 2026-06-28 (42 test suites green, plugin publishable). SQ-9 (gating) ran continuously.
 **Date:** 2026-06-28
 **Owner:** Guus
 **Builds on:** [2026-06-27-loop-hardening-design.md](2026-06-27-loop-hardening-design.md) (liveness, verification contract, supervisor, charter)
@@ -76,21 +76,21 @@ The connective tissue across all of these — and the thing this spec makes firs
 ## 4. Prioritized backlog
 
 **P0**
-- [ ] **SQ-1 — Suggestion surface (the spine):** `.workbench/suggestions/` store + `/workbench:suggest` (list/act/dismiss/add) + a Suggestions section in `/workbench:mc` + top-N in the SessionStart brief; keyed dedup; recommend-only. Generalize `graduate.sh` into the first producer. Tests.
-- [ ] **SQ-2 — Anti-gaming gate-integrity guard:** `scripts/gate-integrity.sh` (test-deletion / trivial-assert / skip / coverage-drop heuristics, language-aware, fail-open, level-scaled), wired into the verify gate; emits a `warn` suggestion. Tests.
-- [ ] **SQ-3 — Cost/budget governance:** per-task ledger + budget ceiling (downshift → pause+suggest) + `/workbench:budget` + `/workbench:mc` spend line. Honest estimate-vs-exact. Tests.
+- [x] **SQ-1 — Suggestion surface (the spine):** `.workbench/suggestions/` store + `/workbench:suggest` (list/act/dismiss/add) + a Suggestions section in `/workbench:mc` + top-N in the SessionStart brief; keyed dedup; recommend-only. Generalize `graduate.sh` into the first producer. Tests.
+- [x] **SQ-2 — Anti-gaming gate-integrity guard:** `scripts/gate-integrity.sh` (test-deletion / trivial-assert / skip / coverage-drop heuristics, language-aware, fail-open, level-scaled), wired into the verify gate; emits a `warn` suggestion. Tests.
+- [x] **SQ-3 — Cost/budget governance:** per-task ledger + budget ceiling (downshift → pause+suggest) + `/workbench:budget` + `/workbench:mc` spend line. Honest estimate-vs-exact. Tests.
 
 **P1**
-- [ ] **SQ-4 — Cross-model verification (optional/suggested):** `verification.cross_model` resolving different-Claude-tier → Codex → other; off by default; the gate uses it when on; the surface suggests enabling it. No hard dependency. Tests.
-- [ ] **SQ-5 — Global regression gate:** `scripts/regression-gate.sh` (full-suite + was-green-now-red), wired pre-verify, level-scaled; red → bounce + auto-file bug + suggestion. Tests.
-- [ ] **SQ-6 — Producer wiring:** generalize the existing signals into suggestions — `arch-drift` (undocumented god-nodes), in-review cap, stale/empty charter, plugin-version drift. Tests.
+- [x] **SQ-4 — Cross-model verification (optional/suggested):** `verification.cross_model` resolving different-Claude-tier → Codex → other; off by default; the gate uses it when on; the surface suggests enabling it. No hard dependency. Tests.
+- [x] **SQ-5 — Global regression gate:** `scripts/regression-gate.sh` (full-suite + was-green-now-red), wired pre-verify, level-scaled; red → bounce + auto-file bug + suggestion. Tests.
+- [x] **SQ-6 — Producer wiring:** generalize the existing signals into suggestions — `arch-drift` (undocumented god-nodes), in-review cap, stale/empty charter, plugin-version drift. Tests.
 
 **P2**
-- [ ] **SQ-7 — Task dependency graph:** `**Blocked-by:**` field + picker honors it + mc/doctor surface it. Tests.
-- [ ] **SQ-8 — Value/north-star drift audit:** cadenced audit agent → suggestion. Tests.
+- [x] **SQ-7 — Task dependency graph:** `**Blocked-by:**` field + picker honors it + mc/doctor surface it. Tests.
+- [x] **SQ-8 — Value/north-star drift audit:** cadenced audit agent → suggestion. Tests.
 
 **Ongoing**
-- [ ] **SQ-9 — Gate:** per workstream run `test/all.sh`, update CHANGELOG `[Unreleased]`, commit (scoped pathspec) + push, confirm CI green. Lead gates; nothing "done" without passing tests.
+- [x] **SQ-9 — Gate:** per workstream run `test/all.sh`, update CHANGELOG `[Unreleased]`, commit (scoped pathspec) + push, confirm CI green. Lead gates; nothing "done" without passing tests.
 
 ## 5. Open decisions
 1. **Suggestion store shape** — one file per suggestion (`.workbench/suggestions/<key>.md`, lifecycle-consistent, git-trackable) vs a single dedup'd ledger. *Gut: one file per suggestion* — matches the task model and is diffable; revisit if it gets noisy.
