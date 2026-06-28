@@ -147,6 +147,21 @@ if [[ ${#inrev[@]} -gt 0 ]]; then
 fi
 shopt -u nullglob
 
+# ----- spend (exact tokens from the usage-meter snapshot) -----
+if [[ -f "$(il_cfg_dir "$ROOT")/usage/current.tsv" && -x "$SELF_DIR/budget.sh" ]]; then
+  spend="$(bash "$SELF_DIR/budget.sh" show --target "$ROOT" 2>/dev/null)"
+  if [[ -n "$spend" ]]; then
+    section "Spend"
+    printf '%s\n' "$spend" | sed '1d; s/^/  /'   # drop the script's own header line
+    # per-task ledger: last few closed tasks with their token delta
+    LED="$(il_cfg_dir "$ROOT")/ledger.tsv"
+    if [[ -f "$LED" ]]; then
+      recent="$(grep -E '	close	' "$LED" 2>/dev/null | tail -3 | awk -F'\t' '{for(i=1;i<=NF;i++) if($i ~ /^delta=/){d=$i}; printf "    task %s  %s\n",$1,d}')"
+      [[ -n "$recent" ]] && { printf "  ${C_DIM}recent per-task:${C_RESET}\n"; printf '%s\n' "$recent"; }
+    fi
+  fi
+fi
+
 # ----- suggestions (recommend-only; ranked warn>recommend>info) -----
 if [[ -x "$SELF_DIR/suggest.sh" ]]; then
   sug="$(bash "$SELF_DIR/suggest.sh" list --target "$ROOT" 2>/dev/null)"
