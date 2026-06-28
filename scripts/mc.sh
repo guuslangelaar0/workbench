@@ -147,6 +147,17 @@ if [[ ${#inrev[@]} -gt 0 ]]; then
 fi
 shopt -u nullglob
 
+# ----- blocked tasks (unmet Blocked-by deps) -----
+if [[ -x "$SELF_DIR/deps.sh" ]]; then
+  blk="$(bash "$SELF_DIR/deps.sh" blocked --target "$ROOT" 2>/dev/null)"
+  if [[ -n "$blk" && "$blk" != "(no blocked tasks)" ]]; then
+    section "Blocked (unmet dependencies)"
+    printf '%s\n' "$blk" | sed "s/^/  ${C_AMBER}/; s/$/${C_RESET}/"
+    cyc="$(bash "$SELF_DIR/deps.sh" cycles --target "$ROOT" 2>/dev/null)"
+    [[ -n "$cyc" && "$cyc" != "(no cycles)" ]] && printf "  ${C_RED}%s${C_RESET}\n" "$cyc"
+  fi
+fi
+
 # ----- spend (exact tokens from the usage-meter snapshot) -----
 if [[ -f "$(il_cfg_dir "$ROOT")/usage/current.tsv" && -x "$SELF_DIR/budget.sh" ]]; then
   spend="$(bash "$SELF_DIR/budget.sh" show --target "$ROOT" 2>/dev/null)"

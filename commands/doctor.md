@@ -12,7 +12,12 @@ Also report loop health — list lanes and flag phantoms:
 
 !`bash ${CLAUDE_PLUGIN_ROOT}/scripts/lane.sh list --target "$CLAUDE_PROJECT_DIR" 2>/dev/null; bash ${CLAUDE_PLUGIN_ROOT}/scripts/lane.sh reap --target "$CLAUDE_PROJECT_DIR" 2>/dev/null`
 
+And the dependency graph — blocked tasks and any cycle:
+
+!`bash ${CLAUDE_PLUGIN_ROOT}/scripts/deps.sh blocked --target "$CLAUDE_PROJECT_DIR" 2>/dev/null; bash ${CLAUDE_PLUGIN_ROOT}/scripts/deps.sh cycles --target "$CLAUDE_PROJECT_DIR" 2>/dev/null`
+
 Then add, from your own inspection:
+- **Dependency cycle:** if `deps.sh cycles` reports one, two tasks block each other and neither can ever be picked — break the cycle by editing a `**Blocked-by:**` field.
 - **Phantom lanes:** any lane the reap above reports `DEAD` (heartbeat stale) is a worker that died — its task in `in-development/` needs re-dispatch (or `lane.sh clear <id>` if the work landed). A lane with a high `attempts` count is a repeatedly-failing task — surface it.
 - **In-review cap:** count `.claude/tasks/in-review/` vs `lifecycle.in_review_cap` in `.workbench/config.json`; warn if at/over.
 - **SESSION_STATE freshness:** when was `.claude/SESSION_STATE.md` last updated (git log) — flag if stale (> a day during active work).

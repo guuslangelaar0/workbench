@@ -11,7 +11,7 @@ PLUGIN_ROOT="$(cd "$SELF_DIR/.." && pwd)"                  # workbench
 . "$SELF_DIR/lib.sh"
 
 TITLE="" TARGET="$PWD" STATE="backlog"
-TRACK="general" REPOS="(unset)" ESTIMATE="(unestimated)" VERIF="(define how this is verified)" EPIC="(none)"
+TRACK="general" REPOS="(unset)" ESTIMATE="(unestimated)" VERIF="(define how this is verified)" EPIC="(none)" BLOCKED_BY="(none)"
 need_arg() { [ "$#" -ge 2 ] || { echo "task-new.sh: $1 requires a value" >&2; exit 64; }; }
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -20,6 +20,7 @@ while [ "$#" -gt 0 ]; do
     --state)        need_arg "$@"; STATE="$2"; shift 2 ;;
     --track)        need_arg "$@"; TRACK="$2"; shift 2 ;;
     --epic)         need_arg "$@"; EPIC="$2"; shift 2 ;;
+    --blocked-by)   need_arg "$@"; BLOCKED_BY="$2"; shift 2 ;;
     --repos)        need_arg "$@"; REPOS="$2"; shift 2 ;;
     --estimate)     need_arg "$@"; ESTIMATE="$2"; shift 2 ;;
     --verification) need_arg "$@"; VERIF="$2"; shift 2 ;;
@@ -43,7 +44,7 @@ mkdir -p "$T/$STATE"
 OUT="$T/$STATE/$ID-$slug.md"
 CREATED="$(date -u +%Y-%m-%d)"
 il_render "$PLUGIN_ROOT/templates/minimal/tasks/task.md.tmpl" "$OUT" \
-  "ID=$ID" "TITLE=$TITLE" "STATUS=$STATE" "TRACK=$TRACK" "EPIC=$EPIC" "REPOS=$REPOS" \
+  "ID=$ID" "TITLE=$TITLE" "STATUS=$STATE" "TRACK=$TRACK" "EPIC=$EPIC" "BLOCKED_BY=$BLOCKED_BY" "REPOS=$REPOS" \
   "ESTIMATE=$ESTIMATE" "CREATED=$CREATED" "VERIFICATION=$VERIF"
 
 printf '%04d\n' "$((10#$ID + 1))" > "$NID"
