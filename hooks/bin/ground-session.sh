@@ -74,6 +74,7 @@ fi
 # the loop opens with instead of silence. Everything routes through the one surface.
 if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
   [ -x "$CLAUDE_PLUGIN_ROOT/scripts/graduate.sh" ] && bash "$CLAUDE_PLUGIN_ROOT/scripts/graduate.sh" "$P" >/dev/null 2>&1
+  [ -x "$CLAUDE_PLUGIN_ROOT/scripts/suggest-scan.sh" ] && bash "$CLAUDE_PLUGIN_ROOT/scripts/suggest-scan.sh" --target "$P" >/dev/null 2>&1
   if [ -x "$CLAUDE_PLUGIN_ROOT/scripts/suggest.sh" ]; then
     sug="$(bash "$CLAUDE_PLUGIN_ROOT/scripts/suggest.sh" top 3 --target "$P" 2>/dev/null)"
     [ -n "$sug" ] && { echo ""; printf '%s\n' "$sug"; }
