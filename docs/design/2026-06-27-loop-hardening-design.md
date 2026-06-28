@@ -167,6 +167,16 @@ A concrete, checkable backlog. P0 = directly addresses a named pain and is high-
 3. **Charter vs. SESSION_STATE.** Keep them as two files (stable goal vs. volatile progress) or one with two sections? Recommendation: two files — different lifecycles, different lossiness needs.
 4. **Scope of P0 vs. ship incrementally.** All four P0 items are independent; recommend shipping the **verification contract** first (highest user-named value), then liveness.
 
+## 5.5 Future option: a cloud-resident loop (Claude Code Routines)
+
+The local supervisor (§1.5) is right for a self-hosted loop on your own machine. For the day we want the loop to run **while the machine is off entirely**, Claude Code **Routines** ([docs](https://code.claude.com/docs/en/routines.md), research preview as of 2026-06) are the cloud path — marked down here, not built now.
+
+What they are (confirmed from the doc): a saved prompt + repos + connectors that runs on **Anthropic-managed cloud infrastructure** ("keep working when your laptop is closed"), with triggers that are **scheduled** (presets or a cron via `/schedule update`; **minimum interval one hour**), **API** (POST to a per-routine `/fire` endpoint with a bearer token), or **GitHub events** (PR/release). Managed at `claude.ai/code/routines` or CLI `/schedule`; Pro/Max/Team/Enterprise with Claude Code on the web; daily run cap + subscription usage.
+
+Why it is **not** a drop-in for the local supervisor (the load-bearing limits): each run **clones a GitHub repo and starts a FRESH session** on `claude/`-prefixed branches — it has **no access to your local working tree and cannot `--resume` your local session**, and the 1-hour floor is far coarser than a watchdog cadence. So a Routine can't supervise a local loop.
+
+The fit, if we go cloud later: **move the whole loop cloud-side** against a *remote* repo — the git remote becomes the sync boundary (clone → work → push, no local files), a scheduled Routine is the heartbeat / relaunch, and API + GitHub triggers make it event-driven; secrets ride the environment's env vars and the network allowlist. The §1.5 supervisor *design* still holds — it just relocates to the cloud and resumes against the remote. (For a Claude-native **local** runtime alternative to cron/systemd, note **Desktop scheduled tasks** — the "Local" option — which run on your machine with local-file access.)
+
 ## 6. Non-goals
 
 - A bespoke durable-execution engine (Temporal-style replay) — LLM steps are non-deterministic, so we snapshot state to disk rather than event-source/replay. The file-based task lifecycle + charter *is* our durable store.
