@@ -12,6 +12,9 @@ Run the verification gate for a task. Follow the `orchestration` and `task-lifec
    - `recommended` — spawn a `verifier` (Task tool, `subagent_type: verifier`, model per the `models` skill) to independently run it and return evidence.
    - `better` — spawn several verifiers with an adversarial framing; require a majority PASS.
    Always: review the diff, build, and run the declared verification before advancing.
+2.5. **Anti-gaming check.** Before advancing, inspect the task's code diff for reward-hacking — a test deleted, skipped/ignored, or weakened to a trivial pass while the task claims its tests are green. Run the guard over the task's commit range (the range the engineer's work landed in, e.g. the baseline the task started from to `HEAD`):
+   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/gate-integrity.sh" --range <baseline>..HEAD --task <task-file> --key gaming-<id> --target "${CLAUDE_PROJECT_DIR}"`
+   It is a HEURISTIC — it raises honest suspicion, it does not certify. It files a `warn` suggestion on anything it finds and **exits 3 (block)** when a hard signal (deleted/skipped/trivial test) coincides with a pass-claim at `crew`/`fleet`. If it blocks or flags, review the diff: if the change is legitimate (e.g. an obsolete test removed) note why and proceed; otherwise bounce the task to `in-development`.
 3. **On PASS** — capture the evidence (command output / screenshot path / commit SHA) into the task's `## Verification evidence` section, then move it:
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-move.sh" <id> verified --target "${CLAUDE_PROJECT_DIR}"`
    (Use `staged` instead of `verified` when the level's lifecycle includes a `staged` stage — Crew and Fleet are deploy-gated — and a prod deploy is still pending.)

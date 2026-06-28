@@ -57,6 +57,12 @@ case "$TO" in
         exit 3
       fi
     fi
+    # Anti-gaming guard — ADVISORY here (the working-tree diff at move time is unreliable;
+    # real enforcement lives in /workbench:verify with a proper commit range). Best-effort:
+    # it scans `git diff HEAD`, files a warn suggestion on anything suspicious, never blocks.
+    if [ "${WB_SKIP_VERIFY_GATE:-0}" != 1 ] && [ -x "$SELF_DIR/gate-integrity.sh" ]; then
+      "$SELF_DIR/gate-integrity.sh" --task "$src" --key "gaming-$ID" --target "$TARGET" >/dev/null 2>&1 || true
+    fi
     ;;
 esac
 
