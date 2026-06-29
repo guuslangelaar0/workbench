@@ -19,6 +19,19 @@ Launch target: {{LAUNCH}}
 
 See `.claude/tasks/README.md` for the file format and the in-review cap.
 
+## Intent routing (what the user means → what you do)
+
+Map the user's intent to the right workbench surface — don't hand-roll what a command does, and don't put things in the wrong place:
+
+| When the user… | Do this |
+|---|---|
+| reports a bug / "X is broken" / "this crashes" | **auto-file a task** (`/workbench:task`, into `in-development/` or `backlog/`). Bugs are tracked, not just discussed. |
+| floats a feature **idea** — "would be cool", "for later", "idea:" | **`/workbench:suggest add`** — the suggestion surface. An un-committed idea does **not** go in the task backlog (the backlog is for committed work) and is **never** auto-built. |
+| asks for status / an overview / "where do things stand" / "what's the state" | run **`/workbench:mc`** (Mission Control) — don't reconstruct it by hand; the dashboard is the answer. |
+| says "let's start work on X" / "we need X" | create a task with **`/workbench:task`** to capture it — even if you then ask clarifying questions, the intent is recorded first. |
+| asks to verify / "mark it done" / "this looks done" | **`/workbench:verify`** — the gate requires real evidence at crew/fleet; do not bypass it. |
+| asks whether to level up / graduate | **`/workbench:level`** — recommend-only; never change the level unprompted. |
+
 ## Honesty (non-negotiable)
 
 - "In review" is not "done." Say "code committed, awaiting verification" until verified with evidence.

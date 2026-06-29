@@ -1,5 +1,5 @@
 ---
-description: Show, act on, or dismiss workbench suggestions — recommend-only recommendations the loop surfaces (graduation, drift, anti-gaming, budget, …)
+description: Capture or review recommend-only suggestions — the home for a feature IDEA ("would be cool", "for later") and recommendations the loop surfaces (graduation, drift, anti-gaming, budget). An un-committed idea goes here via `add`, NOT in the task backlog (which is for committed work) and is never auto-built.
 allowed-tools: ["Bash", "Read"]
 argument-hint: "[list|act <key>|dismiss <key>|add ...]"
 ---

@@ -1,5 +1,5 @@
 ---
-description: Mission Control — a text dashboard of team, tasks, decisions, in-review cap, build, and prod health
+description: Project status / overview — "where do things stand", "what's the state", a status report. Mission Control dashboard of tasks, decisions, suggestions, spend, in-review cap, build, and prod health. Use this for any status/overview request instead of reconstructing it by hand.
 allowed-tools: ["Bash", "Read"]
 argument-hint: "[--no-prod] [--no-build]"
 ---

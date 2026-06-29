@@ -45,7 +45,11 @@ for cdir in "$CASES"/*/; do
   prompt="$(cat "$cdir/prompt")"
 
   P="$(mktemp -d)"
-  bash "$ROOT/scripts/init.sh" --name "Intent" --level "$level" --target "$P" >/dev/null 2>&1
+  # seed a concrete mission so cases test intent ROUTING, not cold-start ambiguity
+  # (a blank project makes the model ask clarifying questions instead of acting).
+  bash "$ROOT/scripts/init.sh" --name "Intent" --level "$level" \
+    --mission "A small web product: a public REST API, a web UI, and a settings page." \
+    --target "$P" >/dev/null 2>&1
   [ -f "$cdir/setup.sh" ] && ( cd "$P" && ROOT="$ROOT" bash "$cdir/setup.sh" ) >/dev/null 2>&1
 
   if [ "$SIMULATE" = 1 ]; then
