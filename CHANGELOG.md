@@ -6,6 +6,9 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Self-benchmarking — the loop's expectancy number** (offline, zero-cost). Each task is a "trade"; the loop's quality + economics fold into one figure. A durable append-only metrics log (`.workbench/metrics.tsv`, written by `scripts/metric.sh`) records every loop event — the existing gates emit it: `task_closed`/`task_bounced` (task-move), `gaming_flag` (gate-integrity), `regression_red` (regression-gate), `restart` (lane), `drift_due` (value-audit). `scripts/score.sh` + `/workbench:score` aggregate it with the token ledger into **expectancy per task** and **per 100k tokens**, a 0–100 grade, and a trend vs the last score. A *gamed* or regressed close **lowers** expectancy (it scores reality, not the loop's claims). Weights are configurable (`score`{}). See [docs/design/2026-06-29-self-benchmarking-expectancy-design.md](docs/design/2026-06-29-self-benchmarking-expectancy-design.md).
+
 ## [0.2.0] - 2026-06-28
 
 The loop-engineering release: the way of working now stays alive, honest, economical, and on-target across long autonomous runs. Two designs land here — **loop hardening** (liveness, the verification contract, the external supervisor) and **loop quality & economics** (a suggestion surface, anti-gaming, cost governance, optional cross-model verification, a regression gate, dependency graph, and a value-drift audit). 42 offline test suites; publishable. See [docs/design/2026-06-27-loop-hardening-design.md](docs/design/2026-06-27-loop-hardening-design.md) and [docs/design/2026-06-28-loop-quality-economics-design.md](docs/design/2026-06-28-loop-quality-economics-design.md).

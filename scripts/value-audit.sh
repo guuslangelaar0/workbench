@@ -71,6 +71,7 @@ case "$CMD" in
         --how "compare the recent closes against the charter goal + roadmap; re-prioritize the backlog if work is drifting low-value, then run: value-audit.sh done" \
         --source value-audit --target "$TARGET" >/dev/null 2>&1 || true
     fi
+    [ -x "$SELF_DIR/metric.sh" ] && "$SELF_DIR/metric.sh" emit drift_due --detail "$delta closes" --target "$TARGET" >/dev/null 2>&1 || true
     echo "value-audit: DUE ($delta/$cad) — filed a recommend suggestion"
     ;;
   *)

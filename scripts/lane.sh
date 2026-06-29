@@ -67,6 +67,9 @@ case "$CMD" in
     fi
     attempts=$((attempts + 1))
     _lane_write "$f" "$OWNER" "$started" "$now" "$attempts" running
+    # a re-start (attempts>1) is a restart-intensity event worth scoring
+    [ "$attempts" -gt 1 ] && [ -x "$SELF_DIR/metric.sh" ] && \
+      "$SELF_DIR/metric.sh" emit restart --task "$ID" --detail "attempt $attempts" --target "$TARGET" >/dev/null 2>&1 || true
     echo "lane: started $ID owner=$OWNER attempts=$attempts"
     ;;
 

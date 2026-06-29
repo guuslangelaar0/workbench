@@ -90,3 +90,14 @@ fi
 
 from="$(basename "$(dirname "$src")")"
 echo "workbench: moved $ID  $from -> $TO  ($dest)"
+
+# metrics: a clean close vs a bounce (rework) — best-effort, fail-open
+if [ -x "$SELF_DIR/metric.sh" ]; then
+  case "$TO" in
+    verified|shipped) "$SELF_DIR/metric.sh" emit task_closed --task "$ID" --detail "$from->$TO" --target "$TARGET" >/dev/null 2>&1 || true ;;
+    in-development)
+      case "$from" in in-review|staged|release-candidate)
+        "$SELF_DIR/metric.sh" emit task_bounced --task "$ID" --detail "$from->in-development" --target "$TARGET" >/dev/null 2>&1 || true ;;
+      esac ;;
+  esac
+fi

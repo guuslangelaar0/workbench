@@ -80,6 +80,8 @@ if [ -x "$SELF_DIR/suggest.sh" ]; then
     --source regression --target "$TARGET" >/dev/null 2>&1 || true
 fi
 
+[ -x "$SELF_DIR/metric.sh" ] && "$SELF_DIR/metric.sh" emit regression_red --detail "${regressed:-$fails}" --target "$TARGET" >/dev/null 2>&1 || true
+
 echo "regression-gate: RED — failed: $fails" >&2
 [ -n "$regressed" ] && echo "  was-green-now-red: $regressed" >&2
 if [ "$enforce" = 1 ]; then

@@ -112,6 +112,11 @@ if [ -x "$SELF_DIR/suggest.sh" ]; then
     --source gate-integrity --target "$TARGET" >/dev/null 2>&1 || true
 fi
 
+# metric: a hard signal is a gaming attempt worth scoring against the loop
+if [ -n "$hard" ] && [ -x "$SELF_DIR/metric.sh" ]; then
+  "$SELF_DIR/metric.sh" emit gaming_flag --detail "$hard" --target "$TARGET" >/dev/null 2>&1 || true
+fi
+
 echo "gate-integrity: SUSPICIOUS (heuristic — review, do not treat as proof)" >&2
 [ -n "$hard" ] && echo "  hard: $hard" >&2
 [ -n "$soft" ] && echo "  soft: $soft" >&2
