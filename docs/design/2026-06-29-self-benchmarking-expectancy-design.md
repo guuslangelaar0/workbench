@@ -63,6 +63,21 @@ Once there's a number, optimizing workbench is itself a loop: **change one knob 
 - [ ] **BM-5 — Expectancy gate for workbench's own CI:** block a workbench change that drops L1 expectancy; run L2 on cadence.
 - [ ] **BM-6 — Knob search:** semi-automated dial/threshold sweep that proposes the config maximizing expectancy.
 
+## 6b. The benchmark's true target — description conformance, not model skill (added 2026-06-29)
+
+A correction after the first live runs pinned at 100/100: a coding-difficulty fixture (BM-7) just measures *the model*. A strong model (the one users should run — **always Opus**) aces it honestly, so the number can't discriminate between workbench configs. That's the wrong thing to measure.
+
+**What we actually test: do workbench's own descriptions, triggers, and level presets make Opus do the right thing?** A user expresses an intent; the right command/skill should fire, the way of working should show up, and at a given level the right behavior should be enforced. The oracle is **"did the correct behavior happen,"** not "is the code correct." When the number drops, it means a *description* (a command's `description`, a skill's trigger, a way-of-working rule) isn't pulling its weight for Opus — which is exactly the thing we can fix and want a regression gate on.
+
+**BM-8 — intent→behavior conformance benchmark.** Each case = a natural-language intent + a level + an effect-based oracle, e.g.:
+- "I found a bug: …" → a task is **auto-filed** (the "bugs auto-file" rule).
+- "Idea for later: …" → a **suggestion** is filed, not an auto-built feature (the "features suggest" rule).
+- "Where does the project stand?" → **/workbench:mc** fires (status-intent routing).
+- "Start work on X" → a task is created.
+- (crew) "verify task 0001" with no evidence → the **verify gate holds** (refuses), proving the gate's description survives pressure.
+
+Run live with `claude -p --plugin-dir` (always the user's real model); oracles read the project FS + the captured output. A `--simulate` path fakes the correct behavior via the plugin's own scripts so the harness is CI-testable without tokens. Conformance < 100 is a real finding: a description that doesn't make Opus do the right thing. This is the primary benchmark; the BM-7 coding fixture stays as a secondary no-gaming/no-regression sanity layer.
+
 ## 7. Non-goals
 - A perfect correctness oracle for arbitrary real projects (impossible — that's why L1 is a proxy and L2 uses *seeded* tasks).
 - Optimizing the number at the expense of the thing it proxies (see §5.4).
