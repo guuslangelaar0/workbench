@@ -1,6 +1,6 @@
 # Self-benchmarking — giving the loop an expectancy number
 
-**Status:** Proposal (design only — scope decision pending)
+**Status:** L1 + L2 implemented 2026-06-29 (BM-1..BM-4; 45 test suites green). BM-5/BM-6 (CI gate + knob search) remain P2.
 **Date:** 2026-06-29
 **Owner:** Guus
 **Builds on:** the loop-hardening + loop-quality-economics instruments (verify-gate, gate-integrity, budget/ledger, regression-gate, lane attempts, value-audit) — they already emit the raw signal; this turns it into a score.
@@ -52,12 +52,12 @@ Once there's a number, optimizing workbench is itself a loop: **change one knob 
 
 ## 6. Backlog
 **P0**
-- [ ] **BM-1 — Metrics event log:** append-only `.workbench/metrics.tsv`; the existing gates/hooks emit `task_closed|task_bounced|gaming_flag|regression_red|restart|drift_due` + token deltas. Tests.
-- [ ] **BM-2 — `/workbench:score` (offline scorecard):** `scripts/score.sh` aggregates the log + ledger into components + expectancy/100k + grade + trend. Tests.
+- [x] **BM-1 — Metrics event log:** append-only `.workbench/metrics.tsv`; the existing gates/hooks emit `task_closed|task_bounced|gaming_flag|regression_red|restart|drift_due` + token deltas. Tests.
+- [x] **BM-2 — `/workbench:score` (offline scorecard):** `scripts/score.sh` aggregates the log + ledger into components + expectancy/100k + grade + trend. Tests.
 
 **P1**
-- [ ] **BM-3 — Golden benchmark project:** a seeded fixture (N tasks + machine-checkable oracles, mixed difficulty).
-- [ ] **BM-4 — Live benchmark runner:** extend `test/e2e/run.sh` to run the plugin against the fixture, score vs oracles, K seeds, mean±spread → an expectancy report.
+- [x] **BM-3 — Golden benchmark project:** a seeded fixture (N tasks + machine-checkable oracles, mixed difficulty).
+- [x] **BM-4 — Live benchmark runner:** extend `test/e2e/run.sh` to run the plugin against the fixture, score vs oracles, K seeds, mean±spread → an expectancy report.
 
 **P2**
 - [ ] **BM-5 — Expectancy gate for workbench's own CI:** block a workbench change that drops L1 expectancy; run L2 on cadence.
