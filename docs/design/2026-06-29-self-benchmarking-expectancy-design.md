@@ -1,6 +1,6 @@
 # Self-benchmarking — giving the loop an expectancy number
 
-**Status:** Implemented 2026-06-29 — BM-1..BM-8 (all). The intent-conformance benchmark (BM-8) is the primary one; BM-6 (knob search) turns it into an optimizer. Conformance fixture widened to 11 cases with a train/holdout split (anti-overfit). 48 test suites green. Live conformance: 2/5 → **5/5** after the benchmark caught and we fixed real description gaps; the widened set re-baselines live under BM-6/CB-3.
+**Status:** Implemented 2026-06-29 — BM-1..BM-8 (all). The intent-conformance benchmark (BM-8) is the primary one; BM-6 (knob search) turns it into an optimizer. Conformance fixture widened to 11 cases with a train/holdout split (anti-overfit). 50 test suites green. Live conformance history: 2/5 → 5/5 (first description fix) → on the widened set the full live run scored **9/11**, and **both failures were held-out cases** (the Goodhart guard catching what the train-tuned descriptions didn't generalize): `in-review cap not checked before pulling new work`, and `a "plan a big multi-part effort" intent at solo not landing as tracked backlog tasks`. Two routing-table rows fixed both; re-validated live → **11/11**. (Note: those two holdout cases are now "seen" — replenish the holdout with fresh unseen cases before trusting it as an anti-overfit guard again; see §6c.)
 **Date:** 2026-06-29
 **Owner:** Guus
 **Builds on:** the loop-hardening + loop-quality-economics instruments (verify-gate, gate-integrity, budget/ledger, regression-gate, lane attempts, value-audit) — they already emit the raw signal; this turns it into a score.
@@ -77,6 +77,16 @@ A correction after the first live runs pinned at 100/100: a coding-difficulty fi
 - (crew) "verify task 0001" with no evidence → the **verify gate holds** (refuses), proving the gate's description survives pressure.
 
 Run live with `claude -p --plugin-dir` (always the user's real model); oracles read the project FS + the captured output. A `--simulate` path fakes the correct behavior via the plugin's own scripts so the harness is CI-testable without tokens. Conformance < 100 is a real finding: a description that doesn't make Opus do the right thing. This is the primary benchmark; the BM-7 coding fixture stays as a secondary no-gaming/no-regression sanity layer.
+
+## 6c. The first held-out catch (2026-06-29) — and the holdout-rotation rule
+
+The widened set's first full live run scored **9/11**. The eight **train** cases all passed; the two failures were both **holdout** cases — exactly the generalization the train-tuned descriptions missed:
+1. **`09-inreview-cap`** — at the in-review cap, "grab the next feature and start building it" had the model open new work instead of recognizing the cap and draining it. The cap rule lived only in the loop-cadence step, not tied to the *pull-new-work* intent.
+2. **`11-flat-solo`** — "plan a big multi-part effort" at solo produced a prose plan, not tracked backlog tasks. There was no routing rule for *decomposition* (the fleet counterpart `10-epic-fleet` passed because epics are explicit).
+
+Both were fixed with two **intent-routing rows** in the scaffolded `CLAUDE.md` (a cap-check-before-pull row, and a level-aware decomposition row: epic at fleet, flat backlog tasks at lighter levels). Re-validated live → both PASS (11/11). These are genuine behavior fixes, not keyword-gaming — the oracle keywords appear because the corrected behavior naturally produces them.
+
+**Holdout-rotation rule (the integrity cost).** Fixing against a held-out case "spends" it: 09 and 11 are now tuned-against and no longer a clean anti-overfit signal. The held-out set guards the **automated** knob search (BM-6), which only ever sees train — so it remains valid for that. But before quoting the holdout as a fresh generalization check again, **replenish it with new, genuinely-unseen cases** (or rotate which cases are held out). A holdout you've optimized against is just more train data.
 
 ## 7. Non-goals
 - A perfect correctness oracle for arbitrary real projects (impossible — that's why L1 is a proxy and L2 uses *seeded* tasks).

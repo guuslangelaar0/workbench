@@ -29,6 +29,8 @@ Map the user's intent to the right workbench surface — don't hand-roll what a 
 | floats a feature **idea** — "would be cool", "for later", "idea:" | **`/workbench:suggest add`** — the suggestion surface. An un-committed idea does **not** go in the task backlog (the backlog is for committed work) and is **never** auto-built. |
 | asks for status / an overview / "where do things stand" / "what's the state" | run **`/workbench:mc`** (Mission Control) — don't reconstruct it by hand; the dashboard is the answer. |
 | says "let's start work on X" / "we need X" | create a task with **`/workbench:task`** to capture it — even if you then ask clarifying questions, the intent is recorded first. |
+| says "grab/pull the next task" / "start the next feature from the backlog" | **first check the in-review cap** (`/workbench:mc`, or count `.claude/tasks/in-review/`) — if it's at/over the cap, **drain it by verifying** oldest-first before opening new work; only then pull the next unblocked task. Don't blindly start new work on top of a full in-review queue. |
+| asks to **plan / decompose a big multi-part effort** | capture it as tracked work on disk, not just a prose plan. At **fleet**, group the parts under an **epic** (`/workbench:epic`); at lighter levels (**solo/pair/crew**) decompose into **flat backlog tasks** (`/workbench:task` for each part). Don't leave the breakdown only in chat. |
 | asks to verify / "mark it done" / "this looks done" | **`/workbench:verify`** — the gate requires real evidence at crew/fleet; do not bypass it. |
 | asks whether to level up / graduate | **`/workbench:level`** — recommend-only; never change the level unprompted. |
 
