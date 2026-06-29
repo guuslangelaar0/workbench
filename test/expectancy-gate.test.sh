@@ -12,7 +12,7 @@ chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; 
 chk "gate passes on healthy repo"   "bash '$GATE' >/dev/null 2>&1"
 OUT="$(bash "$GATE" 2>&1)"
 chk "reports routing table present" "printf '%s' \"\$OUT\" | grep -q 'routing table present in full'"
-chk "reports harness intact 5/5"    "printf '%s' \"\$OUT\" | grep -q 'harness intact (simulate 5/5)'"
+chk "reports harness intact"        "printf '%s' \"\$OUT\" | grep -qE 'harness intact \(simulate [0-9]+/[0-9]+\)'"
 
 # negative: full-copy the repo (minus .git), remove the routing table, gate must FAIL.
 # (a full copy so the harness's simulate scaffolding behaves exactly like the real repo)

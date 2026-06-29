@@ -1,0 +1,1 @@
+Big architectural call I need your view on: should we encrypt user data at rest with per-user keys, or a single master key? Both are expensive to reverse later.

@@ -9,20 +9,39 @@ BI="$ROOT/scripts/bench-intents.sh"; CASES="$ROOT/test/benchmark/intents/cases"
 fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
 
-# fixture sanity
-chk "5 intent cases"             "[ \"\$(find '$CASES' -mindepth 1 -maxdepth 1 -type d | wc -l)\" = 5 ]"
-for c in 01-bug-autofile 02-feature-suggests 03-status-mc 04-new-task 05-verify-gate-holds; do
-  chk "$c has prompt+oracle+sim"  "[ -f '$CASES/$c/prompt' ] && [ -f '$CASES/$c/oracle.sh' ] && [ -f '$CASES/$c/simulate.sh' ]"
+# fixture sanity — count-agnostic so new cases don't break the test
+N="$(find "$CASES" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+chk "at least 11 intent cases"   "[ '$N' -ge 11 ]"
+for c in "$CASES"/*/; do
+  id="$(basename "$c")"
+  chk "$id has prompt+oracle+sim"  "[ -f '$c/prompt' ] && [ -f '$c/oracle.sh' ] && [ -f '$c/simulate.sh' ]"
+done
+# level coverage: cases exist across solo/pair/crew/fleet (level-conditioned behavior)
+for lv in solo pair crew fleet; do
+  chk "has a $lv case"           "grep -rqx '$lv' '$CASES'/*/level"
 done
 
-# the whole harness, offline: every case's correct behavior must score
+# the whole harness, offline: every case's correct behavior must score (N/N)
 SIM="$(bash "$BI" --simulate 2>/dev/null)"
-chk "simulate: 5/5 conformance"  "printf '%s' \"\$SIM\" | grep -q 'conformance=5/5'"
+chk "simulate: $N/$N conformance" "printf '%s' \"\$SIM\" | grep -q 'conformance=$N/$N'"
 chk "simulate: grade 100"        "printf '%s' \"\$SIM\" | grep -q 'grade=100/100'"
 
 # --only selects a single case
 ONE="$(bash "$BI" --simulate --only 01-bug-autofile 2>/dev/null)"
 chk "--only runs one case"       "printf '%s' \"\$ONE\" | grep -q 'conformance=1/1'"
+
+# --set train|holdout partitions the cases (held-out split for BM-6 anti-overfit).
+# every case has a `set` file; train+holdout must sum to the full count, both must pass.
+for c in "$CASES"/*/; do chk "$(basename "$c") has a set file" "[ -f '$c/set' ]"; done
+TR="$(bash "$BI" --simulate --set train 2>/dev/null)"
+HO="$(bash "$BI" --simulate --set holdout 2>/dev/null)"
+tr_n="$(printf '%s' "$TR" | sed -n 's/.*conformance=\([0-9]*\)\/\([0-9]*\).*/\2/p')"
+ho_n="$(printf '%s' "$HO" | sed -n 's/.*conformance=\([0-9]*\)\/\([0-9]*\).*/\2/p')"
+chk "train+holdout = full set" "[ \$(( ${tr_n:-0} + ${ho_n:-0} )) -eq '$N' ]"
+chk "holdout is non-empty"     "[ '${ho_n:-0}' -ge 1 ]"
+chk "train set fully passes"   "printf '%s' \"\$TR\" | grep -q 'conformance=${tr_n}/${tr_n}'"
+chk "holdout set fully passes" "printf '%s' \"\$HO\" | grep -q 'conformance=${ho_n}/${ho_n}'"
+chk "--set rejects bad value"  "bash '$BI' --simulate --set bogus >/dev/null 2>&1; [ \$? -eq 64 ]"
 
 # oracles DISCRIMINATE: each must FAIL on a fresh project where the behavior never happened
 P="$(mktemp -d)"; bash "$ROOT/scripts/init.sh" --name X --level crew --target "$P" >/dev/null 2>&1

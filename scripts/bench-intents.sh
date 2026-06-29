@@ -12,21 +12,27 @@
 #   simulate.sh   cwd=project, env ROOT=<plugin>; fakes the CORRECT behavior via plugin scripts
 #   setup.sh      (optional) cwd=project, env ROOT; pre-seed project state before the intent
 #
+# Each case is tagged train|holdout via a `set` file (default train). The knob search (BM-6)
+# optimizes against the TRAIN set; HOLDOUT is reserved to validate a proposed winner so we
+# can't overfit the metric (Goodhart, §5.4 of the design). --set picks which subset to run.
+#
 # Live invocation costs API tokens and is gated by WB_BENCH=1; --simulate runs free offline.
-# Usage: bench-intents.sh [--simulate] [--keep] [--only <id>]
+# Usage: bench-intents.sh [--simulate] [--keep] [--only <id>] [--set train|holdout|all]
 set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SELF_DIR/.." && pwd)"
 CASES="$ROOT/test/benchmark/intents/cases"
-SIMULATE=0 KEEP=0 ONLY=""
+SIMULATE=0 KEEP=0 ONLY="" SET="all"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --simulate) SIMULATE=1; shift ;;
     --keep)     KEEP=1; shift ;;
     --only)     ONLY="$2"; shift 2 ;;
+    --set)      SET="$2"; shift 2 ;;
     *) echo "bench-intents.sh: unknown arg '$1'" >&2; exit 64 ;;
   esac
 done
+case "$SET" in train|holdout|all) ;; *) echo "bench-intents.sh: --set must be train|holdout|all (got '$SET')" >&2; exit 64 ;; esac
 [ -d "$CASES" ] || { echo "bench-intents.sh: no cases dir at $CASES" >&2; exit 1; }
 if [ "$SIMULATE" = 0 ] && [ "${WB_BENCH:-0}" != 1 ]; then
   echo "bench-intents.sh: the LIVE conformance run drives a real model and COSTS API TOKENS." >&2
@@ -40,6 +46,8 @@ for cdir in "$CASES"/*/; do
   id="$(basename "$cdir")"
   [ -n "$ONLY" ] && [ "$ONLY" != "$id" ] && continue
   [ -f "$cdir/prompt" ] && [ -f "$cdir/oracle.sh" ] || continue
+  cset="$(tr -d ' \n' < "$cdir/set" 2>/dev/null)"; [ -n "$cset" ] || cset="train"
+  [ "$SET" != "all" ] && [ "$SET" != "$cset" ] && continue
   total=$((total+1))
   level="$(tr -d ' \n' < "$cdir/level" 2>/dev/null)"; [ -n "$level" ] || level=crew
   prompt="$(cat "$cdir/prompt")"
@@ -74,6 +82,6 @@ if [ "$total" -eq 0 ]; then echo "BENCH-INTENT: no cases"; exit 0; fi
 read -r conf grade <<EOF
 $(awk -v p="$pass" -v t="$total" 'BEGIN{ printf "%.0f %.0f", 100.0*p/t, 100.0*p/t }')
 EOF
-printf "BENCH-INTENT conformance=%d/%d  expectancy=%d  grade=%d/100\n" "$pass" "$total" "$conf" "$grade"
+printf "BENCH-INTENT [set=%s] conformance=%d/%d  expectancy=%d  grade=%d/100\n" "$SET" "$pass" "$total" "$conf" "$grade"
 [ "$pass" -lt "$total" ] && echo "  ↳ a failed case = the plugin's description/trigger didn't make the model do the right thing (fixable)."
 exit 0
