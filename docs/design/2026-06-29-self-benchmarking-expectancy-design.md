@@ -1,6 +1,6 @@
 # Self-benchmarking — giving the loop an expectancy number
 
-**Status:** Implemented 2026-06-29 — BM-1..BM-5, BM-7 (hardened coding fixture), BM-8 (intent-conformance benchmark, the primary one). 47 test suites green. Live conformance: 2/5 → **5/5** after the benchmark caught and we fixed real description gaps. Only BM-6 (automated knob search) remains.
+**Status:** Implemented 2026-06-29 — BM-1..BM-8 (all). The intent-conformance benchmark (BM-8) is the primary one; BM-6 (knob search) turns it into an optimizer. Conformance fixture widened to 11 cases with a train/holdout split (anti-overfit). 48 test suites green. Live conformance: 2/5 → **5/5** after the benchmark caught and we fixed real description gaps; the widened set re-baselines live under BM-6/CB-3.
 **Date:** 2026-06-29
 **Owner:** Guus
 **Builds on:** the loop-hardening + loop-quality-economics instruments (verify-gate, gate-integrity, budget/ledger, regression-gate, lane attempts, value-audit) — they already emit the raw signal; this turns it into a score.
@@ -61,7 +61,7 @@ Once there's a number, optimizing workbench is itself a loop: **change one knob 
 
 **P2**
 - [x] **BM-5 — Expectancy gate for workbench's own CI:** block a workbench change that drops L1 expectancy; run L2 on cadence.
-- [ ] **BM-6 — Knob search:** semi-automated dial/threshold sweep that proposes the config maximizing expectancy.
+- [x] **BM-6 — Knob search:** `scripts/knob-search.sh` sweeps candidate overlay dirs (alternative descriptions / CLAUDE.md routing / dial presets) against the conformance **train** set, ranks them, and proposes the strict winner (recommend-only — prints the apply command, never mutates the plugin). A train winner is validated on the reserved **holdout** set; one that wins on train but drops on holdout is rejected as overfit (§5.4). Ties keep the baseline. Offline-tested via stubbed per-candidate scores; live gated by `WB_BENCH=1`.
 
 ## 6b. The benchmark's true target — description conformance, not model skill (added 2026-06-29)
 
