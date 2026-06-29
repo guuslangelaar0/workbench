@@ -28,10 +28,10 @@ If commands don't appear immediately, run `/reload-plugins` (or restart Claude C
 
 ## 2. Set up your project
 
-Start Claude Code in your project directory and run the front door:
+Start Claude Code in your project directory and run the front door. Claude Code namespaces every plugin command as `/<plugin>:<command>`, so type `/workbench` to filter the command menu and pick the front door:
 
 ```text
-/workbench
+/workbench:workbench
 ```
 
 On an unconfigured project this launches the **setup wizard** — a short series of cards. You pick:
@@ -50,7 +50,7 @@ CLAUDE.md                     project instructions for every session
 scripts/coord/                multi-session coordination tooling
 ```
 
-> Already configured? Bare `/workbench` instead shows your current status and the next sensible actions.
+> Already configured? `/workbench:workbench` instead shows your current status and the next sensible actions.
 
 ## 3. Do some work
 
@@ -84,7 +84,7 @@ To smoke-test in a throwaway project:
 mkdir -p ~/wb-smoke && cd ~/wb-smoke && git init && claude
 ```
 
-…then run `/workbench`, scaffold, exit, relaunch, and confirm the `=== workbench operating brief ===` prints on startup.
+…then run `/workbench:workbench`, scaffold, exit, relaunch, and confirm the `=== workbench operating brief ===` prints on startup.
 
 Clean up:
 

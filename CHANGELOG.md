@@ -6,6 +6,9 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **Docs: the front door is `/workbench:workbench`, not a bare `/workbench`.** Claude Code namespaces every plugin command as `/<plugin>:<command>`, so a bare `/workbench` is "unknown command" — the front-door file `commands/workbench.md` is invoked as `/workbench:workbench` (typing `/workbench` filters the command menu to the family). The README, getting-started, command reference, the `level` command's hint, and the e2e front-door scenario were corrected to use `/workbench:workbench`. No behavior change — the command always worked under its real name.
+
 ## [0.3.0] - 2026-06-29
 
 The self-measurement + lifecycle release. Workbench now **benchmarks its own way of working** — an expectancy scorecard, a live intent→behavior conformance benchmark (the primary one), a coding-oracle layer, a knob-search optimizer, and a regression gate — and it gained a real **install/upgrade/uninstall lifecycle** backed by a v2 manifest ledger. See [docs/benchmarking.md](docs/benchmarking.md) and [docs/design/2026-06-29-self-benchmarking-expectancy-design.md](docs/design/2026-06-29-self-benchmarking-expectancy-design.md).

@@ -9,7 +9,7 @@ You are the `/workbench:level` command. Read `$ARGUMENTS` and act on it.
 ## Resolve the config
 
 Read `${CLAUDE_PROJECT_DIR}/.workbench/config.json`. If it does not exist, tell the user:
-"This project isn't configured yet. Run `/workbench` to set it up." and stop.
+"This project isn't configured yet. Run `/workbench:workbench` to set it up." and stop.
 
 Parse `workbench.level` using sed — no `jq`:
 

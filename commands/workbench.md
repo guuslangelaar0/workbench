@@ -10,4 +10,4 @@ You are the workbench front door. Decide what to do based on project state:
 
 This is also the auto-trigger: any `/workbench:*` command, when run in an unconfigured project, should defer to this front-door assessment and setup first.
 
-> **Power-user note:** `/workbench:init` and `/workbench:setup` remain as explicit aliases for users who want to jump directly to scaffolding or configuration — but `/workbench` is the one to remember. It does the right thing automatically.
+> **Power-user note:** `/workbench:init` and `/workbench:setup` remain as explicit aliases for users who want to jump directly to scaffolding or configuration — but `/workbench:workbench` is the front door to remember (type `/workbench` to filter the command menu to it). It does the right thing automatically.

@@ -8,11 +8,11 @@ Every command defers to setup when the project is unconfigured, so running anyth
 
 ## Front door & setup
 
-### `/workbench`
-Context-aware entry point. On an **unconfigured** project it runs the setup wizard. On a **configured** one it prints current status (level, task counts, what's in flight) and the next sensible actions.
+### `/workbench:workbench`
+Context-aware entry point (the front door). On an **unconfigured** project it runs the setup wizard. On a **configured** one it prints current status (level, task counts, what's in flight) and the next sensible actions. Type `/workbench` to filter the command menu to the whole family — Claude Code namespaces every plugin command as `/<plugin>:<command>`, so there is no bare `/workbench`.
 
 ### `/workbench:setup`
-The guided, per-axis setup wizard. Walks each configuration choice as a card with *leaner / recommended / better* options and a plain-language cost note, writes `.workbench/config.json`, then scaffolds. This is what `/workbench` calls on a fresh project.
+The guided, per-axis setup wizard. Walks each configuration choice as a card with *leaner / recommended / better* options and a plain-language cost note, writes `.workbench/config.json`, then scaffolds. This is what `/workbench:workbench` calls on a fresh project.
 
 ### `/workbench:init`
 Non-interactive scaffold. Renders templates + manifest into the project. Preserves an existing `.workbench/config.json` (the wizard owns it). Useful for re-scaffolding or scripted setup. Accepts `--name`, `--level`, `--profile minimal|full`, `--target <dir>`.

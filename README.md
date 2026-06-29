@@ -38,20 +38,20 @@ workbench is a Claude Code plugin. From any Claude Code session:
 /plugin install workbench@workbench
 ```
 
-Then start (or restart) Claude Code in your project. There is one command to remember — the front door:
+Then start (or restart) Claude Code in your project. There is one prefix to remember — type `/workbench` and the command menu filters to the whole `/workbench:*` family. The front door is:
 
 ```text
-/workbench
+/workbench:workbench
 ```
 
-On an unconfigured project it runs a short guided setup; on a configured one it shows status and the next actions.
+On an unconfigured project it runs a short guided setup; on a configured one it shows status and the next actions. (Claude Code namespaces every plugin command as `/<plugin>:<command>`, so there's no bare `/workbench` — but typing `/workbench` surfaces the menu.)
 
 → Step-by-step, including a local-install smoke test: **[docs/getting-started.md](docs/getting-started.md)**.
 
 ## Quickstart
 
 ```text
-/workbench                      # front door — guided setup on a new project, status on a configured one
+/workbench:workbench            # front door — guided setup on a new project, status on a configured one
 /workbench:task "ship login"    # create your first task (auto-allocated ID, canonical format)
 /workbench:mc                   # Mission Control: a dashboard of tasks, the in-review cap, build, prod
 /workbench:loop                 # run the autonomous teamlead loop: pick → dispatch → verify-gate → repeat
@@ -61,11 +61,11 @@ That's the whole rhythm: pick a level, capture work as tasks, let the loop drive
 
 ## Commands
 
-`/workbench` is the only one you have to remember; it routes to the rest.
+`/workbench` is the only prefix you have to remember — type it and the menu shows the whole family; `/workbench:workbench` is the front door that routes to the rest.
 
 | Command | What it does |
 |---------|--------------|
-| `/workbench` | Front door: set up if needed, else show status + next actions |
+| `/workbench:workbench` | Front door: set up if needed, else show status + next actions (type `/workbench` to see the menu) |
 | `/workbench:setup` | Configure this project's way of working (guided per-axis wizard) and scaffold it |
 | `/workbench:init` | Scaffold non-interactively (the wizard's config is preserved) |
 | `/workbench:uninstall` | Safely remove workbench-managed project files and side effects using `.workbench/manifest.json` |
@@ -129,7 +129,7 @@ Workbench keeps a [C4](https://c4model.com)-style architecture model in `.claude
 
 ```mermaid
 flowchart TD
-    FD["/workbench<br/>(front door)"] --> SETUP[setup wizard]
+    FD["/workbench:workbench<br/>(front door)"] --> SETUP[setup wizard]
     SETUP --> CFG[".workbench/config.json<br/>level + way of working"]
     CFG --> SCAFFOLD["scaffold: CLAUDE.md · SOUL.md<br/>.claude/tasks/ · scripts/coord/"]
     SCAFFOLD --> LOOP["/workbench:loop"]

@@ -94,13 +94,13 @@ out="$(cd "$D3" && drive "$D3" 'Run /workbench:level status and tell me the curr
 printf '%s' "$out" | grep -qi "fleet" && ok "reports the configured level (fleet)" || bad "did not report level fleet"
 rm -rf "$D3"
 
-# ---- scenario 4: the bare /workbench front door reports status on a configured project
-note "4) /workbench front door reports status (no setup) on a configured project"
+# ---- scenario 4: the /workbench:workbench front door reports status on a configured project
+note "4) /workbench:workbench front door reports status (no setup) on a configured project"
 D4="$(scaffold "E2E Four" crew)"
 # the front door summarizes status in prose, so assert on ANY status signal (level,
 # a lifecycle stage, the cap, or "configured") rather than one exact word — it must
 # report status, NOT re-run setup.
-out="$(cd "$D4" && drive "$D4" 'Run /workbench and show me the status it reports.')"
+out="$(cd "$D4" && drive "$D4" 'Run /workbench:workbench and show me the status it reports.')"
 printf '%s' "$out" | grep -qiE 'crew|configured|in-review|backlog|staged|cap|level' \
   && ok "front door reports status on a configured project" \
   || bad "front door did not report status"
