@@ -1,6 +1,6 @@
 # Self-benchmarking — giving the loop an expectancy number
 
-**Status:** L1 + L2 implemented 2026-06-29 (BM-1..BM-4; 45 test suites green). BM-5/BM-6 (CI gate + knob search) remain P2.
+**Status:** Implemented 2026-06-29 — BM-1..BM-5, BM-7 (hardened coding fixture), BM-8 (intent-conformance benchmark, the primary one). 47 test suites green. Live conformance: 2/5 → **5/5** after the benchmark caught and we fixed real description gaps. Only BM-6 (automated knob search) remains.
 **Date:** 2026-06-29
 **Owner:** Guus
 **Builds on:** the loop-hardening + loop-quality-economics instruments (verify-gate, gate-integrity, budget/ledger, regression-gate, lane attempts, value-audit) — they already emit the raw signal; this turns it into a score.
@@ -60,7 +60,7 @@ Once there's a number, optimizing workbench is itself a loop: **change one knob 
 - [x] **BM-4 — Live benchmark runner:** extend `test/e2e/run.sh` to run the plugin against the fixture, score vs oracles, K seeds, mean±spread → an expectancy report.
 
 **P2**
-- [ ] **BM-5 — Expectancy gate for workbench's own CI:** block a workbench change that drops L1 expectancy; run L2 on cadence.
+- [x] **BM-5 — Expectancy gate for workbench's own CI:** block a workbench change that drops L1 expectancy; run L2 on cadence.
 - [ ] **BM-6 — Knob search:** semi-automated dial/threshold sweep that proposes the config maximizing expectancy.
 
 ## 6b. The benchmark's true target — description conformance, not model skill (added 2026-06-29)
