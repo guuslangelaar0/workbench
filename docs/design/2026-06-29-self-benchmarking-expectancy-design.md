@@ -63,6 +63,9 @@ Once there's a number, optimizing workbench is itself a loop: **change one knob 
 - [x] **BM-5 — Expectancy gate for workbench's own CI:** block a workbench change that drops L1 expectancy; run L2 on cadence.
 - [x] **BM-6 — Knob search:** `scripts/knob-search.sh` sweeps candidate overlay dirs (alternative descriptions / CLAUDE.md routing / dial presets) against the conformance **train** set, ranks them, and proposes the strict winner (recommend-only — prints the apply command, never mutates the plugin). A train winner is validated on the reserved **holdout** set; one that wins on train but drops on holdout is rejected as overfit (§5.4). Ties keep the baseline. Offline-tested via stubbed per-candidate scores; live gated by `WB_BENCH=1`.
 
+**Follow-up**
+- [ ] **CB-6 — Replenish the holdout.** Cases `09` and `11` were fixed against (§6c), so they're tuned-against now. Author 2–3 new, genuinely-unseen holdout cases (and/or rotate the tags) and live-validate, so the held-out set is a clean anti-overfit signal again before BM-6 is run for real.
+
 ## 6b. The benchmark's true target — description conformance, not model skill (added 2026-06-29)
 
 A correction after the first live runs pinned at 100/100: a coding-difficulty fixture (BM-7) just measures *the model*. A strong model (the one users should run — **always Opus**) aces it honestly, so the number can't discriminate between workbench configs. That's the wrong thing to measure.
