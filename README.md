@@ -68,6 +68,7 @@ That's the whole rhythm: pick a level, capture work as tasks, let the loop drive
 | `/workbench` | Front door: set up if needed, else show status + next actions |
 | `/workbench:setup` | Configure this project's way of working (guided per-axis wizard) and scaffold it |
 | `/workbench:init` | Scaffold non-interactively (the wizard's config is preserved) |
+| `/workbench:uninstall` | Safely remove workbench-managed project files and side effects using `.workbench/manifest.json` |
 | `/workbench:level` | Show the level + dials, or move `up` / `down` / to a named level |
 | `/workbench:loop` | Run the autonomous teamlead loop (pick → dispatch → verify-gate → never stop) |
 | `/workbench:task "<title>"` | Create a task (allocates the next ID, renders the canonical format) |
@@ -83,6 +84,7 @@ That's the whole rhythm: pick a level, capture work as tasks, let the loop drive
 | `/workbench:upgrade` | Reconcile this project's workbench files to the current plugin version (preserves your edits) |
 | `/workbench:doctor` | Health-check: drift, stale state, in-review cap |
 | `/workbench:remote` | Operate the project from your phone over Telegram, with a catastrophic-command guard |
+| `/workbench:self-test` | Run plugin-source validation: package JSON, shell syntax, publishability, and optionally the full shell suite |
 
 → Full reference: **[docs/commands.md](docs/commands.md)**.
 
@@ -176,7 +178,7 @@ workbench/
 ├── skills/             the operating disciplines (levels, orchestration, continuity, architecture, …)
 ├── agents/             engineer + verifier subagents
 ├── hooks/              SessionStart / PreCompact / PostToolUse / PreToolUse / Notification
-├── scripts/            the CLI: init, task-new, task-move, mc, levels, loop-policy, graduate, drift, arch-drift
+├── scripts/            the CLI: init, task-new, task-move, mc, levels, loop-policy, graduate, drift, upgrade, uninstall, doctor, self-test
 ├── templates/          what gets scaffolded into a project (minimal | full profiles)
 ├── test/               all.sh (offline suites) + e2e/ (live-plugin)
 └── docs/               getting-started · levels · concepts · commands · configuration

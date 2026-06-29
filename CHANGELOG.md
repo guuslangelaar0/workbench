@@ -6,6 +6,14 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Install ledger v2 + lifecycle commands** (standalone hardening port). The scaffold now writes a **v2 manifest** (`.workbench/manifest.json`) that records, per file, its `mode` (managed/merge/once), `action`, whether it was `preexisting`, and both its rendered and source-template hashes — plus a `side_effects` block (the `.gitignore` runtime-state line, the pre-commit hook, created dirs, runtime dirs). `init.sh` is now greenfield-only (it won't clobber an existing ledger) and stays pure bash/awk. On top of the ledger:
+  - **`/workbench:uninstall`** (`scripts/uninstall.sh`) — a manifest-driven project uninstall. Defaults to a dry-run; on `--apply` it removes only **unchanged, workbench-owned `managed`** files and the recorded side-effect blocks, and **preserves** `merge`/`once`/pre-existing/**edited**/data files. (Verified live: an edited managed file is detected and kept.)
+  - **`/workbench:self-test`** (`scripts/self-test.sh`) — a plugin-source check: package/marketplace/hook JSON validity, `validate-plugin.sh` publishability, shell-syntax across every script, and the full offline suite (`--skip-suite` to skip).
+  - **`scripts/upgrade.sh`** — a deterministic upgrade classifier (`ok` / `edited` / `missing` / `preexisting` / `template-changed`) that `/workbench:upgrade` and `/workbench:doctor` run before acting.
+  - **`scripts/doctor.sh`** — `/workbench:doctor` now backs onto one deterministic health script (config/manifest JSON validity, drift inventory, hooks, lanes, dependencies, task counts vs the in-review cap, session-state freshness, charter).
+  - Manifest **schema v2** (`templates/schemas/manifest.schema.json`), expanded `upgrade`/manifest tests, new `uninstall`/`doctor`/`self-test` suites, and three new live e2e scenarios covering the commands. The manifest-parsing scripts now fail cleanly with a clear message when `python3` is absent (matching `drift.sh`), rather than aborting mid-run.
+
 ### Fixed
 - **Two description gaps the held-out conformance set caught** (the optimize-loop working as designed). The first full live run of the widened set scored 9/11 — and **both misses were holdout cases** (the Goodhart guard catching what the train-tuned descriptions didn't generalize): at the in-review cap, "grab the next feature and build it" opened new work instead of draining the queue; and "plan a big multi-part effort" at solo produced a prose plan instead of tracked backlog tasks. Both fixed with intent-routing rows in the scaffolded `CLAUDE.md` — a **cap-check-before-pulling-new-work** row, and a **level-aware decomposition** row (epic at fleet, flat backlog tasks at lighter levels). Re-validated live → 11/11. (Per the holdout-rotation rule, those two cases are now "seen" and the holdout should be replenished before it's trusted as a fresh anti-overfit signal again — see design §6c.)
 

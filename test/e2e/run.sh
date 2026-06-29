@@ -151,6 +151,37 @@ printf '%s' "$out" | grep -qiE 'abstraction|declared|god.?node|named in|drift|re
   || bad "drift did not surface the comparison (model output: $(printf '%s' "$out" | tail -3 | tr '\n' ' '))"
 rm -rf "$D7"
 
+# ---- scenario 8: /workbench:doctor reports project health -------------------
+note "8) /workbench:doctor reports project health"
+D8="$(scaffold "E2E Eight" crew)"
+out="$(cd "$D8" && drive "$D8" 'Run /workbench:doctor and show me the health report it prints.')"
+printf '%s' "$out" | grep -qiE 'doctor|manifest|drift|hooks|tasks:' \
+  && ok "doctor surfaces the health report" \
+  || bad "doctor did not surface health report (model output: $(printf '%s' "$out" | tail -3 | tr '\n' ' '))"
+rm -rf "$D8"
+
+# ---- scenario 9: /workbench:uninstall dry-run previews, mutates nothing -------
+note "9) /workbench:uninstall dry-run previews removals and preserves the project"
+D9="$(scaffold "E2E Nine" crew)"
+out="$(cd "$D9" && drive "$D9" 'Run /workbench:uninstall as a dry-run and show me what it would remove and preserve. Do NOT apply anything.')"
+{ [ -f "$D9/CLAUDE.md" ] && [ -f "$D9/.workbench/manifest.json" ] && [ -f "$D9/scripts/coord/lib.sh" ]; } \
+  && ok "dry-run left the project intact" \
+  || bad "dry-run mutated the project"
+printf '%s' "$out" | grep -qiE 'preserve|would remove|remove:|coord' \
+  && ok "uninstall preview lists removals/preserves" \
+  || bad "uninstall preview missing (model output: $(printf '%s' "$out" | tail -3 | tr '\n' ' '))"
+rm -rf "$D9"
+
+# ---- scenario 10: /workbench:self-test runs the plugin-source self-test -------
+# --skip-suite keeps it within the per-scenario timeout (the full suite runs in all.sh).
+note "10) /workbench:self-test runs the plugin-source self-test"
+D10="$(scaffold "E2E Ten" solo)"
+out="$(cd "$D10" && drive "$D10" 'Run /workbench:self-test with the --skip-suite flag and tell me whether the checks passed.')"
+printf '%s' "$out" | grep -qiE 'self-test|ok json|ok shell|ok plugin|passed' \
+  && ok "self-test reports its check results" \
+  || bad "self-test did not report (model output: $(printf '%s' "$out" | tail -3 | tr '\n' ' '))"
+rm -rf "$D10"
+
 # NOTE — known coverage gap: SessionStart / PreCompact hooks do NOT fire (or their
 # injected context is not surfaced) under `claude -p`, so this harness cannot assert
 # hook behavior. Hooks are covered structurally by test/hooks.test.sh and behaviorally

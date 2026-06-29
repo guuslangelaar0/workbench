@@ -43,6 +43,7 @@ TMPL_CODEX="$PLUGIN_ROOT/templates/codex"
 # against current templates. PRESERVED accumulates the relpaths we left alone.
 PRESERVED=""
 note_preserved() { PRESERVED="${PRESERVED:+$PRESERVED }$1"; }
+was_preserved() { case " $PRESERVED " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 render_new() { # <tmpl> <dest> <relpath> [tokens...]
   local tmpl="$1" dest="$2" rel="$3"; shift 3
   if [ -e "$dest" ]; then note_preserved "$rel"; else il_render "$tmpl" "$dest" "$@"; fi
@@ -75,8 +76,10 @@ if [ "$PROFILE" = full ]; then
   chmod +x "$TARGET/scripts/coord/wb-coord" 2>/dev/null || true
   # coordination runtime state (heartbeats, locks) must never be committed (idempotent)
   GI="$TARGET/.gitignore"
+  GITIGNORE_ACTION="already-present"
   if ! { [ -f "$GI" ] && grep -qxF '/.claude/locks/' "$GI"; }; then
     printf '\n# workbench coordination runtime state (heartbeats, locks) — never commit\n/.claude/locks/\n' >> "$GI"
+    GITIGNORE_ACTION="appended"
   fi
   render_new "$TMPL_FULL/SESSION_STATE.md.tmpl" "$TARGET/.claude/SESSION_STATE.md" ".claude/SESSION_STATE.md" "PROJECT_NAME=$NAME"
   # durable loop charter — the stable north star, re-injected at SessionStart + kept across compaction
@@ -114,8 +117,8 @@ fi
 # 4. .workbench/config.json
 mkdir -p "$TARGET/.workbench"
 CFG="$TARGET/.workbench/config.json"
+NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 if [ ! -f "$CFG" ]; then
-  NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   cat > "$CFG" <<JSON
 {
   "workbench": { "version": "$VERSION", "initialized_at": "$NOW", "level": "$LEVEL" },
@@ -174,36 +177,84 @@ elif [ "$LEVEL_EXPLICIT" = 1 ]; then
   ' "$CFG" > "$CFG.tmp" && mv "$CFG.tmp" "$CFG"
 fi
 
-# 5. .workbench/manifest.json — record managed files with hashes + modes (jq-free accumulator)
-MANIFEST_ENTRIES=""
-add_manifest() { # <path> <template> <mode>
-  local h; h="sha256:$(il_hash "$TARGET/$1")"
-  local rec="{ \"path\": \"$1\", \"template\": \"$2\", \"mode\": \"$3\", \"rendered_hash\": \"$h\", \"from_version\": \"$VERSION\" }"
-  MANIFEST_ENTRIES="${MANIFEST_ENTRIES:+$MANIFEST_ENTRIES,}$rec"
-}
-add_manifest "CLAUDE.md" "$( [ "$PROFILE" = full ] && echo full/CLAUDE.md.tmpl || echo minimal/CLAUDE.md.tmpl )" "merge"
-add_manifest ".claude/tasks/README.md" "minimal/tasks/README.md" "merge"
-if [ "$PROFILE" = full ]; then
-  add_manifest ".claude/SOUL.md" "full/SOUL.md.tmpl" "merge"
-  add_manifest "AGENTS.md" "full/AGENTS.md.tmpl" "merge"
-  for s in lib.sh wb-coord with-lock.sh precommit-guard.sh bb-worktree.sh install-hooks.sh; do
-    add_manifest "scripts/coord/$s" "coord/$s" "managed"
+# 5. .workbench/manifest.json — install ledger with hashes, ownership, and side effects.
+# init is greenfield-only: if a manifest already exists, leave it as the source of truth.
+if [ ! -f "$TARGET/.workbench/manifest.json" ]; then
+  MANIFEST_ENTRIES=""
+  json_hash_or_null() { [ -f "$1" ] && printf '"sha256:%s"' "$(il_hash "$1")" || printf 'null'; }
+  add_manifest() { # <path> <template> <mode>
+    local path="$1" template="$2" mode="$3"
+    local file="$TARGET/$path" tmpl="$PLUGIN_ROOT/templates/$template"
+    [ -f "$file" ] || return 0
+    local rendered_hash template_hash action preexisting previous_hash
+    rendered_hash="sha256:$(il_hash "$file")"
+    template_hash="$(json_hash_or_null "$tmpl")"
+    if was_preserved "$path"; then
+      action="preserved"; preexisting=true; previous_hash="\"$rendered_hash\""
+    else
+      action="created"; preexisting=false; previous_hash=null
+    fi
+    local rec="{ \"path\": \"$path\", \"template\": \"$template\", \"mode\": \"$mode\", \"action\": \"$action\", \"preexisting\": $preexisting, \"previous_hash\": $previous_hash, \"rendered_hash\": \"$rendered_hash\", \"template_hash\": $template_hash, \"from_version\": \"$VERSION\" }"
+    MANIFEST_ENTRIES="${MANIFEST_ENTRIES:+$MANIFEST_ENTRIES,}$rec"
+  }
+  add_manifest "CLAUDE.md" "$( [ "$PROFILE" = full ] && echo full/CLAUDE.md.tmpl || echo minimal/CLAUDE.md.tmpl )" "merge"
+  add_manifest ".claude/tasks/README.md" "minimal/tasks/README.md" "merge"
+  if [ "$PROFILE" = full ]; then
+    add_manifest ".claude/SOUL.md" "full/SOUL.md.tmpl" "merge"
+    add_manifest "AGENTS.md" "full/AGENTS.md.tmpl" "merge"
+    for s in lib.sh wb-coord with-lock.sh precommit-guard.sh bb-worktree.sh install-hooks.sh; do
+      add_manifest "scripts/coord/$s" "coord/$s" "managed"
+    done
+    add_manifest ".claude/SESSION_STATE.md" "full/SESSION_STATE.md.tmpl" "once"
+    add_manifest ".workbench/loop-charter.md" "full/loop-charter.md.tmpl" "once"
+    add_manifest ".claude/architecture/context.md" "full/architecture/context.md.tmpl" "merge"
+    add_manifest ".claude/architecture/containers.md" "full/architecture/containers.md.tmpl" "merge"
+    add_manifest ".claude/architecture/components.md" "full/architecture/components.md.tmpl" "merge"
+  fi
+  add_manifest ".claude/tasks/_next-id" "minimal/tasks/_next-id" "once"
+  # codex bridge manifest entries (only when codex was rendered above)
+  if [ "$PROFILE" = full ] && [ -n "$CODEX" ] && [ "$CODEX" != off ]; then
+    add_manifest ".claude/CODEX_COORDINATION.md" "codex/CODEX_COORDINATION.md.tmpl" "merge"
+    add_manifest ".claude/codex-teamlead-prompt.md" "codex/codex-teamlead-prompt.md.tmpl" "managed"
+  fi
+
+  CREATED_DIRS='".workbench"'
+  for d in $(wb_level_lifecycle "$LEVEL"); do
+    CREATED_DIRS="$CREATED_DIRS, \".claude/tasks/$d\""
   done
-  [ -f "$TARGET/.claude/SESSION_STATE.md" ] && add_manifest ".claude/SESSION_STATE.md" "full/SESSION_STATE.md.tmpl" "once"
-  [ -f "$TARGET/.workbench/loop-charter.md" ] && add_manifest ".workbench/loop-charter.md" "full/loop-charter.md.tmpl" "once"
-fi
-add_manifest ".claude/tasks/_next-id" "minimal/tasks/_next-id" "once"
-# codex bridge manifest entries (only when codex was rendered above)
-if [ "$PROFILE" = full ] && [ -n "$CODEX" ] && [ "$CODEX" != off ]; then
-  add_manifest ".claude/CODEX_COORDINATION.md" "codex/CODEX_COORDINATION.md.tmpl" "merge"
-  add_manifest ".claude/codex-teamlead-prompt.md" "codex/codex-teamlead-prompt.md.tmpl" "managed"
-fi
-cat > "$TARGET/.workbench/manifest.json" <<JSON
+  [ -d "$TARGET/.claude/epics" ] && CREATED_DIRS="$CREATED_DIRS, \".claude/epics\""
+  if [ "$PROFILE" = full ]; then
+    CREATED_DIRS="$CREATED_DIRS, \".claude\", \"scripts/coord\""
+    [ -d "$TARGET/.claude/architecture" ] && CREATED_DIRS="$CREATED_DIRS, \".claude/architecture\""
+  fi
+  GITIGNORE_BLOCKS=""
+  GIT_HOOKS=""
+  if [ "$PROFILE" = full ]; then
+    GITIGNORE_BLOCKS="{ \"path\": \".gitignore\", \"marker\": \"workbench coordination runtime state\", \"lines\": [\"/.claude/locks/\"], \"action\": \"${GITIGNORE_ACTION:-already-present}\" }"
+    if [ -d "$TARGET/.git" ]; then
+      GIT_HOOKS="{ \"type\": \"pre-commit\", \"path\": \".git/hooks/pre-commit\", \"marker\": \"wb-coord commit guard (B)\", \"action\": \"installed\" }"
+    fi
+  fi
+  cat > "$TARGET/.workbench/manifest.json" <<JSON
 {
+  "schema_version": 2,
   "plugin_version": "$VERSION",
-  "files": [ $MANIFEST_ENTRIES ]
+  "plugin": {
+    "name": "workbench",
+    "version": "$VERSION",
+    "source": "workbench@workbench",
+    "installed_at": "$NOW"
+  },
+  "files": [ $MANIFEST_ENTRIES ],
+  "side_effects": {
+    "gitignore_blocks": [ $GITIGNORE_BLOCKS ],
+    "git_hooks": [ $GIT_HOOKS ],
+    "created_dirs": [ $CREATED_DIRS ],
+    "runtime_dirs": [ ".claude/locks", ".workbench/checkpoints", ".workbench/lanes" ]
+  }
 }
 JSON
+fi
 
 # 6. install the git pre-commit guard (full profile, if target is a git repo)
 if [ "$PROFILE" = full ] && [ -d "$TARGET/.git" ]; then

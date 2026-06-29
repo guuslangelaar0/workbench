@@ -88,17 +88,28 @@ mkdir -p ~/wb-smoke && cd ~/wb-smoke && git init && claude
 
 Clean up:
 
+To remove scaffolded workbench files from the scratch project, run the project-level uninstaller inside that scratch Claude session:
+
+```text
+/workbench:uninstall
+```
+
+It defaults to a dry-run. Apply only after reviewing the plan. It uses `.workbench/manifest.json` and preserves user data, `merge` files, `once` files, pre-existing files, and edited files by default.
+
+To remove the Claude Code plugin registration itself, use the plugin commands:
+
 ```text
 /plugin uninstall workbench@workbench
 /plugin marketplace remove workbench
 ```
 
-If skills or commands linger after a reinstall, clear the cache: `rm -rf ~/.claude/plugins/cache`.
+These two cleanups are separate: `/workbench:uninstall` affects files scaffolded into a project; `/plugin uninstall` removes the plugin from Claude Code. If skills or commands linger after a reinstall, clear the cache: `rm -rf ~/.claude/plugins/cache`.
 
 ### Running the tests
 
 ```sh
 bash test/all.sh                 # fast, offline — no API, no cost
+bash scripts/self-test.sh        # package JSON + shell syntax + publishability + all tests
 WB_E2E=1 bash test/e2e/run.sh    # live — loads the real plugin into a headless session (needs auth, costs tokens)
 ```
 

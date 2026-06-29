@@ -4,17 +4,9 @@ allowed-tools: ["Bash", "Read", "Glob", "Grep"]
 argument-hint: ""
 ---
 
-Report this project's workbench health. Run the drift classifier and summarize:
+Report this project's workbench health from deterministic script output:
 
-!`bash ${CLAUDE_PLUGIN_ROOT}/scripts/drift.sh "$CLAUDE_PROJECT_DIR"`
-
-Also report loop health — list lanes and flag phantoms:
-
-!`bash ${CLAUDE_PLUGIN_ROOT}/scripts/lane.sh list --target "$CLAUDE_PROJECT_DIR" 2>/dev/null; bash ${CLAUDE_PLUGIN_ROOT}/scripts/lane.sh reap --target "$CLAUDE_PROJECT_DIR" 2>/dev/null`
-
-And the dependency graph — blocked tasks and any cycle:
-
-!`bash ${CLAUDE_PLUGIN_ROOT}/scripts/deps.sh blocked --target "$CLAUDE_PROJECT_DIR" 2>/dev/null; bash ${CLAUDE_PLUGIN_ROOT}/scripts/deps.sh cycles --target "$CLAUDE_PROJECT_DIR" 2>/dev/null`
+!`bash ${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh --target "$CLAUDE_PROJECT_DIR"`
 
 Then add, from your own inspection:
 - **Dependency cycle:** if `deps.sh cycles` reports one, two tasks block each other and neither can ever be picked — break the cycle by editing a `**Blocked-by:**` field.

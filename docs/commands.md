@@ -17,6 +17,9 @@ The guided, per-axis setup wizard. Walks each configuration choice as a card wit
 ### `/workbench:init`
 Non-interactive scaffold. Renders templates + manifest into the project. Preserves an existing `.workbench/config.json` (the wizard owns it). Useful for re-scaffolding or scripted setup. Accepts `--name`, `--level`, `--profile minimal|full`, `--target <dir>`.
 
+### `/workbench:uninstall`
+Project-level uninstall. Reads `.workbench/manifest.json`, dry-runs by default, and removes only unchanged workbench-owned `managed` files plus recorded side-effect blocks such as `.gitignore` and pre-commit hook snippets. It preserves `merge`, `once`, pre-existing, edited, and data files unless you explicitly apply a more destructive mode. This is separate from `/plugin uninstall workbench@workbench`, which only removes the Claude plugin from Claude Code.
+
 ---
 
 ## The maturity ladder
@@ -79,6 +82,9 @@ Reconcile this project's scaffolded files to the current plugin version: regener
 ### `/workbench:doctor`
 Health-check: validate the config against the schema, report drift between the manifest and the files on disk, flag stale state and an over-cap in-review queue.
 
+### `/workbench:self-test`
+Plugin-source self-test for workbench contributors. Validates plugin JSON, marketplace JSON, shell syntax, publishability via `scripts/validate-plugin.sh`, and the full offline shell suite unless called with `--skip-suite`.
+
 ---
 
 ## Remote
@@ -95,6 +101,7 @@ The commands are thin markdown wrappers over the scripts in `scripts/`, which yo
 | Script | Purpose |
 |--------|---------|
 | `init.sh` | Scaffold a project (level-aware) |
+| `uninstall.sh` | Project-level uninstall using the manifest ledger |
 | `task-new.sh` | Create a task file + allocate ID |
 | `task-move.sh` | Move a task between stages (`git mv` + status rewrite) |
 | `mc.sh` | Render the Mission Control dashboard |
@@ -103,4 +110,7 @@ The commands are thin markdown wrappers over the scripts in `scripts/`, which yo
 | `detect-level.sh` | Recommend a *starting* level for a project being adopted, from git signals (recommend-only) |
 | `graduate.sh` | Detect when a *configured* project has outgrown its level (recommend-only) |
 | `drift.sh` | Classify scaffolded files as ok / edited / missing |
+| `upgrade.sh` | Deterministic upgrade classifier (`ok`, `edited`, `missing`, `preexisting`, `template-changed`) |
+| `doctor.sh` | Deterministic health report for scaffolded projects |
+| `self-test.sh` | Contributor self-test for plugin source validation |
 | `arch-drift.sh` | Align authored C4 docs against graphify-extracted reality (architecture drift) |

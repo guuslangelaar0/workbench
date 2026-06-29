@@ -2,21 +2,46 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "workbench managed-file manifest",
   "type": "object",
-  "required": ["plugin_version", "files"],
+  "required": ["schema_version", "plugin_version", "plugin", "files", "side_effects"],
   "properties": {
+    "schema_version": { "type": "integer" },
     "plugin_version": { "type": "string" },
+    "plugin": {
+      "type": "object",
+      "required": ["name", "version", "source", "installed_at"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "source": { "type": "string" },
+        "installed_at": { "type": "string" }
+      }
+    },
     "files": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["path", "template", "mode", "rendered_hash", "from_version"],
+        "required": ["path", "template", "mode", "action", "preexisting", "previous_hash", "rendered_hash", "template_hash", "from_version"],
         "properties": {
           "path": { "type": "string" },
           "template": { "type": "string" },
           "mode": { "enum": ["managed", "merge", "once"] },
+          "action": { "enum": ["created", "preserved", "updated"] },
+          "preexisting": { "type": "boolean" },
+          "previous_hash": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" },
           "rendered_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+          "template_hash": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" },
           "from_version": { "type": "string" }
         }
+      }
+    },
+    "side_effects": {
+      "type": "object",
+      "required": ["gitignore_blocks", "git_hooks", "created_dirs", "runtime_dirs"],
+      "properties": {
+        "gitignore_blocks": { "type": "array" },
+        "git_hooks": { "type": "array" },
+        "created_dirs": { "type": "array", "items": { "type": "string" } },
+        "runtime_dirs": { "type": "array", "items": { "type": "string" } }
       }
     }
   }

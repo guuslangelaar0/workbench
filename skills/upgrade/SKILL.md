@@ -8,7 +8,7 @@ description: Use when running /workbench:upgrade — reconcile a project's workb
 Bring a project's generated files up to the current plugin version without clobbering the user's edits. This is intelligent migration — you read each file and decide, you don't blindly copy.
 
 ## Procedure
-1. Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/drift.sh" "${CLAUDE_PROJECT_DIR}"` to classify every managed file as `ok` / `edited` / `missing`, and note whether the plugin version advanced past the manifest's.
+1. Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/upgrade.sh" --target "${CLAUDE_PROJECT_DIR}" --dry-run` to classify every managed file as `ok` / `edited` / `missing` / `preexisting` / `template-changed`, and note whether the plugin version advanced past the manifest's.
 2. If the plugin version did NOT advance and nothing is `edited`/`missing`, report "already current" and stop.
 3. For each managed file, act by its **mode** (from the manifest) and status:
    - **`managed` + ok** (mechanism file, user hasn't touched it — coord scripts, etc.): regenerate from the current plugin template/source. Safe overwrite.
