@@ -1,0 +1,68 @@
+# Self-benchmarking — giving the loop an expectancy number
+
+**Status:** Proposal (design only — scope decision pending)
+**Date:** 2026-06-29
+**Owner:** Guus
+**Builds on:** the loop-hardening + loop-quality-economics instruments (verify-gate, gate-integrity, budget/ledger, regression-gate, lane attempts, value-audit) — they already emit the raw signal; this turns it into a score.
+
+---
+
+## 1. Why
+
+workbench now *measures* many things but answers no single question: **is the way of working good, and did a change to it make the loop better or worse?** Without a number, every tweak to a skill, a dial, or a gate is a vibe. We want a metric we can (a) compute automatically, (b) trust, and (c) optimize against — so improving workbench becomes a measurable loop instead of a guess.
+
+## 2. What "expectancy" means here
+
+Borrowed from trading. **Each task is a trade.** It either wins (a clean verified/shipped close that delivered value) or loses (bounced for rework, caught gaming, introduced a regression, or just burned tokens going nowhere). The classic formula:
+
+```
+Expectancy = (Win% × AvgWin) − (Loss% × AvgLoss)
+```
+
+mapped to the loop:
+
+- **Win** = a task reached `verified`/`shipped` *with evidence* AND survived the anti-gaming and regression gates. `AvgWin` = average value of a clean close (optionally weighted by the task's `**Estimate:**`/impact).
+- **Loss** = a task was bounced, abandoned, gamed, or caused a regression. `AvgLoss` = the wasted cost (tokens + a penalty).
+
+The headline number is **expectancy per 100k tokens** — expected net verified-value per unit of spend. That folds quality *and* economics into one figure: a loop that ships more, rubber-stamps less, regresses less, and burns fewer tokens scores higher. Map it to a 0–100 "loop health" band for at-a-glance, keep the raw expectancy for trend lines.
+
+**Crucial honesty rule:** a *gamed* win must **lower** expectancy, not raise it. The score counts a close as a win only if it survived `gate-integrity` + `regression-gate`; a flagged-then-advanced task is a loss. Otherwise we'd be scoring the loop's *claims*, not reality — the exact trap workbench exists to avoid.
+
+## 3. Two layers (cheap proxy → honest oracle)
+
+### L1 — Offline scorecard (free, always-on)
+The instruments emit *current state*; scoring needs *history*. So add one append-only **metrics event log** (`.workbench/metrics.tsv`) that the existing gates/hooks write a line to at each decision: `task_closed`, `task_bounced`, `gaming_flag`, `regression_red`, `restart`, `drift_due`, plus token deltas (already in `ledger.tsv`). Then `scripts/score.sh` / `/workbench:score` aggregates it into the component metrics + the expectancy number + a grade + a trend vs the last score. **Zero API cost**, runs anytime, scores the *real* project.
+- Measures **process health** — rework rate, gaming caught, regressions, cost/close, drift episodes, restart-intensity.
+- It's a **proxy**: it knows a task was *accepted clean*, not whether the feature is genuinely *good*. Honest about that.
+
+### L2 — Live golden-task benchmark (costs tokens, run on cadence)
+A seeded **benchmark project** with N tasks that have **machine-checkable oracles** (a known-correct test that must pass, a file that must exist, an output that must match). Run the *real plugin* headless against it — extending the existing `test/e2e/run.sh` harness (`claude -p --plugin-dir`) — let the loop work the tasks, then **score outcomes against the oracles**. This is execution-grounded (SWE-bench-style), so the win/loss labels are ground truth, not self-report → the **honest expectancy**.
+- Stochastic: one run is noisy. Run K seeds, report **mean ± spread**, not a point.
+- Costs API tokens per run → cadence/CI, not every commit.
+
+## 4. The optimization meta-loop
+
+Once there's a number, optimizing workbench is itself a loop: **change one knob → re-benchmark → keep iff expectancy ↑.** Knobs: a dial preset, a gate threshold, a prompt in a skill, a model tier, the cross-model setting. The number becomes a **regression gate for the way of working itself** — every PR to workbench runs L1 on a recorded run (free) and L2 on cadence (paid); a drop in expectancy blocks the change. Later this can be automated (grid/random search over dial configs), but the first win is just *having the gate*.
+
+## 5. Honesty caveats (read before trusting a number)
+1. **Self-measurement is gameable** — mitigated by counting only gate-survived closes as wins (§2).
+2. **Proxy ≠ quality** — L1 measures process; only L2's oracle measures correctness. Don't quote L1 as "the loop is good," quote it as "the process is healthy."
+3. **Variance** — LLM runs vary; a single L2 number is noise. Always K-seed and report spread.
+4. **Goodhart** — once we optimize against expectancy, it stops being a neutral measure. Keep the oracle set growing and partly held-out so we can't overfit the metric.
+
+## 6. Backlog
+**P0**
+- [ ] **BM-1 — Metrics event log:** append-only `.workbench/metrics.tsv`; the existing gates/hooks emit `task_closed|task_bounced|gaming_flag|regression_red|restart|drift_due` + token deltas. Tests.
+- [ ] **BM-2 — `/workbench:score` (offline scorecard):** `scripts/score.sh` aggregates the log + ledger into components + expectancy/100k + grade + trend. Tests.
+
+**P1**
+- [ ] **BM-3 — Golden benchmark project:** a seeded fixture (N tasks + machine-checkable oracles, mixed difficulty).
+- [ ] **BM-4 — Live benchmark runner:** extend `test/e2e/run.sh` to run the plugin against the fixture, score vs oracles, K seeds, mean±spread → an expectancy report.
+
+**P2**
+- [ ] **BM-5 — Expectancy gate for workbench's own CI:** block a workbench change that drops L1 expectancy; run L2 on cadence.
+- [ ] **BM-6 — Knob search:** semi-automated dial/threshold sweep that proposes the config maximizing expectancy.
+
+## 7. Non-goals
+- A perfect correctness oracle for arbitrary real projects (impossible — that's why L1 is a proxy and L2 uses *seeded* tasks).
+- Optimizing the number at the expense of the thing it proxies (see §5.4).
