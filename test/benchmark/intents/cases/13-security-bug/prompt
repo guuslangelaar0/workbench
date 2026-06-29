@@ -1,0 +1,1 @@
+I just realized our login endpoint writes users' plaintext passwords into the server logs.
