@@ -103,3 +103,12 @@ WB_E2E=1 bash test/e2e/run.sh    # live — loads the real plugin into a headles
 ```
 
 See [the test section of the README](../README.md#tests) for what each layer covers.
+
+### Measuring the way of working
+
+Workbench benchmarks itself — see [benchmarking.md](benchmarking.md). The short version:
+
+```sh
+scripts/bench.sh                 # free: structural gate + offline conformance
+WB_BENCH=1 scripts/bench.sh      # + live conformance (drives the real model; costs tokens)
+```
