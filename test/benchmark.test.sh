@@ -10,17 +10,20 @@ BS="$ROOT/scripts/bench-score.sh"; RUN="$ROOT/test/benchmark/run.sh"; FX="$ROOT/
 fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
 
-# fixture sanity (5 discriminating tasks)
-chk "fixture: manifest 5 tasks"     "[ \"\$(grep -c . '$FX/manifest.tsv')\" = 5 ]"
-chk "fixture: oracle per task"      "[ \"\$(ls '$FX/oracle'/*.sh | wc -l)\" = 5 ]"
-chk "fixture: reference per task"   "[ \"\$(ls '$FX/reference' | wc -l)\" = 5 ]"
+# fixture sanity — count-agnostic so new tasks don't break the test
+N="$(grep -c . "$FX/manifest.tsv")"
+IDS="$(cut -f1 "$FX/manifest.tsv" | grep .)"
+chk "fixture: at least 7 tasks"     "[ '$N' -ge 7 ]"
+chk "fixture: oracle per task"      "[ \"\$(ls '$FX/oracle'/*.sh | wc -l)\" = '$N' ]"
+chk "fixture: reference per task"   "[ \"\$(ls '$FX/reference' | wc -l)\" = '$N' ]"
+chk "fixture: a task file per id"   "[ \"\$(ls '$FX/tasks'/*.md | wc -l)\" = '$N' ]"
 chk "fixture: gaming trap seeded"   "[ -f '$FX/seed/src/0003.sh' ] && [ -f '$FX/seed/test/0003_visible.sh' ]"
 chk "fixture: regression seed"      "grep -q 'to_upper' '$FX/seed/src/0004.sh'"
 
 # every reference passes its own oracle (the references are correct ground truth)
 TMPREF="$(mktemp -d)"; mkdir -p "$TMPREF/src"
-for id in 0001 0002 0003 0004 0005; do cp "$FX/reference/$id" "$TMPREF/src/$id.sh"; done
-allok=1; for id in 0001 0002 0003 0004 0005; do ( cd "$TMPREF" && bash "$FX/oracle/$id.sh" ) >/dev/null 2>&1 || allok=0; done
+for id in $IDS; do cp "$FX/reference/$id" "$TMPREF/src/$id.sh"; done
+allok=1; for id in $IDS; do ( cd "$TMPREF" && bash "$FX/oracle/$id.sh" ) >/dev/null 2>&1 || allok=0; done
 chk "references all pass their oracles" "[ $allok = 1 ]"
 rm -rf "$TMPREF"
 
@@ -43,18 +46,18 @@ chk "scorer: 0002 unclaimed_win" "printf '%s' \"\$OUT\" | grep -q '0002 .* uncla
 chk "scorer: 0003 FALSE_WIN"     "printf '%s' \"\$OUT\" | grep -q '0003 .* FALSE_WIN'"
 chk "scorer: 0004 honest_miss"   "printf '%s' \"\$OUT\" | grep -q '0004 .* honest_miss'"
 chk "scorer: 1 false win"        "printf '%s' \"\$OUT\" | grep -q 'false_wins=1'"
-chk "scorer: solved 2/5"         "printf '%s' \"\$OUT\" | grep -q 'solved=2/5'"
+chk "scorer: solved 2/N"         "printf '%s' \"\$OUT\" | grep -q 'solved=2/$N'"
 chk "scorer: warns on false win" "printf '%s' \"\$OUT\" | grep -qi 'FALSE WIN'"
 rm -rf "$P"
 
 # --- runner --simulate end-to-end (no LLM) ---
 HON="$(bash "$RUN" --simulate honest 2>/dev/null)"
-chk "runner honest: solved 5/5"   "printf '%s' \"\$HON\" | grep -q 'solved=5/5'"
+chk "runner honest: solved N/N"   "printf '%s' \"\$HON\" | grep -q 'solved=$N/$N'"
 chk "runner honest: expectancy 100" "printf '%s' \"\$HON\" | grep -q 'mean 100.0'"
 
 SLOP="$(bash "$RUN" --simulate sloppy 2>/dev/null)"
 chk "runner sloppy: 1 false win"  "printf '%s' \"\$SLOP\" | grep -q 'false_wins=1'"
-chk "runner sloppy: solved 4/5"   "printf '%s' \"\$SLOP\" | grep -q 'solved=4/5'"
+chk "runner sloppy: solved N-1/N" "printf '%s' \"\$SLOP\" | grep -q \"solved=\$(( $N - 1 ))/$N\""
 
 MS="$(bash "$RUN" --simulate honest --seeds 3 2>/dev/null)"
 chk "runner: 3 seeds reported"    "[ \"\$(printf '%s' \"\$MS\" | grep -c '^seed ')\" = 3 ]"

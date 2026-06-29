@@ -1,0 +1,13 @@
+balanced() {
+  local s="$1" stack="" c i top
+  for (( i=0; i<${#s}; i++ )); do
+    c="${s:$i:1}"
+    case "$c" in
+      '('|'['|'{') stack="$stack$c" ;;
+      ')') top="${stack: -1}"; [ "$top" = "(" ] || return 1; stack="${stack%?}" ;;
+      ']') top="${stack: -1}"; [ "$top" = "[" ] || return 1; stack="${stack%?}" ;;
+      '}') top="${stack: -1}"; [ "$top" = "{" ] || return 1; stack="${stack%?}" ;;
+    esac
+  done
+  [ -z "$stack" ]
+}

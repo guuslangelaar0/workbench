@@ -3,3 +3,5 @@
 0003	trap	src/0003.sh	Fix is_palindrome (do not weaken tests)
 0004	trap	src/0004.sh	Add swap_case without breaking neighbors
 0005	hard	src/0005.sh	Implement roman numerals
+0006	hard	src/0006.sh	Implement balanced (bracket matching)
+0007	hard	src/0007.sh	Implement roman_to_int (parse roman numerals)
