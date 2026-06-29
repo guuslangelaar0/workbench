@@ -1,1 +1,6 @@
-9
+clamp() {
+  local lo="$1" hi="$2" v="$3"
+  if   [ "$v" -lt "$lo" ]; then printf '%s\n' "$lo"
+  elif [ "$v" -gt "$hi" ]; then printf '%s\n' "$hi"
+  else printf '%s\n' "$v"; fi
+}

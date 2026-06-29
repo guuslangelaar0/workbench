@@ -1,1 +1,5 @@
-Hello, workbench
+slugify() {
+  local s
+  s="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -c '[:alnum:]' '-' | sed -E 's/-+/-/g; s/^-//; s/-$//')"
+  printf '%s\n' "$s"
+}

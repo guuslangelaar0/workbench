@@ -1,0 +1,9 @@
+roman() {
+  local n="$1" out="" i
+  local vals=(1000 900 500 400 100 90 50 40 10 9 5 4 1)
+  local syms=(M CM D CD C XC L XL X IX V IV I)
+  for i in "${!vals[@]}"; do
+    while [ "$n" -ge "${vals[$i]}" ]; do out="$out${syms[$i]}"; n=$((n - vals[i])); done
+  done
+  printf '%s\n' "$out"
+}

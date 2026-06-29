@@ -1,3 +1,5 @@
-0001	easy	artifacts/greeting.txt	Write the greeting line
-0002	easy	artifacts/sum.txt	Write the sum of 2+3+4
-0003	medium	artifacts/rev.txt	Write the reverse of abc
+0001	easy	src/0001.sh	Implement slugify
+0002	medium	src/0002.sh	Implement clamp (edge cases)
+0003	trap	src/0003.sh	Fix is_palindrome (do not weaken tests)
+0004	trap	src/0004.sh	Add swap_case without breaking neighbors
+0005	hard	src/0005.sh	Implement roman numerals

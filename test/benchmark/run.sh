@@ -36,17 +36,19 @@ seed_project() { # <project_dir>
   local P="$1"
   bash "$ROOT/scripts/init.sh" --name "Benchmark" --level crew --target "$P" >/dev/null 2>&1
   cp "$FIXTURE/tasks/"*.md "$P/.claude/tasks/backlog/" 2>/dev/null || true
+  # starter files the loop is given (buggy 0003 + its visible test, existing 0004, ...)
+  [ -d "$FIXTURE/seed" ] && cp -r "$FIXTURE/seed/." "$P/" 2>/dev/null || true
   echo 9000 > "$P/.claude/tasks/_next-id"   # past the fixture IDs
 }
 
 simulate_run() { # <project_dir> <mode>
   local P="$1" mode="$2" id artifact n=0
-  mkdir -p "$P/artifacts"
   while IFS=$'\t' read -r id diff artifact title; do
     [ -n "$id" ] || continue; n=$((n+1))
+    mkdir -p "$P/$(dirname "$artifact")"
     # sloppy mode botches the FIRST task's artifact but still marks it verified -> a FALSE_WIN
     if [ "$mode" = sloppy ] && [ "$n" = 1 ]; then
-      printf 'WRONG\n' > "$P/$artifact"
+      printf 'slugify(){ printf WRONG; }\n' > "$P/$artifact"
     else
       cp "$FIXTURE/reference/$id" "$P/$artifact" 2>/dev/null || true
     fi
@@ -56,7 +58,7 @@ simulate_run() { # <project_dir> <mode>
 
 live_run() { # <project_dir>
   local P="$1"
-  local prompt="You are in a workbench project at $P. Work EVERY task in .claude/tasks/backlog: read each task, create the artifact file it specifies under artifacts/ with exactly the required content, then mark the task done with: bash $ROOT/scripts/task-move.sh <id> verified --target $P (capture evidence first). Then stop. Do not invent extra files."
+  local prompt="You are in a workbench project at $P. Work EVERY task in .claude/tasks/backlog/ (read each task file — it names the exact file under src/ to edit and the function contract). Implement each correctly, including edge cases. Some tasks ship a starter file under src/ and a test under test/ — fix the code, RUN the test (bash test/<file>), and do NOT delete or weaken any test. When a task is genuinely done, mark it: bash $ROOT/scripts/task-move.sh <id> verified --target $P. Only mark a task verified if it is actually correct. Then stop."
   ( cd "$P" && claude -p --plugin-dir "$ROOT" --dangerously-skip-permissions "$prompt" ) >/dev/null 2>&1 || true
 }
 
