@@ -6,6 +6,10 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-29
+
+The self-measurement + lifecycle release. Workbench now **benchmarks its own way of working** — an expectancy scorecard, a live intent→behavior conformance benchmark (the primary one), a coding-oracle layer, a knob-search optimizer, and a regression gate — and it gained a real **install/upgrade/uninstall lifecycle** backed by a v2 manifest ledger. See [docs/benchmarking.md](docs/benchmarking.md) and [docs/design/2026-06-29-self-benchmarking-expectancy-design.md](docs/design/2026-06-29-self-benchmarking-expectancy-design.md).
+
 ### Added
 - **Install ledger v2 + lifecycle commands** (standalone hardening port). The scaffold now writes a **v2 manifest** (`.workbench/manifest.json`) that records, per file, its `mode` (managed/merge/once), `action`, whether it was `preexisting`, and both its rendered and source-template hashes — plus a `side_effects` block (the `.gitignore` runtime-state line, the pre-commit hook, created dirs, runtime dirs). `init.sh` is now greenfield-only (it won't clobber an existing ledger) and stays pure bash/awk. On top of the ledger:
   - **`/workbench:uninstall`** (`scripts/uninstall.sh`) — a manifest-driven project uninstall. Defaults to a dry-run; on `--apply` it removes only **unchanged, workbench-owned `managed`** files and the recorded side-effect blocks, and **preserves** `merge`/`once`/pre-existing/**edited**/data files. (Verified live: an edited managed file is detected and kept.)
