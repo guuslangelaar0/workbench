@@ -66,13 +66,18 @@ lan_ip() {
 }
 
 metadata_url() {
-  local meta host port
+  local meta host port token
   meta="$TARGET/.workbench/mesh/server.json"
   [ -f "$meta" ] || return 1
   host="$(sed -n 's/.*"host"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$meta" | head -1)"
   port="$(sed -n 's/.*"port"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$meta" | head -1)"
   [ -n "$host" ] && [ -n "$port" ] || return 1
-  printf 'http://%s:%s\n' "$host" "$port"
+  token="$(sed -n 's/.*"local_token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$meta" | head -1)"
+  if [ -n "$token" ]; then
+    printf 'http://%s:%s?token=%s\n' "$host" "$port" "$token"
+  else
+    printf 'http://%s:%s\n' "$host" "$port"
+  fi
 }
 
 print_start_info() {

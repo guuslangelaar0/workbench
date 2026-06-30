@@ -70,6 +70,11 @@ struct WsQuery {
 }
 
 #[derive(Debug, Deserialize)]
+struct StaticQuery {
+    token: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct EventRequest {
     #[serde(rename = "type")]
     event_type: String,
@@ -160,19 +165,21 @@ pub fn read_server_metadata(project_root: &Path) -> Result<ServerMetadata> {
 async fn command_center(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<StaticQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
-    require_bearer(&state, &headers)?;
-    Ok((
-        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
-        INDEX_HTML,
-    ))
+    let html = match static_auth(&state, &headers, &query)? {
+        StaticAuth::Bearer => INDEX_HTML.to_string(),
+        StaticAuth::QueryToken(token) => tokenized_command_center_html(&token),
+    };
+    Ok(([(header::CONTENT_TYPE, "text/html; charset=utf-8")], html))
 }
 
 async fn command_center_js(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<StaticQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
-    require_bearer(&state, &headers)?;
+    static_auth(&state, &headers, &query)?;
     Ok((
         [(
             header::CONTENT_TYPE,
@@ -185,8 +192,9 @@ async fn command_center_js(
 async fn command_center_css(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<StaticQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
-    require_bearer(&state, &headers)?;
+    static_auth(&state, &headers, &query)?;
     Ok((
         [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
         STYLE_CSS,
@@ -342,6 +350,34 @@ fn bearer_role(state: &AppState, headers: &HeaderMap) -> Result<String, ApiError
     };
     require_token(state, token)?;
     Ok(state.local_role.clone())
+}
+
+enum StaticAuth {
+    Bearer,
+    QueryToken(String),
+}
+
+fn static_auth(
+    state: &AppState,
+    headers: &HeaderMap,
+    query: &StaticQuery,
+) -> Result<StaticAuth, ApiError> {
+    if let Some(token) = query.token.as_deref() {
+        if require_token(state, token).is_ok() {
+            return Ok(StaticAuth::QueryToken(token.to_string()));
+        }
+    }
+    require_bearer(state, headers)?;
+    Ok(StaticAuth::Bearer)
+}
+
+fn tokenized_command_center_html(token: &str) -> String {
+    INDEX_HTML
+        .replace(
+            "/assets/style.css",
+            &format!("/assets/style.css?token={token}"),
+        )
+        .replace("/assets/app.js", &format!("/assets/app.js?token={token}"))
 }
 
 fn state_json(state: &AppState) -> Result<Value> {

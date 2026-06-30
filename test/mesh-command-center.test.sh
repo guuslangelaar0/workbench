@@ -27,6 +27,11 @@ chk "html includes decisions view" "printf '%s' \"\$HTML\" | grep -q 'Decisions'
 chk "html includes invites view" "printf '%s' \"\$HTML\" | grep -q 'Invites'"
 chk "html includes audit view" "printf '%s' \"\$HTML\" | grep -q 'Audit'"
 
+HTML_QUERY="$(curl -fsS "http://127.0.0.1:$PORT/?token=$TOKEN")"
+chk "query token html names command center" "printf '%s' \"\$HTML_QUERY\" | grep -q 'Workbench Mesh'"
+chk "query token html links tokenized style" "printf '%s' \"\$HTML_QUERY\" | grep -q \"/assets/style.css?token=$TOKEN\""
+chk "query token html links tokenized app" "printf '%s' \"\$HTML_QUERY\" | grep -q \"/assets/app.js?token=$TOKEN\""
+
 CSS="$(curl -fsS "http://127.0.0.1:$PORT/assets/style.css" -H "Authorization: Bearer $TOKEN")"
 chk "style defines command rail" "printf '%s' \"\$CSS\" | grep -q 'event-rail'"
 
@@ -35,6 +40,12 @@ chk "app opens websocket" "printf '%s' \"\$JS\" | grep -q 'WebSocket'"
 chk "app posts events" "printf '%s' \"\$JS\" | grep -q '/api/events'"
 chk "app creates invites" "printf '%s' \"\$JS\" | grep -q '/api/invites'"
 chk "app supports availability" "printf '%s' \"\$JS\" | grep -q 'availability.set'"
+
+CSS_QUERY="$(curl -fsS "http://127.0.0.1:$PORT/assets/style.css?token=$TOKEN")"
+chk "query token style defines command rail" "printf '%s' \"\$CSS_QUERY\" | grep -q 'event-rail'"
+
+JS_QUERY="$(curl -fsS "http://127.0.0.1:$PORT/assets/app.js?token=$TOKEN")"
+chk "query token app opens websocket" "printf '%s' \"\$JS_QUERY\" | grep -q 'WebSocket'"
 
 UNAUTH_RC=0
 curl -fsS "http://127.0.0.1:$PORT/" >/tmp/mesh.ui-unauth.$$ 2>&1 || UNAUTH_RC=$?
