@@ -15,6 +15,8 @@ chk "bootstrap prints authenticated local user" "grep -q 'local credential ready
 chk "device key stored outside repo" "find '$HOME_TMP/mesh/devices' -type f -name '*.key' | grep -q ."
 chk "project credential stored outside repo" "find '$HOME_TMP/mesh/projects' -type f -name '*.cred' | grep -q ."
 chk "repo contains no secret key files" "! find '$TMP/.workbench' -name '*.key' -o -name '*.cred' | grep -q ."
+BOOTSTRAP_ROLE="$(find "$HOME_TMP/mesh/projects" -type f -name '*.cred' -print -quit | xargs python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["role"])' 2>/dev/null || true)"
+chk "bootstrap project credential role is owner" "[ '$BOOTSTRAP_ROLE' = owner ]"
 
 MODE="$(find "$HOME_TMP/mesh/devices" -type f -name '*.key' -print -quit | xargs stat -c '%a' 2>/dev/null || true)"
 if [ -n "$MODE" ]; then

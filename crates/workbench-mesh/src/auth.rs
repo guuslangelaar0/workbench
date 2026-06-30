@@ -78,7 +78,7 @@ pub fn bootstrap(project_root: &Path, home: Option<PathBuf>) -> Result<String> {
 
     let project_cred = ProjectCredential {
         project: project_id.clone(),
-        role: "lead".to_string(),
+        role: "owner".to_string(),
         token: project_token,
     };
     write_secret_file(
@@ -217,7 +217,9 @@ pub fn accept_invite(
     };
 
     write_secret_file(
-        &auth_paths.device_dir.join(format!("{}.key", sanitize_name(device))),
+        &auth_paths
+            .device_dir
+            .join(format!("{}.key", sanitize_name(device))),
         &random_secret(),
     )?;
     let project_cred = ProjectCredential {
@@ -274,7 +276,7 @@ pub fn check(project_root: &Path, home: Option<PathBuf>, token: &str) -> Result<
 
 pub fn validate_role(role: &str) -> Result<()> {
     match role {
-        "lead" | "worker" | "observer" => Ok(()),
+        "owner" | "operator" | "worker" | "observer" => Ok(()),
         _ => bail!("invalid role: {role}"),
     }
 }
@@ -418,24 +420,75 @@ fn write_secret_file(path: &Path, content: &str) -> Result<()> {
         .with_context(|| format!("write {}", path.display()))?;
     file.flush()
         .with_context(|| format!("flush {}", path.display()))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        file.set_permissions(fs::Permissions::from_mode(0o600))
+            .with_context(|| format!("set permissions on {}", path.display()))?;
+    }
+
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{sanitize_name, validate_role};
+    use super::{bootstrap, sanitize_name, validate_role, ProjectCredential};
+    use std::fs;
 
     #[test]
     fn validates_known_roles() {
-        validate_role("lead").unwrap();
+        validate_role("owner").unwrap();
+        validate_role("operator").unwrap();
         validate_role("worker").unwrap();
         validate_role("observer").unwrap();
     }
 
     #[test]
     fn rejects_unknown_roles() {
+        let err = validate_role("lead").unwrap_err();
+        assert_eq!(err.to_string(), "invalid role: lead");
+
         let err = validate_role("admin").unwrap_err();
         assert_eq!(err.to_string(), "invalid role: admin");
+    }
+
+    #[test]
+    fn bootstrap_project_credential_uses_owner_role() {
+        let project = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        fs::create_dir_all(project.path().join(".workbench")).unwrap();
+        fs::write(
+            project.path().join(".workbench/config.json"),
+            r#"{"project":{"name":"Mesh Auth"}}"#,
+        )
+        .unwrap();
+
+        bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+
+        let cred_path = home.path().join("mesh/projects/mesh-auth.cred");
+        let credential: ProjectCredential =
+            serde_json::from_slice(&fs::read(cred_path).unwrap()).unwrap();
+        assert_eq!(credential.role, "owner");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn secret_rewrite_narrows_existing_file_permissions_to_600() {
+        use super::write_secret_file;
+        use std::os::unix::fs::PermissionsExt;
+
+        let home = tempfile::tempdir().unwrap();
+        let secret_path = home.path().join("mesh/devices/device.key");
+        fs::create_dir_all(secret_path.parent().unwrap()).unwrap();
+        fs::write(&secret_path, "old-secret").unwrap();
+        fs::set_permissions(&secret_path, fs::Permissions::from_mode(0o644)).unwrap();
+
+        write_secret_file(&secret_path, "new-secret").unwrap();
+
+        let mode = fs::metadata(&secret_path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
     }
 
     #[test]
