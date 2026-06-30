@@ -41,6 +41,12 @@ Run the autonomous teamlead loop: pick the highest-impact unblocked task → dis
 ### `/workbench:task "<title>"`
 Create a task. Allocates the next ID from `_next-id`, renders the canonical task format into `backlog/`. Optional fields: track, repos, estimate.
 
+### `/workbench:lead [status | set "<purpose>" | adopt | clear]`
+Manage this session's durable lead purpose. A lead purpose records what this session is for — one active task, one track, or an intentional backlog-scouting pass — under `.workbench/leads/`. `status` shows the current purpose and the latest open purpose if this session has none. `set` pins a new purpose. `adopt` copies the latest open purpose into this session after a resume or new tab. `clear` closes the purpose when the task/track is no longer owned.
+
+### `/workbench:park "<title>" [--type bug|feature|follow-up]`
+Park unrelated work as a real backlog task with origin metadata: session, active task, current purpose, and branch. Use it when a lead working one feature finds a different bug, feature idea, cleanup, or follow-up. If code already exists for the tangent, capture the relevant context or diff in the parked task; only revert code after explicit confirmation.
+
 ### `/workbench:epic "<title>" [--theme <t>]` / `/workbench:epic list`
 Create or list **epics** — groups of related tasks under one user-facing outcome (`.claude/epics/NNNN-title.md`). Available at levels whose `decomposition` dial is grouped (pair = light-epics, crew = epics, fleet = themes-epics); `solo` uses flat tasks and has no epics. Epics draw from the shared `.claude/tasks/_next-id` counter, so epic and task IDs never collide. Link a task with `/workbench:task "<t>" --epic <id>`; the epic's `done/total` rollup shows in `/workbench:mc`. See [concepts.md](concepts.md#task-lifecycle).
 
@@ -58,7 +64,7 @@ Mission Control — a text dashboard of tasks by stage, the in-review cap, decis
 ## Multi-session & greenfield
 
 ### `/workbench:teamlead <topic>`
-Designate this session a topic lead. Scopes task-picking to one `**Track:**` and locks its tasks via the coordination tooling so multiple leads can run in parallel without colliding.
+Designate this session a topic lead. Scopes task-picking to one `**Track:**`, records the lead purpose, and locks its tasks via the coordination tooling so multiple leads can run in parallel without colliding.
 
 ### `/workbench:inception`
 Scope-controlled product genesis for a greenfield project: turns an idea into a v1 spec and a seeded backlog, refusing to proceed until you name what's explicitly **out** of v1.

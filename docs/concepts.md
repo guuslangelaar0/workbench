@@ -56,6 +56,14 @@ Principles the loop never violates:
 
 ---
 
+## Lead purpose and parking
+
+A workbench lead session has a durable purpose under `.workbench/leads/`: one active task, one track, or an intentional backlog-scouting pass. The `SessionStart` and `UserPromptSubmit` hooks re-inject that purpose, and Claude Code can show it as the session title, so a lead is visible as "the checkout retry lead" rather than an anonymous tab.
+
+Purpose changes the default behavior when a tangent appears. If a lead working one feature finds a different bug, feature idea, cleanup, or follow-up, it parks that work as a real backlog task via `/workbench:park` instead of widening the active branch. The parked task carries origin metadata — session, active task, purpose, and branch — and can include copied context or a diff if code already exists. The loop can later pick that task normally, with the same verification contract as any other backlog work.
+
+---
+
 ## Continuity
 
 Coding agents forget. Workbench makes forgetting safe with three hooks and a handoff file.

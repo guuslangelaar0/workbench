@@ -14,6 +14,8 @@ Dispatch a task to an engineer. Follow the `orchestration` skill — **you are t
    Then move it to in-development (you own lifecycle transitions):
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-move.sh" <id> in-development --target "${CLAUDE_PROJECT_DIR}"`
    and append an owner line to its `## Notes` (e.g. `<UTC time> — claimed by lead:<topic> (session <sid>)`).
+   Set this session's durable lead purpose to the dispatched task:
+   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lead.sh" set --target "${CLAUDE_PROJECT_DIR}" --session-id "<session-id>" --mode task --active-task "<id>" --track "<task Track field>" --purpose "<task title>"`
 4. Resolve the engineer's model via the `models` skill (read `way_of_working.models`). Spawn the engineer with the Task tool, `subagent_type: engineer`, passing the model and a prompt that includes: the task file path, the target repo/stack (from the lane hint or `config.project.repos`), and the instruction to implement, run the declared verification, commit (scoped pathspec, no Co-Authored-By), note progress, and report back.
 5. When the engineer returns, **gate** it (review diff, build, run verification) per the `orchestration` skill — do not advance the task on the engineer's word alone. Then `/workbench:verify <id>`.
 

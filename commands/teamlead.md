@@ -8,6 +8,7 @@ Make THIS session the lead for one topic/track, so several teamleads can run in 
 
 1. Parse the `<topic>` from `$ARGUMENTS` (e.g. `storage`, `mobile`, `web`). If none was given, ask which track this session should lead.
 2. Announce ownership by setting your coord label, then look at who else is live:
+   - `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lead.sh" set --target "${CLAUDE_PROJECT_DIR}" --session-id "<session-id>" --mode track --track "<topic>" --purpose "lead <topic> track"`
    - `bash "${CLAUDE_PROJECT_DIR}/scripts/coord/wb-coord" ping "lead:<topic>"`
    - `bash "${CLAUDE_PROJECT_DIR}/scripts/coord/wb-coord" who`
    If another live session already leads this `<topic>`, stop and pick a different track (or coordinate) — never double-lead a track. (If `scripts/coord/wb-coord` doesn't exist, this project is minimal-profile and single-session; just proceed as the sole lead.)

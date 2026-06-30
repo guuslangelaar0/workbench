@@ -53,6 +53,8 @@ On an unconfigured project it runs a short guided setup; on a configured one it 
 ```text
 /workbench:workbench            # front door — guided setup on a new project, status on a configured one
 /workbench:task "ship login"    # create your first task (auto-allocated ID, canonical format)
+/workbench:lead status          # show or set this lead session's current purpose
+/workbench:park "bug title"     # park unrelated work as a real backlog task
 /workbench:mc                   # Mission Control: a dashboard of tasks, the in-review cap, build, prod
 /workbench:loop                 # run the autonomous teamlead loop: pick → dispatch → verify-gate → repeat
 ```
@@ -72,6 +74,8 @@ That's the whole rhythm: pick a level, capture work as tasks, let the loop drive
 | `/workbench:level` | Show the level + dials, or move `up` / `down` / to a named level |
 | `/workbench:loop` | Run the autonomous teamlead loop (pick → dispatch → verify-gate → never stop) |
 | `/workbench:task "<title>"` | Create a task (allocates the next ID, renders the canonical format) |
+| `/workbench:lead` | Show, set, adopt, or clear this session's durable lead purpose |
+| `/workbench:park "<title>"` | Park an unrelated bug/feature/follow-up as a real backlog task with origin metadata |
 | `/workbench:epic "<title>"` | Create or list epics — groups of related tasks with a live task rollup (pair level and up) |
 | `/workbench:dispatch <id>` | Move a task to in-development and dispatch it to an engineer |
 | `/workbench:verify <id>` | Run a task's verification and gate it to `verified/` (or back) |
@@ -148,6 +152,7 @@ Five capabilities, all configured from the level you pick:
 
 - **Task lifecycle** — tasks are markdown files under `.claude/tasks/`; their status *is* the subdirectory they live in (`backlog → in-development → in-review → verified → …`), and transitions are `git mv`. A bounded in-review cap forces verification to happen continuously instead of piling up. Higher levels add `staged`, `shipped`, and `release-candidate` stages.
 - **The orchestration loop** — a long-running teamlead loop that picks the highest-impact unblocked task, dispatches it, and gates it. The lead coordinates; engineers implement; nothing reaches *verified* without evidence. Universal rule: **bugs auto-file as tasks; new features are *suggested*, never auto-built.**
+- **Lead purpose + parking** — a lead session has a durable purpose (one task, one track, or a backlog-scouting pass). When unrelated work appears mid-feature, `/workbench:park` captures it as a backlog task with origin metadata instead of widening the active branch silently.
 - **Continuity** — `SessionStart` re-grounds each new session from disk, `PreCompact` checkpoints before context is compacted, and a `SESSION_STATE.md` handoff means the next session resumes from the file alone.
 - **Coordination** — multiple concurrent sessions register presence, claim tasks, and get warned before they collide; worktrees isolate parallel work.
 - **Discipline built in** — brainstorm → spec → plan before building; "done" means *verified with evidence*, never "should work."

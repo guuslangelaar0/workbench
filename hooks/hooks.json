@@ -41,6 +41,13 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/lead-purpose-nudge.sh\"", "timeout": 10 }
+        ]
+      }
+    ],
     "TeammateIdle": [
       {
         "hooks": [

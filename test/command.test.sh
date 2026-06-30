@@ -14,4 +14,9 @@ chk "boot has reality phase"    "grep -qi 'reality\|verify' '$HERE/commands/boot
 chk "checkpoint command exists" "[ -f '$HERE/commands/checkpoint.md' ]"
 chk "checkpoint writes STATE"   "grep -q 'SESSION_STATE' '$HERE/commands/checkpoint.md'"
 
+chk "lead command exists"       "[ -f '$HERE/commands/lead.md' ]"
+chk "lead command uses lead.sh"  "grep -q 'scripts/lead.sh' '$HERE/commands/lead.md'"
+chk "park command exists"       "[ -f '$HERE/commands/park.md' ]"
+chk "park command uses park.sh"  "grep -q 'scripts/park.sh' '$HERE/commands/park.md'"
+
 [ "$fail" = 0 ] && echo "PASS: command" || { echo "command test failed"; exit 1; }

@@ -9,8 +9,9 @@ chk "hooks.json valid JSON"    "python3 -m json.tool '$HERE/hooks/hooks.json' >/
 chk "has SessionStart"         "grep -q 'SessionStart' '$HERE/hooks/hooks.json'"
 chk "has PreCompact"           "grep -q 'PreCompact' '$HERE/hooks/hooks.json'"
 chk "has PostToolUse"          "grep -q 'PostToolUse' '$HERE/hooks/hooks.json'"
+chk "has UserPromptSubmit"     "grep -q 'UserPromptSubmit' '$HERE/hooks/hooks.json'"
 chk "uses PLUGIN_ROOT"         "grep -q 'CLAUDE_PLUGIN_ROOT' '$HERE/hooks/hooks.json'"
-for s in ground-session precompact-checkpoint coord-ping; do
+for s in ground-session precompact-checkpoint coord-ping lead-purpose-nudge; do
   chk "$s syntactically valid" "bash -n '$HERE/hooks/bin/$s.sh'"
 done
 # precompact writes a marker for a workbench project, no-ops elsewhere
@@ -32,5 +33,16 @@ OUTF="$(mktemp)"
 chk "ground brief shows this project's session" "grep -q sidProjAAA '$OUTF'"
 chk "ground brief hides other project's session" "! grep -q sidOtherBBB '$OUTF'"
 rm -rf "$PROJ" "$OTHER" "$OUTF"
+
+# UserPromptSubmit purpose hook injects current lead purpose as additional context.
+LP="$(mktemp -d)"
+bash "$HERE/scripts/init.sh" --profile full --name "LeadProj" --mission m --target "$LP" >/dev/null 2>&1
+bash "$HERE/scripts/lead.sh" set --target "$LP" --session-id sidLead123 --mode task --active-task 0007 --track checkout --purpose "ship checkout retry" >/dev/null
+printf '{"session_id":"sidLead123","prompt":"also fix analytics"}' \
+  | CLAUDE_PROJECT_DIR="$LP" CLAUDE_PLUGIN_ROOT="$HERE" bash "$HERE/hooks/bin/lead-purpose-nudge.sh" > "$LP/nudge.json"
+chk "lead nudge emits valid json" "python3 -m json.tool '$LP/nudge.json' >/dev/null"
+chk "lead nudge names current purpose" "grep -q 'ship checkout retry' '$LP/nudge.json'"
+chk "lead nudge sets session title" "grep -q 'lead:0007' '$LP/nudge.json'"
+rm -rf "$LP"
 
 [ "$fail" = 0 ] && echo "PASS: hooks" || { echo "hooks test failed"; exit 1; }

@@ -9,6 +9,15 @@ P="${CLAUDE_PROJECT_DIR:-$PWD}"
 _cfg="$(il_cfg_dir "$P")/config.json"
 [ -f "$_cfg" ] || exit 0
 T="$P/.claude/tasks"
+input="$(cat)"
+get_json_string() {
+  printf '%s' "$input" \
+    | grep -o "\"$1\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
+    | head -1 \
+    | sed "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"//; s/\"$//"
+}
+sid="$(get_json_string session_id)"
+[ -n "$sid" ] || sid="${CLAUDE_SESSION_ID:-default}"
 
 name="$(sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_cfg" | head -1)"
 count() { ls -1 "$T/$1" 2>/dev/null | grep -c '\.md$' || true; }
@@ -45,6 +54,24 @@ if [ -f "$_charter" ]; then
   echo ""
   echo "=== loop charter (the north star — re-read it, do not drift) ==="
   sed -n '1,40p' "$_charter"
+fi
+
+LEAD="$SELF_DIR/../../scripts/lead.sh"
+if [ -x "$LEAD" ]; then
+  lead_current="$("$LEAD" status --target "$P" --session-id "$sid" 2>/dev/null || true)"
+  lead_latest=""
+  [ -n "$lead_current" ] || lead_latest="$("$LEAD" latest-open --target "$P" 2>/dev/null || true)"
+  if [ -n "$lead_current$lead_latest" ]; then
+    echo ""
+    echo "=== lead purpose ==="
+    if [ -n "$lead_current" ]; then
+      printf '%s\n' "$lead_current" | sed -n 's/^purpose=/Purpose: /p; s/^mode=/Mode: /p; s/^active_task=/Active task: /p; s/^track=/Track: /p; s/^branch=/Branch: /p'
+      echo "Parking rule: unrelated bugs/features/follow-ups become backlog tasks via /workbench:park; do not expand this purpose silently."
+    else
+      printf '%s\n' "$lead_latest" | sed -n 's/^purpose=/Latest open purpose: /p; s/^active_task=/Latest active task: /p; s/^track=/Latest track: /p'
+      echo "No purpose is set for this session. Continue the latest purpose with /workbench:lead adopt, or pick from backlog."
+    fi
+  fi
 fi
 echo ""
 echo "Tasks: backlog $(count backlog) · in-development $(count in-development) · in-review $(count in-review)/$cap · verified $(count verified) · decisions $(count decisions)"
