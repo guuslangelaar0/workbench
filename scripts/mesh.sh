@@ -86,11 +86,19 @@ Invite: run /workbench:mesh invite --role worker --ttl-seconds 900
 Public internet: unavailable in this version.
 EOF
   else
-    cat <<EOF
+    if [ "$port" = "0" ]; then
+      cat <<EOF
+Workbench mesh will listen on this machine only.
+Command center: URL will be written to $TARGET/.workbench/mesh/server.json after startup.
+Public internet: unavailable in this version.
+EOF
+    else
+      cat <<EOF
 Workbench mesh will listen on this machine only.
 Command center: http://127.0.0.1:$port
 Public internet: unavailable in this version.
 EOF
+    fi
   fi
 }
 
@@ -176,10 +184,14 @@ case "$cmd" in
       url="$1"
       shift
     fi
+    if [ -n "$url" ]; then
+      echo "mesh: remote URL connect is not supported by the current workbench-mesh binary" >&2
+      echo "mesh: use connect TOKEN [DEVICE] only for local project invite acceptance" >&2
+      exit 2
+    fi
     token="${1:-}"
     device="${2:-$(host_name)}"
     require_arg "invite token" "$token"
-    [ -z "$url" ] || printf 'connecting to: %s\n' "$url"
     exec "$BIN" invite accept "${PROJECT_ARGS[@]}" --token "$token" --device "$device"
     ;;
   room)
