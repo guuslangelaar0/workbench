@@ -6,7 +6,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -23,6 +23,10 @@ use crate::auth;
 use crate::net::detect_bind;
 use crate::protocol::EventEnvelope;
 use crate::store::MeshStore;
+
+const INDEX_HTML: &str = include_str!("../assets/index.html");
+const APP_JS: &str = include_str!("../assets/app.js");
+const STYLE_CSS: &str = include_str!("../assets/style.css");
 
 #[derive(Debug, Clone)]
 pub struct ServeOptions {
@@ -127,6 +131,9 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
     }
 
     let app = Router::new()
+        .route("/", get(command_center))
+        .route("/assets/app.js", get(command_center_js))
+        .route("/assets/style.css", get(command_center_css))
         .route("/health", get(health))
         .route("/api/state", get(api_state))
         .route("/api/events", get(api_events).post(post_event))
@@ -148,6 +155,42 @@ pub fn read_server_metadata(project_root: &Path) -> Result<ServerMetadata> {
     let path = server_metadata_path(project_root);
     let content = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     serde_json::from_str(&content).with_context(|| format!("parse {}", path.display()))
+}
+
+async fn command_center(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, ApiError> {
+    require_bearer(&state, &headers)?;
+    Ok((
+        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        INDEX_HTML,
+    ))
+}
+
+async fn command_center_js(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, ApiError> {
+    require_bearer(&state, &headers)?;
+    Ok((
+        [(
+            header::CONTENT_TYPE,
+            "application/javascript; charset=utf-8",
+        )],
+        APP_JS,
+    ))
+}
+
+async fn command_center_css(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, ApiError> {
+    require_bearer(&state, &headers)?;
+    Ok((
+        [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+        STYLE_CSS,
+    ))
 }
 
 async fn health(
@@ -314,6 +357,7 @@ fn state_json(state: &AppState) -> Result<Value> {
         "event_count": events.len(),
         "connected_actor_count": actors.len(),
         "actors": actors.into_iter().collect::<Vec<_>>(),
+        "events": events,
         "last_seq": events.last().map(|event| event.seq).unwrap_or(0),
     }))
 }

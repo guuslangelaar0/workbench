@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Workbench Mesh Command Center</title>
+    <link rel="stylesheet" href="/assets/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Workbench Mesh</p>
+        <h1>Command Center</h1>
+      </div>
+      <form id="token-form" class="token-form">
+        <label for="token-input">Bearer token</label>
+        <input id="token-input" name="token" type="password" autocomplete="off" />
+        <button type="submit">Set</button>
+      </form>
+      <div class="connection-strip" aria-live="polite">
+        <span id="connection-state" class="status-chip status-warn">Token needed</span>
+        <span id="seq-state" class="mono">seq 0</span>
+      </div>
+    </header>
+
+    <nav class="tabbar" aria-label="Command center views">
+      <a href="#overview">Overview</a>
+      <a href="#leads">Leads</a>
+      <a href="#workers">Workers</a>
+      <a href="#rooms">Rooms</a>
+      <a href="#jobs">Jobs</a>
+      <a href="#tasks">Tasks</a>
+      <a href="#decisions">Decisions</a>
+      <a href="#invites">Invites</a>
+      <a href="#audit">Audit</a>
+    </nav>
+
+    <main class="layout">
+      <section class="workspace">
+        <section id="overview" class="band">
+          <div class="band-head">
+            <h2>Overview</h2>
+            <div class="counter-grid" aria-label="Mesh counters">
+              <span><b id="count-events">0</b> events</span>
+              <span><b id="count-actors">0</b> actors</span>
+              <span><b id="count-rooms">0</b> rooms</span>
+              <span><b id="count-open">0</b> open</span>
+            </div>
+          </div>
+          <div class="quick-command">
+            <label for="room-input">Room</label>
+            <input id="room-input" value="repo:workbench" />
+            <label for="actor-input">From</label>
+            <input id="actor-input" value="ui:owner" />
+            <label for="target-input">To</label>
+            <input id="target-input" placeholder="optional" />
+            <label for="message-input">Message</label>
+            <input id="message-input" value="status?" />
+            <button type="button" data-action="send-message">Send message</button>
+            <button type="button" data-action="ask-status">Ask status</button>
+            <button type="button" data-action="request-help">Request help</button>
+          </div>
+        </section>
+
+        <section id="leads" class="band">
+          <div class="band-head">
+            <h2>Leads</h2>
+            <div class="toolbar">
+              <button type="button" data-action="adopt-lead">Adopt stale lead</button>
+              <button type="button" data-action="close-lead">Close lead</button>
+            </div>
+          </div>
+          <div id="lead-matrix" class="matrix" aria-label="Lead matrix"></div>
+        </section>
+
+        <section id="workers" class="band">
+          <div class="band-head">
+            <h2>Workers</h2>
+            <div class="toolbar">
+              <select id="availability-input" aria-label="Availability">
+                <option value="available">Available</option>
+                <option value="busy">Busy</option>
+                <option value="blocked">Blocked</option>
+              </select>
+              <button type="button" data-action="set-availability">Set availability</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Actor</th><th>Room</th><th>Signal</th><th>Last seen</th></tr>
+              </thead>
+              <tbody id="workers-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="rooms" class="band">
+          <div class="band-head">
+            <h2>Rooms</h2>
+          </div>
+          <div id="rooms-grid" class="room-grid"></div>
+        </section>
+
+        <section id="jobs" class="band">
+          <div class="band-head">
+            <h2>Jobs</h2>
+            <div class="toolbar">
+              <button type="button" data-action="stop-job">Stop job</button>
+              <button type="button" data-action="retry-job">Retry job</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Job</th><th>Room</th><th>Status</th><th>Owner</th></tr>
+              </thead>
+              <tbody id="jobs-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="tasks" class="band">
+          <div class="band-head">
+            <h2>Tasks</h2>
+            <div class="toolbar">
+              <input id="task-input" placeholder="task id" />
+              <input id="assignee-input" placeholder="assignee" />
+              <button type="button" data-action="reassign-task">Reassign task</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Task</th><th>Assignee</th><th>Status</th><th>Room</th></tr>
+              </thead>
+              <tbody id="tasks-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="decisions" class="band">
+          <div class="band-head">
+            <h2>Decisions</h2>
+            <div class="toolbar">
+              <button type="button" data-action="approve-decision">Approve decision</button>
+              <button type="button" data-action="deny-decision">Deny decision</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Decision</th><th>Room</th><th>Status</th><th>By</th></tr>
+              </thead>
+              <tbody id="decisions-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="invites" class="band">
+          <div class="band-head">
+            <h2>Invites</h2>
+            <div class="toolbar">
+              <select id="invite-role" aria-label="Invite role">
+                <option value="worker">Worker</option>
+                <option value="operator">Operator</option>
+                <option value="viewer">Viewer</option>
+              </select>
+              <button type="button" data-action="create-invite">Create invite</button>
+              <button type="button" data-action="revoke-invite">Revoke invite</button>
+            </div>
+          </div>
+          <div id="invite-output" class="invite-output mono">No invite created in this browser session.</div>
+        </section>
+
+        <section id="audit" class="band">
+          <div class="band-head">
+            <h2>Audit</h2>
+          </div>
+          <ol id="audit-list" class="audit-list"></ol>
+        </section>
+      </section>
+
+      <aside class="event-rail" aria-label="Live event rail">
+        <div class="rail-head">
+          <h2>Live Rail</h2>
+          <button type="button" id="refresh-button">Refresh</button>
+        </div>
+        <ol id="event-list"></ol>
+      </aside>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>
