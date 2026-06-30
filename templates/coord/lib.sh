@@ -73,3 +73,24 @@ if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
 else
   WB_DIM=""; WB_RED=""; WB_YEL=""; WB_GRN=""; WB_BOLD=""; WB_RST=""
 fi
+
+# --- legacy (bb_) compat bridge ----------------------------------------------
+# This lib was renamed bb_*/BB_* -> wb_*/WB_* in the initlab->workbench rename.
+# `init.sh` is greenfield-only (never overwrites an existing coord file), so a
+# project upgraded from initlab can end up with the NEW wb-coord beside an OLD
+# bb_-prefixed lib.sh (or vice-versa) until /workbench:upgrade refreshes it —
+# and the script then crashes on an undefined symbol. Define the legacy bb_*
+# names as aliases so the coord set degrades gracefully in any mixed state.
+# Harmless on fresh installs; safe to drop once no initlab-era projects remain.
+BB_ROOT="$WB_ROOT"; BB_LOCKS_DIR="$WB_LOCKS_DIR"; BB_SESSIONS_DIR="$WB_SESSIONS_DIR"
+BB_SESSION_TTL="$WB_SESSION_TTL"; BB_LOCK_TTL="$WB_LOCK_TTL"
+BB_DIM="$WB_DIM"; BB_RED="$WB_RED"; BB_YEL="$WB_YEL"; BB_GRN="$WB_GRN"; BB_BOLD="$WB_BOLD"; BB_RST="$WB_RST"
+BB_LABEL="${BB_LABEL:-${WB_LABEL:-}}"
+bb_workspace_root() { wb_workspace_root "$@"; }
+bb_now()         { wb_now; }
+bb_now_iso()     { wb_now_iso; }
+bb_sid()         { wb_sid; }
+bb_sid_short()   { wb_sid_short "$@"; }
+bb_json_get()    { wb_json_get "$@"; }
+bb_is_fresh()    { wb_is_fresh "$@"; }
+bb_ensure_dirs() { wb_ensure_dirs; }
