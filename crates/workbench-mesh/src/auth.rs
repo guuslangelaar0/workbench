@@ -259,20 +259,42 @@ pub fn accept_invite(
 pub fn check(project_root: &Path, home: Option<PathBuf>, token: &str) -> Result<String> {
     let auth_paths = paths(home)?;
     let project_id = project_id(project_root)?;
-    let cred_path = auth_paths.project_dir.join(format!("{project_id}.cred"));
-    let credential: ProjectCredential = serde_json::from_slice(
-        &fs::read(&cred_path).with_context(|| format!("read {}", cred_path.display()))?,
-    )
-    .with_context(|| format!("parse {}", cred_path.display()))?;
 
-    if credential.token != token {
-        bail!("token rejected");
+    for entry in fs::read_dir(&auth_paths.project_dir).with_context(|| {
+        format!(
+            "read project credentials {}",
+            auth_paths.project_dir.display()
+        )
+    })? {
+        let entry = entry.with_context(|| {
+            format!(
+                "read project credential entry from {}",
+                auth_paths.project_dir.display()
+            )
+        })?;
+        let path = entry.path();
+        if !path.is_file()
+            || path.extension().and_then(|extension| extension.to_str()) != Some("cred")
+        {
+            continue;
+        }
+
+        let Ok(content) = fs::read(&path) else {
+            continue;
+        };
+        let Ok(credential) = serde_json::from_slice::<ProjectCredential>(&content) else {
+            continue;
+        };
+
+        if credential.project == project_id && credential.token == token {
+            return Ok(format!(
+                "token valid\nproject: {}\nrole: {}",
+                credential.project, credential.role
+            ));
+        }
     }
 
-    Ok(format!(
-        "token valid\nproject: {}\nrole: {}",
-        credential.project, credential.role
-    ))
+    bail!("token rejected")
 }
 
 pub fn validate_role(role: &str) -> Result<()> {
@@ -471,7 +493,10 @@ fn write_secret_file(path: &Path, content: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{bootstrap, create_invite, sanitize_name, validate_role, ProjectCredential};
+    use super::{
+        accept_invite, bootstrap, check, create_invite, sanitize_name, validate_role,
+        ProjectCredential,
+    };
     use std::fs;
     use std::path::Path;
 
@@ -590,6 +615,57 @@ mod tests {
         assert_eq!(invite.role, "observer");
     }
 
+    #[test]
+    fn check_accepts_accepted_device_project_credential() {
+        let project = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Auth");
+        bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let invite = create_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+        accept_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            &invite.token,
+            "macbook",
+        )
+        .unwrap();
+
+        let accepted_credential = read_project_credential(home.path(), "macbook.cred");
+        let output = check(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            &accepted_credential.token,
+        )
+        .unwrap();
+
+        assert_eq!(output, "token valid\nproject: mesh-auth\nrole: worker");
+    }
+
+    #[test]
+    fn check_rejects_wrong_token_when_credential_exists() {
+        let project = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Auth");
+        write_project_credential(home.path(), "macbook.cred", "mesh-auth", "worker");
+
+        let err = check(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "wrong-token",
+        )
+        .err()
+        .unwrap();
+
+        assert_eq!(err.to_string(), "token rejected");
+    }
+
     #[cfg(unix)]
     #[test]
     fn secret_rewrite_narrows_existing_file_permissions_to_600() {
@@ -636,5 +712,10 @@ mod tests {
             serde_json::to_string_pretty(&credential).unwrap(),
         )
         .unwrap();
+    }
+
+    fn read_project_credential(home: &Path, filename: &str) -> ProjectCredential {
+        serde_json::from_slice(&fs::read(home.join("mesh/projects").join(filename)).unwrap())
+            .unwrap()
     }
 }

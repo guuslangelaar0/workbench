@@ -21,6 +21,10 @@ chk "project credential stored outside repo" "find '$HOME_TMP/mesh/projects' -ty
 chk "repo contains no secret key files" "! find '$TMP/.workbench' -name '*.key' -o -name '*.cred' | grep -q ."
 BOOTSTRAP_ROLE="$(find "$HOME_TMP/mesh/projects" -type f -name '*.cred' -print -quit | xargs python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["role"])' 2>/dev/null || true)"
 chk "bootstrap project credential role is owner" "[ '$BOOTSTRAP_ROLE' = owner ]"
+BOOTSTRAP_CRED="$(find "$HOME_TMP/mesh/projects" -type f -name '*.cred' -print -quit)"
+BOOTSTRAP_TOKEN="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["token"])' "$BOOTSTRAP_CRED")"
+"$BIN" auth check --target "$TMP" --home "$HOME_TMP" --token "$BOOTSTRAP_TOKEN" > "$TMP/bootstrap-check.out"
+chk "bootstrap owner credential validates through auth check" "grep -q 'token valid' '$TMP/bootstrap-check.out' && grep -q 'role: owner' '$TMP/bootstrap-check.out'"
 
 MODE="$(find "$HOME_TMP/mesh/devices" -type f -name '*.key' -print -quit | xargs stat -c '%a' 2>/dev/null || true)"
 if [ -n "$MODE" ]; then
@@ -38,6 +42,13 @@ chk "invite audit written" "grep -q 'invite.created' '$TMP/.workbench/mesh/audit
 "$BIN" invite accept --target "$TMP" --home "$HOME_TMP" --token "$TOKEN" --device macbook > "$TMP/accept.out"
 chk "invite accept prints connected device" "grep -q 'device macbook connected' '$TMP/accept.out'"
 chk "accept audit written" "grep -q 'invite.accepted' '$TMP/.workbench/mesh/audit.jsonl'"
+ACCEPTED_TOKEN="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["token"])' "$HOME_TMP/mesh/projects/macbook.cred")"
+"$BIN" auth check --target "$TMP" --home "$HOME_TMP" --token "$ACCEPTED_TOKEN" > "$TMP/accepted-check.out"
+chk "accepted device credential validates through auth check" "grep -q 'token valid' '$TMP/accepted-check.out' && grep -q 'role: worker' '$TMP/accepted-check.out'"
+
+RC=0
+"$BIN" auth check --target "$TMP" --home "$HOME_TMP" --token wrong-token >"$TMP/wrong-check.out" 2>&1 || RC=$?
+chk "wrong auth check token is rejected" "[ '$RC' -ne 0 ] && grep -qi 'token rejected' '$TMP/wrong-check.out'"
 
 RC=0
 "$BIN" invite accept --target "$TMP" --home "$HOME_TMP" --token "$TOKEN" --device second >/tmp/mesh.invite.$$ 2>&1 || RC=$?
