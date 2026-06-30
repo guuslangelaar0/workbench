@@ -24,7 +24,7 @@ operations:
   start [--local|--lan] [--port N] [--pid-file PATH]
   status | who | jobs | open
   invite [--role ROLE] [--ttl-seconds N] [--max-uses N]
-  connect [URL] TOKEN [DEVICE]
+  connect TOKEN [DEVICE]
   room NAME
   message TARGET TEXT...
   ask TARGET QUESTION...
@@ -32,6 +32,9 @@ operations:
   availability STATE [--reason TEXT]
   doing TEXT...
   watch ACTOR
+
+Remote URL connect is unavailable until workbench-mesh supports remote invite
+acceptance. connect TOKEN [DEVICE] accepts a local project invite token.
 EOF
 }
 
@@ -219,7 +222,7 @@ case "$cmd" in
     exec "$BIN" handoff "${PROJECT_ARGS[@]}" --task-id "$task_id" --to "$2"
     ;;
   jobs)
-    "$BIN" event list "${PROJECT_ARGS[@]}" --since 0 "$@" | grep '"type":"job\.' || true
+    exec "$BIN" jobs "${PROJECT_ARGS[@]}" "$@"
     ;;
   availability)
     require_arg "availability state" "${1:-}"

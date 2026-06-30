@@ -70,13 +70,37 @@ chk "wrapper connect URL explains unsupported remote connect" "contains '$WRAP_T
 chk "wrapper connect URL does not discard URL into local accept" "[ ! -s '$LOG' ]"
 
 : > "$LOG"
+run_wrapper help > "$WRAP_TMP/help.out" 2>&1
+chk "wrapper help does not advertise URL connect syntax" "! contains '$WRAP_TMP/help.out' 'connect [URL]'"
+chk "wrapper help documents local connect token syntax" "contains '$WRAP_TMP/help.out' 'connect TOKEN [DEVICE]'"
+chk "wrapper help says remote URL connect unavailable" "contains '$WRAP_TMP/help.out' 'Remote URL connect is unavailable'"
+
+: > "$LOG"
 run_wrapper status > "$WRAP_TMP/status.out" 2>&1
 run_wrapper who > "$WRAP_TMP/who.out" 2>&1
 run_wrapper room lead:checkout > "$WRAP_TMP/room.out" 2>&1
 run_wrapper message lead:checkout hello mesh > "$WRAP_TMP/message.out" 2>&1
+run_wrapper ask session:worker what now > "$WRAP_TMP/ask.out" 2>&1
+run_wrapper handoff TASK-7 session:worker > "$WRAP_TMP/handoff.out" 2>&1
+run_wrapper jobs --since 4 > "$WRAP_TMP/jobs.out" 2>&1
+run_wrapper availability busy --reason reviewing > "$WRAP_TMP/availability.out" 2>&1
+run_wrapper doing reviewing task five > "$WRAP_TMP/doing.out" 2>&1
+run_wrapper watch session:worker > "$WRAP_TMP/watch.out" 2>&1
 chk "wrapper status passes target and home" "contains '$LOG' 'cmd|status|--target|$PROJECT_DIR|--home|$MESH_HOME'"
 chk "wrapper who passes target and home" "contains '$LOG' 'cmd|who|--target|$PROJECT_DIR|--home|$MESH_HOME'"
 chk "wrapper room emits create argv" "contains '$LOG' 'cmd|room|create|--target|$PROJECT_DIR|--home|$MESH_HOME|--name|lead:checkout'"
 chk "wrapper message emits text as one argv" "contains '$LOG' 'cmd|message|--target|$PROJECT_DIR|--home|$MESH_HOME|--to|lead:checkout|--text|hello mesh'"
+chk "wrapper ask emits question as one argv" "contains '$LOG' 'cmd|ask|--target|$PROJECT_DIR|--home|$MESH_HOME|--to|session:worker|--question|what now'"
+chk "wrapper handoff emits task and target" "contains '$LOG' 'cmd|handoff|--target|$PROJECT_DIR|--home|$MESH_HOME|--task-id|TASK-7|--to|session:worker'"
+chk "wrapper jobs delegates to rust jobs" "contains '$LOG' 'cmd|jobs|--target|$PROJECT_DIR|--home|$MESH_HOME|--since|4'"
+chk "wrapper jobs does not own event list filtering" "! contains '$LOG' 'cmd|event|list'"
+chk "wrapper availability passes state and reason" "contains '$LOG' 'cmd|availability|--target|$PROJECT_DIR|--home|$MESH_HOME|busy|--reason|reviewing'"
+chk "wrapper doing emits text as one argv" "contains '$LOG' 'cmd|doing|--target|$PROJECT_DIR|--home|$MESH_HOME|reviewing task five'"
+chk "wrapper watch passes actor" "contains '$LOG' 'cmd|watch|--target|$PROJECT_DIR|--home|$MESH_HOME|session:worker'"
+
+: > "$LOG"
+run_wrapper open > "$WRAP_TMP/open.out" 2>&1
+chk "wrapper open reads metadata without invoking rust" "contains '$WRAP_TMP/open.out' 'Command center: http://127.0.0.1:47321'"
+chk "wrapper open does not call rust binary" "[ ! -s '$LOG' ]"
 
 [ "$fail" = 0 ] && echo "PASS: mesh-packaging" || { echo "mesh-packaging test failed"; exit 1; }

@@ -6,6 +6,7 @@ use reqwest::Client;
 use serde_json::{json, Value};
 
 use crate::auth;
+use crate::protocol::EventEnvelope;
 use crate::server::read_server_metadata;
 use crate::statusline;
 use crate::store::MeshStore;
@@ -192,6 +193,27 @@ pub fn watch_actor(project_root: PathBuf, home: Option<PathBuf>, actor: String) 
     Ok(())
 }
 
+pub fn print_jobs(project_root: PathBuf, home: Option<PathBuf>, since: u64) -> Result<()> {
+    for event in job_events(project_root, home, since)? {
+        println!("{}", serde_json::to_string(&event)?);
+    }
+    Ok(())
+}
+
+pub fn job_events(
+    project_root: PathBuf,
+    home: Option<PathBuf>,
+    since: u64,
+) -> Result<Vec<EventEnvelope>> {
+    auth::require_local_project_credential(&project_root, home)?;
+    let store = MeshStore::open(project_root)?;
+    Ok(store
+        .list_events_since(since)?
+        .into_iter()
+        .filter(|event| event.event_type.starts_with("job."))
+        .collect())
+}
+
 pub fn spawn_actor(
     project_root: PathBuf,
     home: Option<PathBuf>,
@@ -277,5 +299,81 @@ fn spawned_actor_id(kind: &str, task_id: Option<&str>) -> String {
     match task_id {
         Some(task_id) => format!("actor:{kind}:{task_id}"),
         None => format!("actor:{kind}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use tempfile::TempDir;
+
+    use crate::auth;
+    use crate::store::MeshStore;
+
+    use super::job_events;
+
+    #[test]
+    fn job_events_require_local_project_credential() {
+        let project = TempDir::new().unwrap();
+        let unauth_home = TempDir::new().unwrap();
+
+        let err = job_events(
+            project.path().to_path_buf(),
+            Some(unauth_home.path().to_path_buf()),
+            0,
+        )
+        .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("local project credential required"),
+            "unexpected error: {err:#}"
+        );
+    }
+
+    #[test]
+    fn job_events_only_return_job_types_after_since() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let store = MeshStore::open(project.path()).unwrap();
+        store
+            .append_event(
+                "job.queued",
+                "jobs",
+                "session:lead",
+                None,
+                json!({ "task_id": "one" }),
+            )
+            .unwrap();
+        store
+            .append_event(
+                "message.sent",
+                "direct:session:worker",
+                "session:lead",
+                Some("session:worker"),
+                json!({ "text": "not a job" }),
+            )
+            .unwrap();
+        store
+            .append_event(
+                "job.done",
+                "jobs",
+                "session:worker",
+                None,
+                json!({ "task_id": "two" }),
+            )
+            .unwrap();
+
+        let events = job_events(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            1,
+        )
+        .unwrap();
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "job.done");
+        assert_eq!(events[0].payload["task_id"], "two");
     }
 }

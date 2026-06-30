@@ -28,6 +28,7 @@ enum Command {
     Message(MessageArgs),
     Ask(AskArgs),
     Handoff(HandoffArgs),
+    Jobs(JobsArgs),
     Availability(AvailabilityArgs),
     Doing(DoingArgs),
     Watch(WatchArgs),
@@ -255,6 +256,16 @@ struct HandoffArgs {
 }
 
 #[derive(Debug, Args)]
+struct JobsArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    #[arg(long, default_value_t = 0)]
+    since: u64,
+}
+
+#[derive(Debug, Args)]
 struct AvailabilityArgs {
     #[arg(long)]
     target: PathBuf,
@@ -329,6 +340,7 @@ async fn main() -> Result<()> {
         Command::Handoff(args) => {
             client::handoff_task(args.target, args.home, args.task_id, args.to_actor)
         }
+        Command::Jobs(args) => client::print_jobs(args.target, args.home, args.since),
         Command::Availability(args) => {
             client::set_availability(args.target, args.home, args.state, args.reason)
         }
@@ -443,4 +455,37 @@ fn invite_accept(args: InviteAcceptArgs) -> Result<()> {
         auth::accept_invite(&args.target, args.home, &args.token, &args.device)?
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use clap::Parser;
+
+    use super::{Cli, Command};
+
+    #[test]
+    fn parses_jobs_as_top_level_project_command() {
+        let cli = Cli::try_parse_from([
+            "workbench-mesh",
+            "jobs",
+            "--target",
+            "/tmp/project",
+            "--home",
+            "/tmp/home",
+            "--since",
+            "7",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Command::Jobs(args) => {
+                assert_eq!(args.target, PathBuf::from("/tmp/project"));
+                assert_eq!(args.home, Some(PathBuf::from("/tmp/home")));
+                assert_eq!(args.since, 7);
+            }
+            other => panic!("expected jobs command, got {other:?}"),
+        }
+    }
 }
