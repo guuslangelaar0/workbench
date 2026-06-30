@@ -9,6 +9,7 @@ fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
 
 bash "$HERE/scripts/init.sh" --name "MeshUI" --mission "Test." --target "$TMP" --profile full --level crew >/dev/null 2>&1
+cargo build -p workbench-mesh >/dev/null || exit 1
 BIN="$HERE/target/debug/workbench-mesh"
 "$BIN" auth bootstrap --target "$TMP" --home "$HOME_TMP" >/dev/null
 "$BIN" serve --target "$TMP" --home "$HOME_TMP" --bind local --port 0 --pid-file "$PIDF" > "$TMP/mesh.log" 2>&1 &
