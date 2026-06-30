@@ -260,6 +260,76 @@ pub fn check(project_root: &Path, home: Option<PathBuf>, token: &str) -> Result<
     let auth_paths = paths(home)?;
     let project_id = project_id(project_root)?;
 
+    for credential in project_credentials_for(&auth_paths, &project_id)? {
+        if credential.project == project_id && credential.token == token {
+            return Ok(format!(
+                "token valid\nproject: {}\nrole: {}",
+                credential.project, credential.role
+            ));
+        }
+    }
+
+    bail!("token rejected")
+}
+
+pub fn require_local_project_credential(project_root: &Path, home: Option<PathBuf>) -> Result<()> {
+    let auth_paths = paths(home)?;
+    require_project_credential_with_roles(
+        project_root,
+        &auth_paths,
+        &["owner", "operator", "worker", "observer"],
+        "local project credential required",
+    )
+}
+
+pub fn validate_role(role: &str) -> Result<()> {
+    match role {
+        "owner" | "operator" | "worker" | "observer" => Ok(()),
+        _ => bail!("invalid role: {role}"),
+    }
+}
+
+fn resolve_home(home: Option<PathBuf>) -> Result<PathBuf> {
+    if let Some(home) = home {
+        return Ok(home);
+    }
+    if let Some(home) = env::var_os("WORKBENCH_HOME") {
+        return Ok(PathBuf::from(home));
+    }
+    let home = env::var_os("HOME").ok_or_else(|| anyhow::anyhow!("HOME is not set"))?;
+    Ok(PathBuf::from(home).join(".workbench"))
+}
+
+fn require_local_invite_authority(project_root: &Path, auth_paths: &AuthPaths) -> Result<()> {
+    require_project_credential_with_roles(
+        project_root,
+        auth_paths,
+        &["owner", "operator"],
+        "local owner/operator credential required",
+    )
+}
+
+fn require_project_credential_with_roles(
+    project_root: &Path,
+    auth_paths: &AuthPaths,
+    roles: &[&str],
+    error_message: &str,
+) -> Result<()> {
+    let project_id = project_id(project_root)?;
+    for credential in project_credentials_for(auth_paths, &project_id)? {
+        if roles.contains(&credential.role.as_str()) {
+            return Ok(());
+        }
+    }
+
+    bail!("{error_message}")
+}
+
+fn project_credentials_for(
+    auth_paths: &AuthPaths,
+    project_id: &str,
+) -> Result<Vec<ProjectCredential>> {
+    let mut credentials = Vec::new();
     for entry in fs::read_dir(&auth_paths.project_dir).with_context(|| {
         format!(
             "read project credentials {}",
@@ -286,69 +356,12 @@ pub fn check(project_root: &Path, home: Option<PathBuf>, token: &str) -> Result<
             continue;
         };
 
-        if credential.project == project_id && credential.token == token {
-            return Ok(format!(
-                "token valid\nproject: {}\nrole: {}",
-                credential.project, credential.role
-            ));
+        if credential.project == project_id {
+            credentials.push(credential);
         }
     }
 
-    bail!("token rejected")
-}
-
-pub fn validate_role(role: &str) -> Result<()> {
-    match role {
-        "owner" | "operator" | "worker" | "observer" => Ok(()),
-        _ => bail!("invalid role: {role}"),
-    }
-}
-
-fn resolve_home(home: Option<PathBuf>) -> Result<PathBuf> {
-    if let Some(home) = home {
-        return Ok(home);
-    }
-    if let Some(home) = env::var_os("WORKBENCH_HOME") {
-        return Ok(PathBuf::from(home));
-    }
-    let home = env::var_os("HOME").ok_or_else(|| anyhow::anyhow!("HOME is not set"))?;
-    Ok(PathBuf::from(home).join(".workbench"))
-}
-
-fn require_local_invite_authority(project_root: &Path, auth_paths: &AuthPaths) -> Result<()> {
-    let project_id = project_id(project_root)?;
-    for entry in fs::read_dir(&auth_paths.project_dir).with_context(|| {
-        format!(
-            "read project credentials {}",
-            auth_paths.project_dir.display()
-        )
-    })? {
-        let entry = entry.with_context(|| {
-            format!(
-                "read project credential entry from {}",
-                auth_paths.project_dir.display()
-            )
-        })?;
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-
-        let Ok(content) = fs::read(&path) else {
-            continue;
-        };
-        let Ok(credential) = serde_json::from_slice::<ProjectCredential>(&content) else {
-            continue;
-        };
-
-        if credential.project == project_id
-            && matches!(credential.role.as_str(), "owner" | "operator")
-        {
-            return Ok(());
-        }
-    }
-
-    bail!("local owner/operator credential required")
+    Ok(credentials)
 }
 
 fn project_id(project_root: &Path) -> Result<String> {
@@ -494,8 +507,8 @@ fn write_secret_file(path: &Path, content: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        accept_invite, bootstrap, check, create_invite, sanitize_name, validate_role,
-        ProjectCredential,
+        accept_invite, bootstrap, check, create_invite, require_local_project_credential,
+        sanitize_name, validate_role, ProjectCredential,
     };
     use std::fs;
     use std::path::Path;
@@ -613,6 +626,46 @@ mod tests {
         .unwrap();
 
         assert_eq!(invite.role, "observer");
+    }
+
+    #[test]
+    fn require_local_project_credential_rejects_uncredentialed_home() {
+        let project = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Auth");
+
+        let err = require_local_project_credential(project.path(), Some(home.path().to_path_buf()))
+            .err()
+            .unwrap();
+
+        assert_eq!(err.to_string(), "local project credential required");
+    }
+
+    #[test]
+    fn require_local_project_credential_rejects_wrong_project_credential() {
+        let project = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Auth");
+        write_project_credential(home.path(), "other.cred", "other-project", "owner");
+
+        let err = require_local_project_credential(project.path(), Some(home.path().to_path_buf()))
+            .err()
+            .unwrap();
+
+        assert_eq!(err.to_string(), "local project credential required");
+    }
+
+    #[test]
+    fn require_local_project_credential_allows_any_valid_project_role() {
+        for role in ["owner", "operator", "worker", "observer"] {
+            let project = tempfile::tempdir().unwrap();
+            let home = tempfile::tempdir().unwrap();
+            write_project_config(project.path(), "Mesh Auth");
+            write_project_credential(home.path(), "device.cred", "mesh-auth", role);
+
+            require_local_project_credential(project.path(), Some(home.path().to_path_buf()))
+                .unwrap_or_else(|err| panic!("{role} should be accepted: {err}"));
+        }
     }
 
     #[test]

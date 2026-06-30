@@ -61,6 +61,8 @@ enum InviteSubcommand {
 struct AppendArgs {
     #[arg(long)]
     target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
     #[arg(long = "type")]
     event_type: String,
     #[arg(long)]
@@ -77,6 +79,8 @@ struct AppendArgs {
 struct ListArgs {
     #[arg(long)]
     target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
     #[arg(long, default_value_t = 0)]
     since: u64,
 }
@@ -156,6 +160,7 @@ fn run_invite(invite_command: InviteCommand) -> Result<()> {
 }
 
 fn append_event(args: AppendArgs) -> Result<()> {
+    auth::require_local_project_credential(&args.target, args.home)?;
     let store = MeshStore::open(args.target)?;
     let payload = serde_json::from_str(&args.payload_json).context("parse --payload-json")?;
     let event = store.append_event(
@@ -173,6 +178,7 @@ fn append_event(args: AppendArgs) -> Result<()> {
 }
 
 fn list_events(args: ListArgs) -> Result<()> {
+    auth::require_local_project_credential(&args.target, args.home)?;
     let store = MeshStore::open(args.target)?;
     for event in store.list_events_since(args.since)? {
         println!("{}", serde_json::to_string(&event)?);
