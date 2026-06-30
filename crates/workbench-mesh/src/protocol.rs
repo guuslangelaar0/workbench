@@ -59,6 +59,8 @@ pub const ALLOWED_EVENT_TYPES: &[&str] = &[
     "decision.answer",
     "invite.created",
     "invite.accepted",
+    "invite.exhausted",
+    "invite.expired",
     "invite.revoked",
 ];
 

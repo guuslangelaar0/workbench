@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand};
 
+mod auth;
+
 use workbench_mesh::store::MeshStore;
 
 #[derive(Debug, Parser)]
@@ -15,6 +17,8 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     Event(EventCommand),
+    Auth(AuthCommand),
+    Invite(InviteCommand),
 }
 
 #[derive(Debug, Args)]
@@ -27,6 +31,30 @@ struct EventCommand {
 enum EventSubcommand {
     Append(AppendArgs),
     List(ListArgs),
+}
+
+#[derive(Debug, Args)]
+struct AuthCommand {
+    #[command(subcommand)]
+    command: AuthSubcommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum AuthSubcommand {
+    Bootstrap(AuthBootstrapArgs),
+    Check(AuthCheckArgs),
+}
+
+#[derive(Debug, Args)]
+struct InviteCommand {
+    #[command(subcommand)]
+    command: InviteSubcommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum InviteSubcommand {
+    Create(InviteCreateArgs),
+    Accept(InviteAcceptArgs),
 }
 
 #[derive(Debug, Args)]
@@ -53,10 +81,56 @@ struct ListArgs {
     since: u64,
 }
 
+#[derive(Debug, Args)]
+struct AuthBootstrapArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+struct AuthCheckArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    #[arg(long)]
+    token: String,
+}
+
+#[derive(Debug, Args)]
+struct InviteCreateArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    #[arg(long)]
+    role: String,
+    #[arg(long, default_value_t = 3600)]
+    ttl_seconds: u64,
+    #[arg(long, default_value_t = 1)]
+    max_uses: u32,
+}
+
+#[derive(Debug, Args)]
+struct InviteAcceptArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    #[arg(long)]
+    token: String,
+    #[arg(long)]
+    device: String,
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Event(event) => run_event(event),
+        Command::Auth(auth) => run_auth(auth),
+        Command::Invite(invite) => run_invite(invite),
     }
 }
 
@@ -64,6 +138,20 @@ fn run_event(event: EventCommand) -> Result<()> {
     match event.command {
         EventSubcommand::Append(args) => append_event(args),
         EventSubcommand::List(args) => list_events(args),
+    }
+}
+
+fn run_auth(auth_command: AuthCommand) -> Result<()> {
+    match auth_command.command {
+        AuthSubcommand::Bootstrap(args) => auth_bootstrap(args),
+        AuthSubcommand::Check(args) => auth_check(args),
+    }
+}
+
+fn run_invite(invite_command: InviteCommand) -> Result<()> {
+    match invite_command.command {
+        InviteSubcommand::Create(args) => invite_create(args),
+        InviteSubcommand::Accept(args) => invite_accept(args),
     }
 }
 
@@ -89,5 +177,38 @@ fn list_events(args: ListArgs) -> Result<()> {
     for event in store.list_events_since(args.since)? {
         println!("{}", serde_json::to_string(&event)?);
     }
+    Ok(())
+}
+
+fn auth_bootstrap(args: AuthBootstrapArgs) -> Result<()> {
+    println!("{}", auth::bootstrap(&args.target, args.home)?);
+    Ok(())
+}
+
+fn auth_check(args: AuthCheckArgs) -> Result<()> {
+    println!("{}", auth::check(&args.target, args.home, &args.token)?);
+    Ok(())
+}
+
+fn invite_create(args: InviteCreateArgs) -> Result<()> {
+    let invite = auth::create_invite(
+        &args.target,
+        args.home,
+        &args.role,
+        args.ttl_seconds,
+        args.max_uses,
+    )?;
+    println!(
+        "token: {}\nrole: {}\nexpires: {}\nmax_uses: {}",
+        invite.token, invite.role, invite.expires_at, invite.max_uses
+    );
+    Ok(())
+}
+
+fn invite_accept(args: InviteAcceptArgs) -> Result<()> {
+    println!(
+        "{}",
+        auth::accept_invite(&args.target, args.home, &args.token, &args.device)?
+    );
     Ok(())
 }

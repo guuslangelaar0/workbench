@@ -88,6 +88,10 @@ impl MeshStore {
             })
         })
     }
+
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
 }
 
 fn ensure_file(path: &Path) -> Result<()> {

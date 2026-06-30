@@ -1,0 +1,446 @@
+use std::env;
+use std::fs::{self, OpenOptions};
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
+
+use anyhow::{bail, Context, Result};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
+use fs2::FileExt;
+use rand::RngCore;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use sha2::{Digest, Sha256};
+use std::time::Duration;
+use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
+
+use workbench_mesh::store::MeshStore;
+
+pub struct AuthPaths {
+    pub home: PathBuf,
+    pub device_dir: PathBuf,
+    pub project_dir: PathBuf,
+}
+
+pub struct Invite {
+    pub token: String,
+    pub role: String,
+    pub expires_at: String,
+    pub max_uses: u32,
+    #[allow(dead_code)]
+    pub uses: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct StoredInvite {
+    token_hash: String,
+    role: String,
+    expires_at: String,
+    max_uses: u32,
+    uses: u32,
+    revoked_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ProjectCredential {
+    project: String,
+    role: String,
+    token: String,
+}
+
+pub fn paths(home: Option<PathBuf>) -> Result<AuthPaths> {
+    let home = resolve_home(home)?;
+    let mesh_home = home.join("mesh");
+    let device_dir = mesh_home.join("devices");
+    let project_dir = mesh_home.join("projects");
+    fs::create_dir_all(&device_dir)
+        .with_context(|| format!("create device dir {}", device_dir.display()))?;
+    fs::create_dir_all(&project_dir)
+        .with_context(|| format!("create project dir {}", project_dir.display()))?;
+    Ok(AuthPaths {
+        home,
+        device_dir,
+        project_dir,
+    })
+}
+
+pub fn bootstrap(project_root: &Path, home: Option<PathBuf>) -> Result<String> {
+    let auth_paths = paths(home)?;
+    let project_id = project_id(project_root)?;
+    let device_key = random_secret();
+    let project_token = random_secret();
+
+    write_secret_file(
+        &auth_paths.device_dir.join(format!("{project_id}.key")),
+        &device_key,
+    )?;
+
+    let project_cred = ProjectCredential {
+        project: project_id.clone(),
+        role: "lead".to_string(),
+        token: project_token,
+    };
+    write_secret_file(
+        &auth_paths.project_dir.join(format!("{project_id}.cred")),
+        &serde_json::to_string_pretty(&project_cred)?,
+    )?;
+
+    Ok(format!(
+        "local credential ready\nhome: {}\nproject: {}",
+        auth_paths.home.display(),
+        project_id
+    ))
+}
+
+pub fn create_invite(
+    project_root: &Path,
+    home: Option<PathBuf>,
+    role: &str,
+    ttl_seconds: u64,
+    max_uses: u32,
+) -> Result<Invite> {
+    validate_role(role)?;
+    if ttl_seconds == 0 {
+        bail!("ttl_seconds must be positive");
+    }
+    if max_uses == 0 {
+        bail!("max_uses must be positive");
+    }
+
+    let _ = paths(home)?;
+    let token = format!("wb_invite_{}", random_secret());
+    let expires_at = (OffsetDateTime::now_utc() + duration_from_secs(ttl_seconds)?)
+        .format(&Rfc3339)
+        .context("format invite expiry")?;
+    let stored = StoredInvite {
+        token_hash: hash_token(&token),
+        role: role.to_string(),
+        expires_at: expires_at.clone(),
+        max_uses,
+        uses: 0,
+        revoked_at: None,
+    };
+
+    let store = MeshStore::open(project_root)?;
+    let invite_path = store.root().join("invites.json");
+    mutate_invites(&invite_path, |invites| {
+        invites.push(stored.clone());
+        Ok(())
+    })?;
+    store.append_audit(
+        "invite.created",
+        "auth:local",
+        json!({
+            "role": role,
+            "expires_at": expires_at,
+            "max_uses": max_uses,
+            "token_hash": stored.token_hash,
+        }),
+    )?;
+
+    Ok(Invite {
+        token,
+        role: role.to_string(),
+        expires_at,
+        max_uses,
+        uses: 0,
+    })
+}
+
+pub fn accept_invite(
+    project_root: &Path,
+    home: Option<PathBuf>,
+    token: &str,
+    device: &str,
+) -> Result<String> {
+    if device.trim().is_empty() {
+        bail!("device name is required");
+    }
+
+    let auth_paths = paths(home)?;
+    let store = MeshStore::open(project_root)?;
+    let invite_path = store.root().join("invites.json");
+    let token_hash = hash_token(token);
+    let now = OffsetDateTime::now_utc();
+    let project_id = project_id(project_root)?;
+
+    let (role, revoked_at) = match mutate_invites(&invite_path, |invites| {
+        let invite = invites
+            .iter_mut()
+            .find(|invite| invite.token_hash == token_hash)
+            .ok_or_else(|| anyhow::anyhow!("invite not found"))?;
+
+        let expires_at = OffsetDateTime::parse(&invite.expires_at, &Rfc3339)
+            .context("parse stored invite expiry")?;
+        if now >= expires_at {
+            bail!("invite expired");
+        }
+
+        if invite.uses >= invite.max_uses {
+            bail!("invite exhausted");
+        }
+
+        if invite.revoked_at.is_some() {
+            bail!("invite revoked");
+        }
+
+        invite.uses += 1;
+        let revoked_at = if invite.uses >= invite.max_uses {
+            let revoked_at = now.format(&Rfc3339).context("format revoke timestamp")?;
+            invite.revoked_at = Some(revoked_at.clone());
+            Some(revoked_at)
+        } else {
+            invite.revoked_at.clone()
+        };
+
+        Ok((invite.role.clone(), revoked_at))
+    }) {
+        Ok(values) => values,
+        Err(err) => {
+            let message = err.to_string();
+            let event_type = match message.as_str() {
+                "invite expired" => Some("invite.expired"),
+                "invite exhausted" => Some("invite.exhausted"),
+                "invite revoked" => Some("invite.revoked"),
+                _ => None,
+            };
+            if let Some(event_type) = event_type {
+                store.append_audit(
+                    event_type,
+                    "auth:invite",
+                    json!({ "device": device, "token_hash": token_hash }),
+                )?;
+            }
+            return Err(err);
+        }
+    };
+
+    write_secret_file(
+        &auth_paths.device_dir.join(format!("{}.key", sanitize_name(device))),
+        &random_secret(),
+    )?;
+    let project_cred = ProjectCredential {
+        project: project_id,
+        role: role.clone(),
+        token: random_secret(),
+    };
+    write_secret_file(
+        &auth_paths
+            .project_dir
+            .join(format!("{}.cred", sanitize_name(device))),
+        &serde_json::to_string_pretty(&project_cred)?,
+    )?;
+    store.append_audit(
+        "invite.accepted",
+        "auth:invite",
+        json!({ "device": device, "role": role, "token_hash": token_hash }),
+    )?;
+    if let Some(revoked_at) = revoked_at {
+        store.append_audit(
+            "invite.revoked",
+            "auth:invite",
+            json!({
+                "device": device,
+                "role": role,
+                "reason": "max_uses_reached",
+                "revoked_at": revoked_at,
+                "token_hash": token_hash,
+            }),
+        )?;
+    }
+
+    Ok(format!("device {device} connected\nrole: {role}"))
+}
+
+pub fn check(project_root: &Path, home: Option<PathBuf>, token: &str) -> Result<String> {
+    let auth_paths = paths(home)?;
+    let project_id = project_id(project_root)?;
+    let cred_path = auth_paths.project_dir.join(format!("{project_id}.cred"));
+    let credential: ProjectCredential = serde_json::from_slice(
+        &fs::read(&cred_path).with_context(|| format!("read {}", cred_path.display()))?,
+    )
+    .with_context(|| format!("parse {}", cred_path.display()))?;
+
+    if credential.token != token {
+        bail!("token rejected");
+    }
+
+    Ok(format!(
+        "token valid\nproject: {}\nrole: {}",
+        credential.project, credential.role
+    ))
+}
+
+pub fn validate_role(role: &str) -> Result<()> {
+    match role {
+        "lead" | "worker" | "observer" => Ok(()),
+        _ => bail!("invalid role: {role}"),
+    }
+}
+
+fn resolve_home(home: Option<PathBuf>) -> Result<PathBuf> {
+    if let Some(home) = home {
+        return Ok(home);
+    }
+    if let Some(home) = env::var_os("WORKBENCH_HOME") {
+        return Ok(PathBuf::from(home));
+    }
+    let home = env::var_os("HOME").ok_or_else(|| anyhow::anyhow!("HOME is not set"))?;
+    Ok(PathBuf::from(home).join(".workbench"))
+}
+
+fn project_id(project_root: &Path) -> Result<String> {
+    let config_path = project_root.join(".workbench/config.json");
+    if config_path.is_file() {
+        let config: serde_json::Value = serde_json::from_slice(
+            &fs::read(&config_path).with_context(|| format!("read {}", config_path.display()))?,
+        )
+        .with_context(|| format!("parse {}", config_path.display()))?;
+        if let Some(name) = config
+            .get("project")
+            .and_then(|project| project.get("name"))
+            .and_then(|name| name.as_str())
+        {
+            return Ok(sanitize_name(name));
+        }
+    }
+
+    let name = project_root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("project");
+    Ok(sanitize_name(name))
+}
+
+fn random_secret() -> String {
+    let mut bytes = [0_u8; 32];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    URL_SAFE_NO_PAD.encode(bytes)
+}
+
+fn hash_token(token: &str) -> String {
+    let digest = Sha256::digest(token.as_bytes());
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn duration_from_secs(seconds: u64) -> Result<Duration> {
+    Ok(Duration::from_secs(seconds))
+}
+
+fn sanitize_name(value: &str) -> String {
+    let mut sanitized = String::new();
+    for ch in value.chars() {
+        if ch.is_ascii_alphanumeric() {
+            sanitized.push(ch.to_ascii_lowercase());
+        } else if matches!(ch, '-' | '_') {
+            sanitized.push(ch);
+        } else if !sanitized.ends_with('-') {
+            sanitized.push('-');
+        }
+    }
+    let trimmed = sanitized.trim_matches('-');
+    if trimmed.is_empty() {
+        "project".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn mutate_invites<T>(
+    path: &Path,
+    mutate: impl FnOnce(&mut Vec<StoredInvite>) -> Result<T>,
+) -> Result<T> {
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(path)
+        .with_context(|| format!("open {}", path.display()))?;
+    file.lock_exclusive()
+        .with_context(|| format!("lock {}", path.display()))?;
+
+    let result = (|| {
+        let mut content = String::new();
+        file.read_to_string(&mut content)
+            .with_context(|| format!("read {}", path.display()))?;
+        let mut invites = if content.trim().is_empty() {
+            Vec::new()
+        } else {
+            serde_json::from_str(&content).with_context(|| format!("parse {}", path.display()))?
+        };
+        let output = mutate(&mut invites)?;
+        file.seek(SeekFrom::Start(0))
+            .with_context(|| format!("rewind {}", path.display()))?;
+        file.set_len(0)
+            .with_context(|| format!("truncate {}", path.display()))?;
+        serde_json::to_writer_pretty(&mut file, &invites).context("serialize invites")?;
+        file.write_all(b"\n")
+            .with_context(|| format!("write newline to {}", path.display()))?;
+        file.flush()
+            .with_context(|| format!("flush {}", path.display()))?;
+        Ok(output)
+    })();
+
+    file.unlock()
+        .with_context(|| format!("unlock {}", path.display()))?;
+    result
+}
+
+fn write_secret_file(path: &Path, content: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("create parent dir {}", parent.display()))?;
+    }
+
+    #[cfg(unix)]
+    let mut file = {
+        use std::os::unix::fs::OpenOptionsExt;
+
+        OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)
+            .with_context(|| format!("open {}", path.display()))?
+    };
+
+    #[cfg(not(unix))]
+    let mut file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(path)
+        .with_context(|| format!("open {}", path.display()))?;
+
+    file.write_all(content.as_bytes())
+        .with_context(|| format!("write {}", path.display()))?;
+    file.flush()
+        .with_context(|| format!("flush {}", path.display()))?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{sanitize_name, validate_role};
+
+    #[test]
+    fn validates_known_roles() {
+        validate_role("lead").unwrap();
+        validate_role("worker").unwrap();
+        validate_role("observer").unwrap();
+    }
+
+    #[test]
+    fn rejects_unknown_roles() {
+        let err = validate_role("admin").unwrap_err();
+        assert_eq!(err.to_string(), "invalid role: admin");
+    }
+
+    #[test]
+    fn sanitizes_project_names() {
+        assert_eq!(sanitize_name("Mesh Auth"), "mesh-auth");
+        assert_eq!(sanitize_name("###"), "project");
+    }
+}
