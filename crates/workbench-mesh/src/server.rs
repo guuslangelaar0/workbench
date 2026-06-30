@@ -1,6 +1,5 @@
 use std::collections::BTreeSet;
 use std::fs;
-use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -11,12 +10,14 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
-use tower_http::cors::CorsLayer;
 
 use crate::auth;
 use crate::net::detect_bind;
@@ -49,6 +50,8 @@ struct AppState {
     home: Option<PathBuf>,
     store: Arc<MeshStore>,
     events_tx: broadcast::Sender<EventEnvelope>,
+    daemon_token: String,
+    local_role: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,6 +76,13 @@ struct EventRequest {
 }
 
 #[derive(Debug, Deserialize)]
+struct WsEventRequest {
+    v: u16,
+    #[serde(flatten)]
+    event: EventRequest,
+}
+
+#[derive(Debug, Deserialize)]
 struct InviteRequest {
     role: String,
     ttl_seconds: Option<u64>,
@@ -81,7 +91,10 @@ struct InviteRequest {
 
 pub async fn serve(opts: ServeOptions) -> Result<()> {
     auth::require_local_project_credential(&opts.project_root, opts.home.clone())?;
-    let local_token = auth::local_project_token(&opts.project_root, opts.home.clone())?;
+    let credential_token = auth::local_project_token(&opts.project_root, opts.home.clone())?;
+    let local_role =
+        auth::project_token_role(&opts.project_root, opts.home.clone(), &credential_token)?;
+    let daemon_token = random_bearer_token();
     let bind_info = detect_bind(&opts.bind, opts.port)?;
     let listener = TcpListener::bind(bind_info.bind_addr)
         .await
@@ -94,16 +107,18 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
         home: opts.home.clone(),
         store,
         events_tx,
+        daemon_token: daemon_token.clone(),
+        local_role,
     };
 
     let metadata = ServerMetadata {
-        mode: bind_info.mode,
-        host: metadata_host(local_addr, &opts.bind),
+        mode: bind_info.mode.clone(),
+        host: metadata_host(&bind_info.mode, &bind_info.lan_ips),
         port: local_addr.port(),
         hostname: bind_info.hostname,
         mdns: bind_info.mdns_name,
         lan_ips: bind_info.lan_ips,
-        local_token,
+        local_token: daemon_token,
     };
     write_server_metadata(&opts.project_root, &metadata)?;
     if let Some(pid_file) = opts.pid_file {
@@ -117,7 +132,6 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
         .route("/api/events", get(api_events).post(post_event))
         .route("/api/invites", post(post_invite))
         .route("/ws", get(ws_handler))
-        .layer(CorsLayer::permissive())
         .with_state(state);
 
     axum::serve(listener, app)
@@ -197,8 +211,7 @@ async fn ws_handler(
     Query(query): Query<WsQuery>,
     ws: WebSocketUpgrade,
 ) -> Result<impl IntoResponse, ApiError> {
-    auth::check(&state.project_root, state.home.clone(), &query.token)
-        .map_err(|_| ApiError::unauthorized())?;
+    require_token(&state, &query.token)?;
     Ok(ws.on_upgrade(move |socket| websocket_session(socket, state, query.last_seq.unwrap_or(0))))
 }
 
@@ -235,13 +248,16 @@ async fn websocket_session(socket: WebSocket, state: AppState, last_seq: u64) {
                     return;
                 };
                 if let Message::Text(text) = message {
-                    let Ok(request) = serde_json::from_str::<EventRequest>(&text) else {
+                    let Ok(request) = serde_json::from_str::<WsEventRequest>(&text) else {
                         continue;
                     };
-                    let Ok(event) = append_event(&state, request) else {
+                    if request.v != 1 {
                         continue;
                     };
-                    let ack = json!({ "type": "ack", "id": event.id, "seq": event.seq });
+                    let Ok(event) = append_event(&state, request.event) else {
+                        continue;
+                    };
+                    let ack = json!({ "v": 1, "type": "ack", "id": event.id, "seq": event.seq });
                     if sender.send(Message::Text(ack.to_string())).await.is_err() {
                         return;
                     }
@@ -277,8 +293,8 @@ fn bearer_role(state: &AppState, headers: &HeaderMap) -> Result<String, ApiError
     let Some(token) = value.strip_prefix("Bearer ") else {
         return Err(ApiError::unauthorized());
     };
-    auth::project_token_role(&state.project_root, state.home.clone(), token)
-        .map_err(|_| ApiError::unauthorized())
+    require_token(state, token)?;
+    Ok(state.local_role.clone())
 }
 
 fn state_json(state: &AppState) -> Result<Value> {
@@ -298,12 +314,29 @@ fn state_json(state: &AppState) -> Result<Value> {
     }))
 }
 
-fn metadata_host(local_addr: SocketAddr, bind: &str) -> String {
-    if bind == "local" {
-        "127.0.0.1".to_string()
+fn require_token(state: &AppState, token: &str) -> Result<(), ApiError> {
+    if token == state.daemon_token {
+        Ok(())
     } else {
-        local_addr.ip().to_string()
+        Err(ApiError::unauthorized())
     }
+}
+
+fn metadata_host(mode: &str, lan_ips: &[String]) -> String {
+    match mode {
+        "local" => "127.0.0.1".to_string(),
+        "lan" => lan_ips
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "127.0.0.1".to_string()),
+        _ => "127.0.0.1".to_string(),
+    }
+}
+
+fn random_bearer_token() -> String {
+    let mut bytes = [0_u8; 32];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    URL_SAFE_NO_PAD.encode(bytes)
 }
 
 fn write_server_metadata(project_root: &Path, metadata: &ServerMetadata) -> Result<()> {
@@ -373,5 +406,142 @@ impl From<anyhow::Error> for ApiError {
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
         (self.status, Json(json!({ "error": self.message }))).into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::Path;
+    use std::time::Duration;
+
+    use futures_util::{SinkExt, StreamExt};
+    use serde_json::{json, Value};
+    use tempfile::TempDir;
+    use tokio::time::sleep;
+    use tokio_tungstenite::connect_async;
+    use tokio_tungstenite::tungstenite::Message as ClientMessage;
+
+    use super::{read_server_metadata, serve, server_metadata_path, ServeOptions};
+    use crate::auth;
+    use crate::store::MeshStore;
+
+    #[tokio::test]
+    async fn websocket_auth_replay_versioned_append_ack_and_broadcast() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Service");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+
+        MeshStore::open(project.path())
+            .unwrap()
+            .append_event(
+                "presence.join",
+                "repo:mesh-service",
+                "session:existing",
+                None,
+                json!({ "role": "lead" }),
+            )
+            .unwrap();
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+        }));
+
+        let metadata = wait_for_metadata(project.path()).await;
+        let durable_token =
+            auth::local_project_token(project.path(), Some(home.path().to_path_buf())).unwrap();
+        assert_ne!(metadata.local_token, durable_token);
+
+        let ws_url = format!(
+            "ws://{}:{}/ws?token={}&last_seq=0",
+            metadata.host, metadata.port, metadata.local_token
+        );
+        let (mut first, _) = connect_async(&ws_url).await.unwrap();
+        let replay = read_ws_json(&mut first).await;
+        assert_eq!(replay["v"], 1);
+        assert_eq!(replay["seq"], 1);
+        assert_eq!(replay["type"], "presence.join");
+        assert_eq!(replay["from"], "session:existing");
+
+        let (mut second, _) = connect_async(format!(
+            "ws://{}:{}/ws?token={}&last_seq=1",
+            metadata.host, metadata.port, metadata.local_token
+        ))
+        .await
+        .unwrap();
+
+        first
+            .send(ClientMessage::Text(
+                json!({
+                    "v": 1,
+                    "type": "message.sent",
+                    "room": "repo:mesh-service",
+                    "from": "session:first",
+                    "payload": { "text": "hello" }
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+
+        let ack = read_ws_json(&mut first).await;
+        assert_eq!(ack["v"], 1);
+        assert_eq!(ack["type"], "ack");
+        assert_eq!(ack["seq"], 2);
+        assert!(ack["id"].as_str().is_some());
+
+        let broadcast = read_ws_json(&mut second).await;
+        assert_eq!(broadcast["v"], 1);
+        assert_eq!(broadcast["seq"], 2);
+        assert_eq!(broadcast["type"], "message.sent");
+        assert_eq!(broadcast["from"], "session:first");
+
+        let events = MeshStore::open(project.path())
+            .unwrap()
+            .list_events_since(1)
+            .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "message.sent");
+
+        server.abort();
+    }
+
+    async fn wait_for_metadata(project: &Path) -> super::ServerMetadata {
+        for _ in 0..50 {
+            if server_metadata_path(project).is_file() {
+                return read_server_metadata(project).unwrap();
+            }
+            sleep(Duration::from_millis(20)).await;
+        }
+        panic!("server metadata was not written");
+    }
+
+    async fn read_ws_json<S>(socket: &mut S) -> Value
+    where
+        S: StreamExt<Item = Result<ClientMessage, tokio_tungstenite::tungstenite::Error>> + Unpin,
+    {
+        let message = tokio::time::timeout(Duration::from_secs(2), socket.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        match message {
+            ClientMessage::Text(text) => serde_json::from_str(&text).unwrap(),
+            other => panic!("expected websocket text frame, got {other:?}"),
+        }
+    }
+
+    fn write_project_config(project: &Path, name: &str) {
+        fs::create_dir_all(project.join(".workbench")).unwrap();
+        fs::write(
+            project.join(".workbench/config.json"),
+            format!(r#"{{"project":{{"name":"{name}"}}}}"#),
+        )
+        .unwrap();
     }
 }

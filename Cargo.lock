@@ -1869,7 +1869,7 @@ dependencies = [
  "tempfile",
  "time",
  "tokio",
- "tower-http",
+ "tokio-tungstenite",
  "uuid",
 ]
 

@@ -22,6 +22,9 @@ chk "ampersand mission rendered literally"  "grep -qF 'Privacy & speed.' '$TMP/C
 chk "config is valid JSON"       "python3 -m json.tool '$TMP/.workbench/config.json' >/dev/null"
 chk "config name == Acme"        "[ \"\$(python3 -c 'import json;print(json.load(open(\"$TMP/.workbench/config.json\"))[\"project\"][\"name\"])')\" = Acme ]"
 chk "manifest is valid JSON"     "python3 -m json.tool '$TMP/.workbench/manifest.json' >/dev/null"
+chk "scaffold gitignores mesh runtime" "grep -qxF '/.workbench/mesh/' '$TMP/.gitignore'"
+bash "$HERE/scripts/init.sh" --profile minimal --name "Acme" --mission "Privacy & speed." --launch "2027-01-01" --target "$TMP" >/dev/null 2>&1
+chk "mesh gitignore line not duplicated" "[ \"\$(grep -cxF '/.workbench/mesh/' '$TMP/.gitignore')\" = 1 ]"
 chk "manifest hash matches file" "python3 - <<PY
 import json,hashlib
 m=json.load(open('$TMP/.workbench/manifest.json'))
@@ -50,6 +53,7 @@ rm -rf "$TMP2"
 TMPW="$(mktemp -d)"
 bash "$HERE/scripts/init.sh" --profile full --name "Wb" --mission m --target "$TMPW" >/dev/null 2>&1
 chk "scaffolds .workbench/ not .initlab/" "[ -f '$TMPW/.workbench/config.json' ] && [ ! -d '$TMPW/.initlab' ]"
+chk "full scaffold gitignores mesh runtime" "grep -qxF '/.workbench/mesh/' '$TMPW/.gitignore'"
 rm -rf "$TMPW"
 
 [ "$fail" = 0 ] && echo "PASS: init" || { echo "init test failed"; exit 1; }

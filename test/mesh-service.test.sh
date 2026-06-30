@@ -15,7 +15,7 @@ BIN="$HERE/target/debug/workbench-mesh"
 
 "$BIN" serve --target "$TMP" --home "$HOME_TMP" --bind local --port 0 --pid-file "$PIDF" > "$LOG" 2>&1 &
 for _ in $(seq 1 50); do
-  [ -f "$TMP/.workbench/mesh/server.json" ] && break
+  [ -f "$TMP/.workbench/mesh/server.json" ] && [ -f "$PIDF" ] && break
   sleep 0.1
 done
 
@@ -23,6 +23,8 @@ PORT="$(sed -n 's/.*"port":\([0-9][0-9]*\).*/\1/p' "$TMP/.workbench/mesh/server.
 TOKEN="$(sed -n 's/.*"local_token":"\([^"]*\)".*/\1/p' "$TMP/.workbench/mesh/server.json" | head -1)"
 chk "server wrote port" "[ -n '$PORT' ]"
 chk "server wrote local token" "[ -n '$TOKEN' ]"
+chk "server wrote pid file" "[ -s '$PIDF' ]"
+chk "scaffold ignores mesh runtime" "grep -qxF '/.workbench/mesh/' '$TMP/.gitignore'"
 
 HEALTH="$(curl -fsS "http://127.0.0.1:$PORT/health")"
 chk "health returns ok" "printf '%s' \"\$HEALTH\" | grep -q '\"ok\":true'"

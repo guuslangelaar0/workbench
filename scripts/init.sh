@@ -60,6 +60,12 @@ done
 # solo uses flat tasks (decomposition=tasks) and gets no epics dir.
 _dec="$(wb_level_dials "$LEVEL" | sed -n 's/^decomposition=//p')"
 [ -n "$_dec" ] && [ "$_dec" != tasks ] && mkdir -p "$TARGET/.claude/epics"
+GI="$TARGET/.gitignore"
+MESH_GITIGNORE_ACTION="already-present"
+if ! { [ -f "$GI" ] && grep -qxF '/.workbench/mesh/' "$GI"; }; then
+  printf '\n# workbench mesh runtime state — never commit\n/.workbench/mesh/\n' >> "$GI"
+  MESH_GITIGNORE_ACTION="appended"
+fi
 # 2. task README (merge) + _next-id (once) — never clobber existing
 copy_new "$TMPL_MIN/tasks/README.md" "$TARGET/.claude/tasks/README.md" ".claude/tasks/README.md"
 copy_new "$TMPL_MIN/tasks/_next-id"  "$TARGET/.claude/tasks/_next-id"  ".claude/tasks/_next-id"
@@ -75,7 +81,6 @@ if [ "$PROFILE" = full ]; then
   done
   chmod +x "$TARGET/scripts/coord/wb-coord" 2>/dev/null || true
   # coordination runtime state (heartbeats, locks) must never be committed (idempotent)
-  GI="$TARGET/.gitignore"
   GITIGNORE_ACTION="already-present"
   if ! { [ -f "$GI" ] && grep -qxF '/.claude/locks/' "$GI"; }; then
     printf '\n# workbench coordination runtime state (heartbeats, locks) — never commit\n/.claude/locks/\n' >> "$GI"
@@ -229,8 +234,9 @@ if [ ! -f "$TARGET/.workbench/manifest.json" ]; then
   fi
   GITIGNORE_BLOCKS=""
   GIT_HOOKS=""
+  GITIGNORE_BLOCKS="{ \"path\": \".gitignore\", \"marker\": \"workbench mesh runtime state\", \"lines\": [\"/.workbench/mesh/\"], \"action\": \"${MESH_GITIGNORE_ACTION:-already-present}\" }"
   if [ "$PROFILE" = full ]; then
-    GITIGNORE_BLOCKS="{ \"path\": \".gitignore\", \"marker\": \"workbench coordination runtime state\", \"lines\": [\"/.claude/locks/\"], \"action\": \"${GITIGNORE_ACTION:-already-present}\" }"
+    GITIGNORE_BLOCKS="$GITIGNORE_BLOCKS, { \"path\": \".gitignore\", \"marker\": \"workbench coordination runtime state\", \"lines\": [\"/.claude/locks/\"], \"action\": \"${GITIGNORE_ACTION:-already-present}\" }"
     if [ -d "$TARGET/.git" ]; then
       GIT_HOOKS="{ \"type\": \"pre-commit\", \"path\": \".git/hooks/pre-commit\", \"marker\": \"wb-coord commit guard (B)\", \"action\": \"installed\" }"
     fi
