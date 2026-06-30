@@ -24,6 +24,15 @@ enum Command {
     Status(ClientArgs),
     Who(ClientArgs),
     Bench(BenchArgs),
+    Room(RoomCommand),
+    Message(MessageArgs),
+    Ask(AskArgs),
+    Handoff(HandoffArgs),
+    Availability(AvailabilityArgs),
+    Doing(DoingArgs),
+    Watch(WatchArgs),
+    Actor(ActorCommand),
+    Snapshot(SnapshotCommand),
 }
 
 #[derive(Debug, Args)]
@@ -60,6 +69,39 @@ struct InviteCommand {
 enum InviteSubcommand {
     Create(InviteCreateArgs),
     Accept(InviteAcceptArgs),
+}
+
+#[derive(Debug, Args)]
+struct RoomCommand {
+    #[command(subcommand)]
+    command: RoomSubcommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum RoomSubcommand {
+    Create(RoomCreateArgs),
+}
+
+#[derive(Debug, Args)]
+struct ActorCommand {
+    #[command(subcommand)]
+    command: ActorSubcommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum ActorSubcommand {
+    Spawn(ActorSpawnArgs),
+}
+
+#[derive(Debug, Args)]
+struct SnapshotCommand {
+    #[command(subcommand)]
+    command: SnapshotSubcommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum SnapshotSubcommand {
+    Statusline(ClientArgs),
 }
 
 #[derive(Debug, Args)]
@@ -166,6 +208,97 @@ struct BenchArgs {
     messages: u64,
 }
 
+#[derive(Debug, Args)]
+struct RoomCreateArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    #[arg(long)]
+    name: String,
+}
+
+#[derive(Debug, Args)]
+struct MessageArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    #[arg(long = "to")]
+    to_actor: String,
+    #[arg(long)]
+    text: String,
+}
+
+#[derive(Debug, Args)]
+struct AskArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    #[arg(long = "to")]
+    to_actor: String,
+    #[arg(long)]
+    question: String,
+}
+
+#[derive(Debug, Args)]
+struct HandoffArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    #[arg(long)]
+    task_id: String,
+    #[arg(long = "to")]
+    to_actor: String,
+}
+
+#[derive(Debug, Args)]
+struct AvailabilityArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    state: String,
+    #[arg(long)]
+    reason: Option<String>,
+}
+
+#[derive(Debug, Args)]
+struct DoingArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    text: String,
+}
+
+#[derive(Debug, Args)]
+struct WatchArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    actor: String,
+}
+
+#[derive(Debug, Args)]
+struct ActorSpawnArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    #[arg(long)]
+    kind: String,
+    #[arg(long)]
+    parent: String,
+    #[arg(long)]
+    purpose: String,
+    #[arg(long)]
+    task_id: Option<String>,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -186,6 +319,23 @@ async fn main() -> Result<()> {
         Command::Status(args) => client::status(args.target, args.home).await,
         Command::Who(args) => client::who(args.target, args.home).await,
         Command::Bench(args) => client::bench(args.target, args.home, args.messages).await,
+        Command::Room(room) => run_room(room),
+        Command::Message(args) => {
+            client::send_message(args.target, args.home, args.to_actor, args.text)
+        }
+        Command::Ask(args) => {
+            client::ask_status(args.target, args.home, args.to_actor, args.question)
+        }
+        Command::Handoff(args) => {
+            client::handoff_task(args.target, args.home, args.task_id, args.to_actor)
+        }
+        Command::Availability(args) => {
+            client::set_availability(args.target, args.home, args.state, args.reason)
+        }
+        Command::Doing(args) => client::set_doing(args.target, args.home, args.text),
+        Command::Watch(args) => client::watch_actor(args.target, args.home, args.actor),
+        Command::Actor(actor) => run_actor(actor),
+        Command::Snapshot(snapshot) => run_snapshot(snapshot),
     }
 }
 
@@ -207,6 +357,31 @@ fn run_invite(invite_command: InviteCommand) -> Result<()> {
     match invite_command.command {
         InviteSubcommand::Create(args) => invite_create(args),
         InviteSubcommand::Accept(args) => invite_accept(args),
+    }
+}
+
+fn run_room(room_command: RoomCommand) -> Result<()> {
+    match room_command.command {
+        RoomSubcommand::Create(args) => client::create_room(args.target, args.home, args.name),
+    }
+}
+
+fn run_actor(actor_command: ActorCommand) -> Result<()> {
+    match actor_command.command {
+        ActorSubcommand::Spawn(args) => client::spawn_actor(
+            args.target,
+            args.home,
+            args.kind,
+            args.parent,
+            args.purpose,
+            args.task_id,
+        ),
+    }
+}
+
+fn run_snapshot(snapshot_command: SnapshotCommand) -> Result<()> {
+    match snapshot_command.command {
+        SnapshotSubcommand::Statusline(args) => client::snapshot_statusline(args.target, args.home),
     }
 }
 
