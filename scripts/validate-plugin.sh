@@ -11,7 +11,7 @@ ROOT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 command -v python3 >/dev/null 2>&1 || { echo "validate-plugin: python3 required" >&2; exit 3; }
 
 python3 - "$ROOT" <<'PY'
-import json, os, sys, glob
+import json, os, sys, glob, subprocess
 root = sys.argv[1]
 problems = []
 def err(m): problems.append(m)
@@ -75,6 +75,32 @@ surfaces = (glob.glob(os.path.join(root, "commands", "*.md"))
             + glob.glob(os.path.join(root, "agents", "*.md")))
 if not surfaces:
     err("plugin exposes nothing — found no commands/*.md, skills/*/SKILL.md, or agents/*.md")
+
+mesh_command = os.path.join(root, "commands", "mesh.md")
+mesh_script = os.path.join(root, "scripts", "mesh.sh")
+mesh_launcher = os.path.join(root, "bin", "workbench-mesh")
+mesh_skill = os.path.join(root, "skills", "mesh", "SKILL.md")
+
+if os.path.exists(mesh_command):
+    if not os.path.isfile(mesh_launcher):
+        err("commands/mesh.md exists but bin/workbench-mesh is missing")
+    elif not os.access(mesh_launcher, os.X_OK):
+        err("commands/mesh.md exists but bin/workbench-mesh is not executable")
+    if not os.path.isfile(mesh_script):
+        err("commands/mesh.md exists but scripts/mesh.sh is missing")
+    if not os.path.isfile(mesh_skill):
+        err("commands/mesh.md exists but skills/mesh/SKILL.md is missing")
+
+if os.path.exists(mesh_script):
+    result = subprocess.run(
+        ["bash", "-n", mesh_script],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        err(f"scripts/mesh.sh fails bash -n: {detail}")
 
 if problems:
     print("PLUGIN NOT PUBLISHABLE:")

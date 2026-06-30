@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+os="$(uname -s)"
+arch="$(uname -m)"
+case "$os:$arch" in
+  Darwin:arm64)  target="aarch64-apple-darwin" ;;
+  Darwin:x86_64) target="x86_64-apple-darwin" ;;
+  Linux:aarch64|Linux:arm64) target="aarch64-unknown-linux-gnu" ;;
+  Linux:x86_64) target="x86_64-unknown-linux-gnu" ;;
+  *) echo "workbench-mesh: unsupported platform $os/$arch" >&2; exit 70 ;;
+esac
+
+bin="$ROOT/bin/workbench-mesh.d/$target/workbench-mesh"
+if [ -x "$bin" ]; then
+  exec "$bin" "$@"
+fi
+
+if [ -x "$ROOT/target/release/workbench-mesh" ]; then
+  exec "$ROOT/target/release/workbench-mesh" "$@"
+fi
+if [ -x "$ROOT/target/debug/workbench-mesh" ]; then
+  exec "$ROOT/target/debug/workbench-mesh" "$@"
+fi
+
+echo "workbench-mesh: packaged binary missing for $target" >&2
+echo "run: cargo build -p workbench-mesh --release" >&2
+exit 69

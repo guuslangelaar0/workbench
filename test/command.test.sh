@@ -18,5 +18,8 @@ chk "lead command exists"       "[ -f '$HERE/commands/lead.md' ]"
 chk "lead command uses lead.sh"  "grep -q 'scripts/lead.sh' '$HERE/commands/lead.md'"
 chk "park command exists"       "[ -f '$HERE/commands/park.md' ]"
 chk "park command uses park.sh"  "grep -q 'scripts/park.sh' '$HERE/commands/park.md'"
+chk "mesh command exists"       "[ -f '$HERE/commands/mesh.md' ]"
+chk "mesh command uses mesh.sh"  "grep -q 'scripts/mesh.sh' '$HERE/commands/mesh.md'"
+chk "mesh command blocks public exposure" "grep -qi 'Never expose public internet' '$HERE/commands/mesh.md'"
 
 [ "$fail" = 0 ] && echo "PASS: command" || { echo "command test failed"; exit 1; }
