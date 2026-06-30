@@ -10,6 +10,10 @@ chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; 
 bash "$HERE/scripts/init.sh" --name "MeshAuth" --mission "Test." --target "$TMP" --profile full --level crew >/dev/null 2>&1
 BIN="$HERE/target/debug/workbench-mesh"
 
+RC=0
+"$BIN" invite create --target "$TMP" --home "$HOME_TMP" --role worker --ttl-seconds 900 --max-uses 1 >"$TMP/prebootstrap.out" 2>&1 || RC=$?
+chk "invite create before bootstrap fails" "[ '$RC' -ne 0 ] && grep -q 'local owner/operator credential required' '$TMP/prebootstrap.out'"
+
 "$BIN" auth bootstrap --target "$TMP" --home "$HOME_TMP" > "$TMP/bootstrap.out"
 chk "bootstrap prints authenticated local user" "grep -q 'local credential ready' '$TMP/bootstrap.out'"
 chk "device key stored outside repo" "find '$HOME_TMP/mesh/devices' -type f -name '*.key' | grep -q ."

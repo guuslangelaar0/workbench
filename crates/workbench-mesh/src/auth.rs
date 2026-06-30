@@ -108,7 +108,8 @@ pub fn create_invite(
         bail!("max_uses must be positive");
     }
 
-    let _ = paths(home)?;
+    let auth_paths = paths(home)?;
+    require_local_invite_authority(project_root, &auth_paths)?;
     let token = format!("wb_invite_{}", random_secret());
     let expires_at = (OffsetDateTime::now_utc() + duration_from_secs(ttl_seconds)?)
         .format(&Rfc3339)
@@ -292,6 +293,42 @@ fn resolve_home(home: Option<PathBuf>) -> Result<PathBuf> {
     Ok(PathBuf::from(home).join(".workbench"))
 }
 
+fn require_local_invite_authority(project_root: &Path, auth_paths: &AuthPaths) -> Result<()> {
+    let project_id = project_id(project_root)?;
+    for entry in fs::read_dir(&auth_paths.project_dir).with_context(|| {
+        format!(
+            "read project credentials {}",
+            auth_paths.project_dir.display()
+        )
+    })? {
+        let entry = entry.with_context(|| {
+            format!(
+                "read project credential entry from {}",
+                auth_paths.project_dir.display()
+            )
+        })?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let Ok(content) = fs::read(&path) else {
+            continue;
+        };
+        let Ok(credential) = serde_json::from_slice::<ProjectCredential>(&content) else {
+            continue;
+        };
+
+        if credential.project == project_id
+            && matches!(credential.role.as_str(), "owner" | "operator")
+        {
+            return Ok(());
+        }
+    }
+
+    bail!("local owner/operator credential required")
+}
+
 fn project_id(project_root: &Path) -> Result<String> {
     let config_path = project_root.join(".workbench/config.json");
     if config_path.is_file() {
@@ -434,8 +471,9 @@ fn write_secret_file(path: &Path, content: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{bootstrap, sanitize_name, validate_role, ProjectCredential};
+    use super::{bootstrap, create_invite, sanitize_name, validate_role, ProjectCredential};
     use std::fs;
+    use std::path::Path;
 
     #[test]
     fn validates_known_roles() {
@@ -458,12 +496,7 @@ mod tests {
     fn bootstrap_project_credential_uses_owner_role() {
         let project = tempfile::tempdir().unwrap();
         let home = tempfile::tempdir().unwrap();
-        fs::create_dir_all(project.path().join(".workbench")).unwrap();
-        fs::write(
-            project.path().join(".workbench/config.json"),
-            r#"{"project":{"name":"Mesh Auth"}}"#,
-        )
-        .unwrap();
+        write_project_config(project.path(), "Mesh Auth");
 
         bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
 
@@ -471,6 +504,90 @@ mod tests {
         let credential: ProjectCredential =
             serde_json::from_slice(&fs::read(cred_path).unwrap()).unwrap();
         assert_eq!(credential.role, "owner");
+    }
+
+    #[test]
+    fn create_invite_requires_local_owner_or_operator_credential() {
+        let project = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Auth");
+
+        let err = create_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .err()
+        .unwrap();
+
+        assert_eq!(err.to_string(), "local owner/operator credential required");
+    }
+
+    #[test]
+    fn create_invite_allows_bootstrap_owner_credential() {
+        let project = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Auth");
+        bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+
+        let invite = create_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+
+        assert_eq!(invite.role, "worker");
+        assert!(invite.token.starts_with("wb_invite_"));
+    }
+
+    #[test]
+    fn create_invite_rejects_worker_and_observer_project_credentials() {
+        for role in ["worker", "observer"] {
+            let project = tempfile::tempdir().unwrap();
+            let home = tempfile::tempdir().unwrap();
+            write_project_config(project.path(), "Mesh Auth");
+            write_project_credential(home.path(), "device.cred", "mesh-auth", role);
+
+            let err = create_invite(
+                project.path(),
+                Some(home.path().to_path_buf()),
+                "worker",
+                900,
+                1,
+            )
+            .err()
+            .unwrap();
+
+            assert_eq!(
+                err.to_string(),
+                "local owner/operator credential required",
+                "{role} credential must not create invites"
+            );
+        }
+    }
+
+    #[test]
+    fn create_invite_allows_operator_project_credential() {
+        let project = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Auth");
+        write_project_credential(home.path(), "operator.cred", "mesh-auth", "operator");
+
+        let invite = create_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "observer",
+            900,
+            1,
+        )
+        .unwrap();
+
+        assert_eq!(invite.role, "observer");
     }
 
     #[cfg(unix)]
@@ -495,5 +612,29 @@ mod tests {
     fn sanitizes_project_names() {
         assert_eq!(sanitize_name("Mesh Auth"), "mesh-auth");
         assert_eq!(sanitize_name("###"), "project");
+    }
+
+    fn write_project_config(project: &Path, name: &str) {
+        fs::create_dir_all(project.join(".workbench")).unwrap();
+        fs::write(
+            project.join(".workbench/config.json"),
+            format!(r#"{{"project":{{"name":"{name}"}}}}"#),
+        )
+        .unwrap();
+    }
+
+    fn write_project_credential(home: &Path, filename: &str, project: &str, role: &str) {
+        let project_dir = home.join("mesh/projects");
+        fs::create_dir_all(&project_dir).unwrap();
+        let credential = ProjectCredential {
+            project: project.to_string(),
+            role: role.to_string(),
+            token: "test-token".to_string(),
+        };
+        fs::write(
+            project_dir.join(filename),
+            serde_json::to_string_pretty(&credential).unwrap(),
+        )
+        .unwrap();
     }
 }
