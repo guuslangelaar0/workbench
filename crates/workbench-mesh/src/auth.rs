@@ -15,7 +15,7 @@ use std::time::Duration;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
-use workbench_mesh::store::MeshStore;
+use crate::store::MeshStore;
 
 pub struct AuthPaths {
     pub home: PathBuf,
@@ -257,19 +257,37 @@ pub fn accept_invite(
 }
 
 pub fn check(project_root: &Path, home: Option<PathBuf>, token: &str) -> Result<String> {
+    let project_id = project_id(project_root)?;
+    let role = project_token_role(project_root, home, token)?;
+
+    Ok(format!("token valid\nproject: {project_id}\nrole: {role}"))
+}
+
+pub fn project_token_role(
+    project_root: &Path,
+    home: Option<PathBuf>,
+    token: &str,
+) -> Result<String> {
     let auth_paths = paths(home)?;
     let project_id = project_id(project_root)?;
 
     for credential in project_credentials_for(&auth_paths, &project_id)? {
         if credential.project == project_id && credential.token == token {
-            return Ok(format!(
-                "token valid\nproject: {}\nrole: {}",
-                credential.project, credential.role
-            ));
+            return Ok(credential.role);
         }
     }
 
     bail!("token rejected")
+}
+
+pub fn local_project_token(project_root: &Path, home: Option<PathBuf>) -> Result<String> {
+    let auth_paths = paths(home)?;
+    let project_id = project_id(project_root)?;
+    project_credentials_for(&auth_paths, &project_id)?
+        .into_iter()
+        .find(|credential| credential.project == project_id)
+        .map(|credential| credential.token)
+        .ok_or_else(|| anyhow::anyhow!("local project credential required"))
 }
 
 pub fn require_local_project_credential(project_root: &Path, home: Option<PathBuf>) -> Result<()> {

@@ -3,8 +3,9 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand};
 
-mod auth;
-
+use workbench_mesh::auth;
+use workbench_mesh::client;
+use workbench_mesh::server::{self, ServeOptions};
 use workbench_mesh::store::MeshStore;
 
 #[derive(Debug, Parser)]
@@ -19,6 +20,10 @@ enum Command {
     Event(EventCommand),
     Auth(AuthCommand),
     Invite(InviteCommand),
+    Serve(ServeArgs),
+    Status(ClientArgs),
+    Who(ClientArgs),
+    Bench(BenchArgs),
 }
 
 #[derive(Debug, Args)]
@@ -129,12 +134,58 @@ struct InviteAcceptArgs {
     device: String,
 }
 
-fn main() -> Result<()> {
+#[derive(Debug, Args)]
+struct ServeArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    #[arg(long, default_value = "local")]
+    bind: String,
+    #[arg(long, default_value_t = 0)]
+    port: u16,
+    #[arg(long)]
+    pid_file: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+struct ClientArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+struct BenchArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    #[arg(long, default_value_t = 100)]
+    messages: u64,
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Event(event) => run_event(event),
         Command::Auth(auth) => run_auth(auth),
         Command::Invite(invite) => run_invite(invite),
+        Command::Serve(args) => {
+            server::serve(ServeOptions {
+                project_root: args.target,
+                home: args.home,
+                bind: args.bind,
+                port: args.port,
+                pid_file: args.pid_file,
+            })
+            .await
+        }
+        Command::Status(args) => client::status(args.target, args.home).await,
+        Command::Who(args) => client::who(args.target, args.home).await,
+        Command::Bench(args) => client::bench(args.target, args.home, args.messages).await,
     }
 }
 
