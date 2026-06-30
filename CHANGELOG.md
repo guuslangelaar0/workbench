@@ -6,6 +6,10 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-30
+
+The lead-purpose release. Workbench now treats a lead as a durable, named actor with one current purpose, and it gives that lead a native parking path for unrelated work so feature branches stay focused without losing useful bugs, follow-ups, or ideas.
+
 ### Added
 - **Lead purpose + task-first parking.** Lead sessions now get a durable purpose under `.workbench/leads/` via `scripts/lead.sh`, `/workbench:lead`, dispatch/teamlead integration, and prompt/session hooks that re-inject the purpose and session title. When unrelated work appears mid-feature, `/workbench:park` creates a real backlog task through `scripts/park.sh`, preserving origin session/task/purpose/branch metadata (and any captured context) so the current feature stays focused while the tangent remains visible to Mission Control and the loop. Covered by new `lead-purpose` and `park` shell suites plus hook/command/skill structural checks.
 
