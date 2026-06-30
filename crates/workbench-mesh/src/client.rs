@@ -222,8 +222,7 @@ pub fn spawn_actor(
 
 pub fn snapshot_statusline(project_root: PathBuf, home: Option<PathBuf>) -> Result<()> {
     auth::require_local_project_credential(&project_root, home.clone())?;
-    let written = statusline::write_snapshot(&project_root, home)?;
-    println!("{}", written.display());
+    statusline::write_snapshot(&project_root, home)?;
     Ok(())
 }
 

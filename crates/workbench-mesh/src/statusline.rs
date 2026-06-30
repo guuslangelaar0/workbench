@@ -54,9 +54,9 @@ pub fn project_events_snapshot(project: &str, events: &[EventEnvelope]) -> Statu
     let mut unread_mentions = 0;
 
     for event in events {
-        collect_actor(&mut active, &event.from);
+        collect_live_actor(&mut active, &mut stale, &event.from);
         if let Some(to) = &event.to {
-            collect_actor(&mut active, to);
+            collect_live_actor(&mut active, &mut stale, to);
         }
 
         match event.event_type.as_str() {
@@ -67,7 +67,7 @@ pub fn project_events_snapshot(project: &str, events: &[EventEnvelope]) -> Statu
             }
             "actor.spawned" => {
                 if let Some(actor) = event.payload.get("actor").and_then(|value| value.as_str()) {
-                    active.insert(actor.to_string());
+                    collect_live_actor(&mut active, &mut stale, actor);
                     if let Some(purpose) = event
                         .payload
                         .get("purpose")
@@ -146,9 +146,10 @@ pub fn render_compact(snapshot: &StatuslineSnapshot) -> String {
     )
 }
 
-fn collect_actor(actors: &mut BTreeSet<String>, value: &str) {
+fn collect_live_actor(active: &mut BTreeSet<String>, stale: &mut BTreeSet<String>, value: &str) {
     if value.starts_with("session:") || value.starts_with("actor:") {
-        actors.insert(value.to_string());
+        active.insert(value.to_string());
+        stale.remove(value);
     }
 }
 
@@ -199,5 +200,59 @@ fn sanitize_name(value: &str) -> String {
         "project".to_string()
     } else {
         trimmed.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::{json, Value};
+
+    use crate::protocol::EventEnvelope;
+
+    use super::project_events_snapshot;
+
+    #[test]
+    fn later_actor_activity_removes_actor_from_stale_set() {
+        let events = vec![
+            event(
+                1,
+                "actor.stale",
+                "session:worker",
+                None,
+                json!({ "reason": "missed heartbeat" }),
+            ),
+            event(
+                2,
+                "presence.heartbeat",
+                "session:worker",
+                None,
+                json!({ "availability": "available" }),
+            ),
+        ];
+
+        let snapshot = project_events_snapshot("meshops", &events);
+
+        assert_eq!(snapshot.active_count, 1);
+        assert_eq!(snapshot.stale_count, 0);
+    }
+
+    fn event(
+        seq: u64,
+        event_type: &str,
+        from: &str,
+        to: Option<&str>,
+        payload: Value,
+    ) -> EventEnvelope {
+        EventEnvelope {
+            v: 1,
+            id: format!("event-{seq}"),
+            seq,
+            event_type: event_type.to_string(),
+            room: "presence".to_string(),
+            from: from.to_string(),
+            to: to.map(str::to_string),
+            ts: "2026-01-01T00:00:00Z".to_string(),
+            payload,
+        }
     }
 }
