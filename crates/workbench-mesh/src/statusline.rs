@@ -53,7 +53,6 @@ pub fn project_events_snapshot(project: &str, events: &[EventEnvelope]) -> Statu
     let mut doing_by_actor = BTreeMap::new();
     let mut latest_availability = None;
     let mut latest_doing = None;
-    let mut latest_purpose = None;
     let mut unread_mentions = 0;
 
     for event in events {
@@ -77,8 +76,7 @@ pub fn project_events_snapshot(project: &str, events: &[EventEnvelope]) -> Statu
                         .and_then(|value| value.as_str())
                     {
                         let purpose = purpose.to_string();
-                        actor_purposes.insert(actor.to_string(), purpose.clone());
-                        latest_purpose = Some(purpose);
+                        actor_purposes.insert(actor.to_string(), purpose);
                     }
                 }
             }
@@ -111,8 +109,7 @@ pub fn project_events_snapshot(project: &str, events: &[EventEnvelope]) -> Statu
                     .and_then(|value| value.as_str())
                 {
                     let purpose = purpose.to_string();
-                    actor_purposes.insert(event.from.clone(), purpose.clone());
-                    latest_purpose = Some(purpose);
+                    actor_purposes.insert(event.from.clone(), purpose);
                 }
             }
             "message.sent" => {
@@ -138,10 +135,7 @@ pub fn project_events_snapshot(project: &str, events: &[EventEnvelope]) -> Statu
         .iter()
         .find_map(|name| actor_identity_from_room(name))
         .unwrap_or_else(|| ("session:lead".to_string(), "session:lead".to_string()));
-    let purpose = actor_purposes
-        .get(&current_actor_id)
-        .cloned()
-        .or(latest_purpose);
+    let purpose = actor_purposes.get(&current_actor_id).cloned();
     let availability = availability_by_actor
         .get(&current_actor_id)
         .cloned()
@@ -337,6 +331,37 @@ mod tests {
             snapshot.doing.as_deref(),
             Some("running checkout retry tests")
         );
+    }
+
+    #[test]
+    fn spawned_actor_purpose_does_not_become_current_actor_purpose() {
+        let events = vec![
+            event(
+                1,
+                "room.created",
+                "session:lead",
+                None,
+                json!({ "name": "lead:checkout" }),
+            ),
+            event(
+                2,
+                "actor.spawned",
+                "session:lead",
+                Some("session:verifier"),
+                json!({
+                    "actor": "session:verifier",
+                    "kind": "verifier",
+                    "parent": "session:lead",
+                    "purpose": "verify task 0042",
+                    "task_id": "0042"
+                }),
+            ),
+        ];
+
+        let snapshot = project_events_snapshot("meshops", &events);
+
+        assert_eq!(snapshot.current_actor, "checkout lead");
+        assert_eq!(snapshot.purpose, None);
     }
 
     fn event(

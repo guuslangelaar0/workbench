@@ -93,6 +93,10 @@ expected = {
 for key, value in expected.items():
     if snapshot.get(key) != value:
         raise SystemExit(f'{key}: expected {value!r}, got {snapshot.get(key)!r}')
+
+purpose = snapshot.get('purpose')
+if purpose is not None:
+    raise SystemExit('purpose: expected None, got %r' % (purpose,))
 PY"
 
 [ "$fail" = 0 ] && echo "PASS: mesh-ops" || { echo "mesh-ops test failed"; exit 1; }
