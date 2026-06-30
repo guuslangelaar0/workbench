@@ -3,3 +3,5 @@
 /.workbench/locks/
 .superpowers/
 .worktrees/
+/target/
+/.workbench/mesh/
