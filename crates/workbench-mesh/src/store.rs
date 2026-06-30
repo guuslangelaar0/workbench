@@ -54,24 +54,19 @@ impl MeshStore {
 
     pub fn list_events_since(&self, since: u64) -> Result<Vec<EventEnvelope>> {
         let path = self.root.join("events.jsonl");
-        let file = File::open(&path)
+        let file = OpenOptions::new()
+            .read(true)
+            .open(&path)
             .with_context(|| format!("open event log {}", path.display()))?;
-        let reader = BufReader::new(file);
-        let mut events = Vec::new();
+        file.lock_shared()
+            .with_context(|| format!("lock shared {}", path.display()))?;
 
-        for line in reader.lines() {
-            let line = line.with_context(|| format!("read line from {}", path.display()))?;
-            if line.trim().is_empty() {
-                continue;
-            }
-            let event: EventEnvelope = serde_json::from_str(&line)
-                .with_context(|| format!("parse event from {}", path.display()))?;
-            if event.seq > since {
-                events.push(event);
-            }
-        }
+        let result = read_events_since(&file, &path, since);
 
-        Ok(events)
+        file.unlock()
+            .with_context(|| format!("unlock {}", path.display()))?;
+
+        result
     }
 
     pub fn append_audit(&self, action: &str, actor: &str, payload: Value) -> Result<EventEnvelope> {
@@ -127,6 +122,31 @@ fn next_seq(file: &File, path: &Path) -> Result<u64> {
     Ok(seq + 1)
 }
 
+fn read_events_since(file: &File, path: &Path, since: u64) -> Result<Vec<EventEnvelope>> {
+    let mut reader_file = file
+        .try_clone()
+        .with_context(|| format!("clone {}", path.display()))?;
+    reader_file
+        .seek(SeekFrom::Start(0))
+        .with_context(|| format!("rewind {}", path.display()))?;
+    let reader = BufReader::new(reader_file);
+    let mut events = Vec::new();
+
+    for line in reader.lines() {
+        let line = line.with_context(|| format!("read line from {}", path.display()))?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let event: EventEnvelope = serde_json::from_str(&line)
+            .with_context(|| format!("parse event from {}", path.display()))?;
+        if event.seq > since {
+            events.push(event);
+        }
+    }
+
+    Ok(events)
+}
+
 fn append_jsonl(file: &mut File, path: &Path, event: &EventEnvelope) -> Result<()> {
     serde_json::to_writer(&mut *file, event).context("serialize event")?;
     file.write_all(b"\n")
@@ -164,9 +184,14 @@ fn append_locked_jsonl(
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    use std::sync::mpsc;
     use std::sync::{Arc, Barrier};
     use std::thread;
+    use std::time::Duration;
 
+    use fs2::FileExt;
     use serde_json::json;
     use tempfile::TempDir;
 
@@ -248,5 +273,58 @@ mod tests {
 
         assert_eq!(unique.len(), writers, "duplicate sequences: {seqs:?}");
         assert_eq!(unique.into_iter().collect::<Vec<_>>(), (1..=writers as u64).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn list_events_since_waits_for_writer_lock_before_parsing() {
+        let temp = TempDir::new().unwrap();
+        let store = MeshStore::open(temp.path()).unwrap();
+        store
+            .append_event(
+                "presence.join",
+                "repo:test",
+                "session:lead",
+                None,
+                json!({ "role": "lead" }),
+            )
+            .unwrap();
+
+        let log_path = temp.path().join(".workbench/mesh/events.jsonl");
+        let mut writer = OpenOptions::new()
+            .read(true)
+            .append(true)
+            .open(&log_path)
+            .unwrap();
+        writer.lock_exclusive().unwrap();
+        writer
+            .write_all(br#"{"v":1,"id":"partial","seq":2,"type":"message.sent""#)
+            .unwrap();
+        writer.flush().unwrap();
+
+        let project_root = temp.path().to_path_buf();
+        let (tx, rx) = mpsc::channel();
+        let reader = thread::spawn(move || {
+            let store = MeshStore::open(project_root).unwrap();
+            tx.send(store.list_events_since(0)).unwrap();
+        });
+
+        assert!(
+            rx.recv_timeout(Duration::from_millis(200)).is_err(),
+            "reader returned before writer released its lock"
+        );
+
+        writer
+            .write_all(br#","room":"repo:test","from":"session:lead","ts":"2026-01-01T00:00:00Z","payload":{"text":"status?"}}"#)
+            .unwrap();
+        writer.write_all(b"\n").unwrap();
+        writer.flush().unwrap();
+        writer.unlock().unwrap();
+
+        let listed = rx.recv_timeout(Duration::from_secs(1)).unwrap().unwrap();
+        reader.join().unwrap();
+
+        assert_eq!(listed.len(), 2);
+        assert_eq!(listed[1].seq, 2);
+        assert_eq!(listed[1].event_type, "message.sent");
     }
 }
