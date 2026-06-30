@@ -150,8 +150,12 @@ pub fn read_server_metadata(project_root: &Path) -> Result<ServerMetadata> {
     serde_json::from_str(&content).with_context(|| format!("parse {}", path.display()))
 }
 
-async fn health() -> Json<Value> {
-    Json(json!({ "ok": true }))
+async fn health(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    require_bearer(&state, &headers)?;
+    Ok(Json(json!({ "ok": true })))
 }
 
 async fn api_state(

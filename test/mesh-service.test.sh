@@ -26,8 +26,13 @@ chk "server wrote local token" "[ -n '$TOKEN' ]"
 chk "server wrote pid file" "[ -s '$PIDF' ]"
 chk "scaffold ignores mesh runtime" "grep -qxF '/.workbench/mesh/' '$TMP/.gitignore'"
 
-HEALTH="$(curl -fsS "http://127.0.0.1:$PORT/health")"
-chk "health returns ok" "printf '%s' \"\$HEALTH\" | grep -q '\"ok\":true'"
+HEALTH="$(curl -fsS "http://127.0.0.1:$PORT/health" -H "Authorization: Bearer $TOKEN")"
+chk "authenticated health returns ok" "printf '%s' \"\$HEALTH\" | grep -q '\"ok\":true'"
+
+UNAUTH_HEALTH_RC=0
+curl -fsS "http://127.0.0.1:$PORT/health" >/tmp/mesh.unauth-health.$$ 2>&1 || UNAUTH_HEALTH_RC=$?
+chk "health rejects missing auth" "[ '$UNAUTH_HEALTH_RC' -ne 0 ]"
+rm -f /tmp/mesh.unauth-health.$$
 
 POST="$(curl -fsS -X POST "http://127.0.0.1:$PORT/api/events" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
