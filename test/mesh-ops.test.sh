@@ -9,7 +9,7 @@ trap 'kill "$(cat "$PIDF" 2>/dev/null)" >/dev/null 2>&1 || true; rm -rf "$TMP" "
 fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
 
-cargo build -p workbench-mesh >/dev/null
+cargo build -p workbench-mesh >/dev/null || exit 1
 bash "$HERE/scripts/init.sh" --name "MeshOps" --mission "Test." --target "$TMP" --profile full --level crew >/dev/null 2>&1
 BIN="$HERE/target/debug/workbench-mesh"
 "$BIN" auth bootstrap --target "$TMP" --home "$HOME_TMP" >/dev/null
@@ -39,6 +39,37 @@ chk "actor spawn appends actor.spawned" "grep -q 'actor.spawned' '$TMP/.workbenc
 chk "availability appends presence.heartbeat" "grep -q 'presence.heartbeat' '$TMP/.workbench/mesh/events.jsonl'"
 chk "doing appends actor.status" "grep -q 'actor.status' '$TMP/.workbench/mesh/events.jsonl'"
 chk "watch appends payload intent" "grep -q '\"intent\":\"watch\"' '$TMP/.workbench/mesh/events.jsonl'"
+chk "operation payloads include routed data" "python3 - '$TMP/.workbench/mesh/events.jsonl' <<'PY'
+import json
+import sys
+
+events = []
+with open(sys.argv[1], encoding='utf-8') as f:
+    for line in f:
+        events.append(json.loads(line))
+
+if not any(
+    event.get('type') == 'task.handoff'
+    and event.get('payload', {}).get('task_id') == '0042'
+    and event.get('to') == 'session:worker'
+    for event in events
+):
+    raise SystemExit('missing task.handoff task_id=0042 to=session:worker')
+
+if not any(
+    event.get('type') == 'message.sent'
+    and event.get('payload', {}).get('text') == 'what are you touching?'
+    for event in events
+):
+    raise SystemExit('missing message.sent text')
+
+if not any(
+    event.get('type') == 'message.request_status'
+    and event.get('payload', {}).get('question') == 'status?'
+    for event in events
+):
+    raise SystemExit('missing message.request_status question')
+PY"
 chk "snapshot writes statusline json" "[ -n '$SNAPSHOT_PATH' ]"
 chk "snapshot prints compact statusline only" "[ '$STATUSLINE_OUTPUT' = 'workbench | checkout lead | busy: running checkout retry tests | team 3 active, 0 stale' ]"
 chk "snapshot json contents" "python3 - '$SNAPSHOT_PATH' <<'PY'

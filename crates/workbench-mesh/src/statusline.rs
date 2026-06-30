@@ -49,8 +49,11 @@ pub fn project_events_snapshot(project: &str, events: &[EventEnvelope]) -> Statu
     let mut watched = BTreeSet::new();
     let mut room_names = BTreeSet::new();
     let mut actor_purposes = BTreeMap::new();
-    let mut availability = "available".to_string();
-    let mut doing = None;
+    let mut availability_by_actor = BTreeMap::new();
+    let mut doing_by_actor = BTreeMap::new();
+    let mut latest_availability = None;
+    let mut latest_doing = None;
+    let mut latest_purpose = None;
     let mut unread_mentions = 0;
 
     for event in events {
@@ -73,7 +76,9 @@ pub fn project_events_snapshot(project: &str, events: &[EventEnvelope]) -> Statu
                         .get("purpose")
                         .and_then(|value| value.as_str())
                     {
-                        actor_purposes.insert(actor.to_string(), purpose.to_string());
+                        let purpose = purpose.to_string();
+                        actor_purposes.insert(actor.to_string(), purpose.clone());
+                        latest_purpose = Some(purpose);
                     }
                 }
             }
@@ -83,7 +88,9 @@ pub fn project_events_snapshot(project: &str, events: &[EventEnvelope]) -> Statu
                     .get("availability")
                     .and_then(|value| value.as_str())
                 {
-                    availability = state.to_string();
+                    let state = state.to_string();
+                    availability_by_actor.insert(event.from.clone(), state.clone());
+                    latest_availability = Some(state);
                 }
             }
             "actor.status" => {
@@ -92,7 +99,20 @@ pub fn project_events_snapshot(project: &str, events: &[EventEnvelope]) -> Statu
                     .get("current_step")
                     .and_then(|value| value.as_str())
                 {
-                    doing = Some(step.to_string());
+                    let step = step.to_string();
+                    doing_by_actor.insert(event.from.clone(), step.clone());
+                    latest_doing = Some(step);
+                }
+            }
+            "lead.purpose_set" => {
+                if let Some(purpose) = event
+                    .payload
+                    .get("purpose")
+                    .and_then(|value| value.as_str())
+                {
+                    let purpose = purpose.to_string();
+                    actor_purposes.insert(event.from.clone(), purpose.clone());
+                    latest_purpose = Some(purpose);
                 }
             }
             "message.sent" => {
@@ -114,11 +134,23 @@ pub fn project_events_snapshot(project: &str, events: &[EventEnvelope]) -> Statu
         }
     }
 
-    let current_actor = room_names
+    let (current_actor_id, current_actor) = room_names
         .iter()
-        .find_map(|name| actor_label_from_room(name))
-        .unwrap_or_else(|| "session:lead".to_string());
-    let purpose = actor_purposes.values().next().cloned();
+        .find_map(|name| actor_identity_from_room(name))
+        .unwrap_or_else(|| ("session:lead".to_string(), "session:lead".to_string()));
+    let purpose = actor_purposes
+        .get(&current_actor_id)
+        .cloned()
+        .or(latest_purpose);
+    let availability = availability_by_actor
+        .get(&current_actor_id)
+        .cloned()
+        .or(latest_availability)
+        .unwrap_or_else(|| "available".to_string());
+    let doing = doing_by_actor
+        .get(&current_actor_id)
+        .cloned()
+        .or(latest_doing);
 
     StatuslineSnapshot {
         project: project.to_string(),
@@ -153,12 +185,12 @@ fn collect_live_actor(active: &mut BTreeSet<String>, stale: &mut BTreeSet<String
     }
 }
 
-fn actor_label_from_room(name: &str) -> Option<String> {
+fn actor_identity_from_room(name: &str) -> Option<(String, String)> {
     let (role, focus) = name.split_once(':')?;
     if role.is_empty() || focus.is_empty() {
         return None;
     }
-    Some(format!("{focus} {role}"))
+    Some((format!("session:{role}"), format!("{focus} {role}")))
 }
 
 fn project_id(project_root: &Path) -> Result<String> {
@@ -234,6 +266,77 @@ mod tests {
 
         assert_eq!(snapshot.active_count, 1);
         assert_eq!(snapshot.stale_count, 0);
+    }
+
+    #[test]
+    fn status_fields_prefer_current_actor_over_later_actor_events() {
+        let events = vec![
+            event(
+                1,
+                "room.created",
+                "session:lead",
+                None,
+                json!({ "name": "lead:checkout" }),
+            ),
+            event(
+                2,
+                "lead.purpose_set",
+                "session:lead",
+                None,
+                json!({ "purpose": "coordinate checkout" }),
+            ),
+            event(
+                3,
+                "presence.heartbeat",
+                "session:lead",
+                None,
+                json!({ "availability": "busy" }),
+            ),
+            event(
+                4,
+                "actor.status",
+                "session:lead",
+                None,
+                json!({ "current_step": "running checkout retry tests" }),
+            ),
+            event(
+                5,
+                "actor.spawned",
+                "session:lead",
+                Some("session:worker"),
+                json!({
+                    "actor": "session:worker",
+                    "kind": "verifier",
+                    "parent": "session:lead",
+                    "purpose": "verify task 0042",
+                    "task_id": "0042"
+                }),
+            ),
+            event(
+                6,
+                "presence.heartbeat",
+                "session:worker",
+                None,
+                json!({ "availability": "available" }),
+            ),
+            event(
+                7,
+                "actor.status",
+                "session:worker",
+                None,
+                json!({ "current_step": "waiting for instructions" }),
+            ),
+        ];
+
+        let snapshot = project_events_snapshot("meshops", &events);
+
+        assert_eq!(snapshot.current_actor, "checkout lead");
+        assert_eq!(snapshot.purpose.as_deref(), Some("coordinate checkout"));
+        assert_eq!(snapshot.availability, "busy");
+        assert_eq!(
+            snapshot.doing.as_deref(),
+            Some("running checkout retry tests")
+        );
     }
 
     fn event(
