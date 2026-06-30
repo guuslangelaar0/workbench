@@ -9,6 +9,7 @@ repository.workspace = true
 anyhow = "1"
 base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
+fs2 = "0.4"
 hmac = "0.12"
 rand = "0.8"
 serde = { version = "1", features = ["derive"] }

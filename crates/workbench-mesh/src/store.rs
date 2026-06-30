@@ -1,8 +1,9 @@
 use std::fs::{self, File, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use fs2::FileExt;
 use serde_json::Value;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
@@ -34,22 +35,21 @@ impl MeshStore {
     ) -> Result<EventEnvelope> {
         validate_event_type(event_type)?;
         let path = self.root.join("events.jsonl");
-        let seq = next_seq(&path)?;
-        let event = EventEnvelope {
-            v: 1,
-            id: Uuid::now_v7().to_string(),
-            seq,
-            event_type: event_type.to_string(),
-            room: room.to_string(),
-            from: from.to_string(),
-            to: to.map(str::to_string),
-            ts: OffsetDateTime::now_utc()
-                .format(&Rfc3339)
-                .context("format event timestamp")?,
-            payload,
-        };
-        append_jsonl(&path, &event)?;
-        Ok(event)
+        append_locked_jsonl(&path, |seq| {
+            Ok(EventEnvelope {
+                v: 1,
+                id: Uuid::now_v7().to_string(),
+                seq,
+                event_type: event_type.to_string(),
+                room: room.to_string(),
+                from: from.to_string(),
+                to: to.map(str::to_string),
+                ts: OffsetDateTime::now_utc()
+                    .format(&Rfc3339)
+                    .context("format event timestamp")?,
+                payload,
+            })
+        })
     }
 
     pub fn list_events_since(&self, since: u64) -> Result<Vec<EventEnvelope>> {
@@ -77,22 +77,21 @@ impl MeshStore {
     pub fn append_audit(&self, action: &str, actor: &str, payload: Value) -> Result<EventEnvelope> {
         validate_event_type(action)?;
         let path = self.root.join("audit.jsonl");
-        let seq = next_seq(&path)?;
-        let event = EventEnvelope {
-            v: 1,
-            id: Uuid::now_v7().to_string(),
-            seq,
-            event_type: action.to_string(),
-            room: "audit".to_string(),
-            from: actor.to_string(),
-            to: None,
-            ts: OffsetDateTime::now_utc()
-                .format(&Rfc3339)
-                .context("format audit timestamp")?,
-            payload,
-        };
-        append_jsonl(&path, &event)?;
-        Ok(event)
+        append_locked_jsonl(&path, |seq| {
+            Ok(EventEnvelope {
+                v: 1,
+                id: Uuid::now_v7().to_string(),
+                seq,
+                event_type: action.to_string(),
+                room: "audit".to_string(),
+                from: actor.to_string(),
+                to: None,
+                ts: OffsetDateTime::now_utc()
+                    .format(&Rfc3339)
+                    .context("format audit timestamp")?,
+                payload,
+            })
+        })
     }
 }
 
@@ -105,9 +104,14 @@ fn ensure_file(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn next_seq(path: &Path) -> Result<u64> {
-    let file = File::open(path).with_context(|| format!("open {}", path.display()))?;
-    let reader = BufReader::new(file);
+fn next_seq(file: &File, path: &Path) -> Result<u64> {
+    let mut reader_file = file
+        .try_clone()
+        .with_context(|| format!("clone {}", path.display()))?;
+    reader_file
+        .seek(SeekFrom::Start(0))
+        .with_context(|| format!("rewind {}", path.display()))?;
+    let reader = BufReader::new(reader_file);
     let mut seq = 0;
 
     for line in reader.lines() {
@@ -123,12 +127,8 @@ fn next_seq(path: &Path) -> Result<u64> {
     Ok(seq + 1)
 }
 
-fn append_jsonl(path: &Path, event: &EventEnvelope) -> Result<()> {
-    let mut file = OpenOptions::new()
-        .append(true)
-        .open(path)
-        .with_context(|| format!("open {} for append", path.display()))?;
-    serde_json::to_writer(&mut file, event).context("serialize event")?;
+fn append_jsonl(file: &mut File, path: &Path, event: &EventEnvelope) -> Result<()> {
+    serde_json::to_writer(&mut *file, event).context("serialize event")?;
     file.write_all(b"\n")
         .with_context(|| format!("write newline to {}", path.display()))?;
     file.flush()
@@ -136,8 +136,37 @@ fn append_jsonl(path: &Path, event: &EventEnvelope) -> Result<()> {
     Ok(())
 }
 
+fn append_locked_jsonl(
+    path: &Path,
+    build_event: impl FnOnce(u64) -> Result<EventEnvelope>,
+) -> Result<EventEnvelope> {
+    let mut file = OpenOptions::new()
+        .read(true)
+        .append(true)
+        .create(true)
+        .open(path)
+        .with_context(|| format!("open {} for locked append", path.display()))?;
+    file.lock_exclusive()
+        .with_context(|| format!("lock {}", path.display()))?;
+
+    let result = (|| {
+        let seq = next_seq(&file, path)?;
+        let event = build_event(seq)?;
+        append_jsonl(&mut file, path, &event)?;
+        Ok(event)
+    })();
+
+    file.unlock()
+        .with_context(|| format!("unlock {}", path.display()))?;
+
+    result
+}
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+    use std::sync::{Arc, Barrier};
+    use std::thread;
+
     use serde_json::json;
     use tempfile::TempDir;
 
@@ -185,5 +214,39 @@ mod tests {
 
         assert!(temp.path().join(".workbench/mesh/events.jsonl").is_file());
         assert!(temp.path().join(".workbench/mesh/audit.jsonl").is_file());
+    }
+
+    #[test]
+    fn concurrent_appenders_allocate_unique_contiguous_sequences() {
+        let temp = TempDir::new().unwrap();
+        let project_root = temp.path().to_path_buf();
+        let writers = 24;
+        let barrier = Arc::new(Barrier::new(writers));
+        let mut handles = Vec::with_capacity(writers);
+
+        for idx in 0..writers {
+            let project_root = project_root.clone();
+            let barrier = Arc::clone(&barrier);
+            handles.push(thread::spawn(move || {
+                let store = MeshStore::open(&project_root).unwrap();
+                barrier.wait();
+                store
+                    .append_event(
+                        "message.sent",
+                        "repo:test",
+                        &format!("session:{idx}"),
+                        None,
+                        json!({ "writer": idx }),
+                    )
+                    .unwrap()
+                    .seq
+            }));
+        }
+
+        let seqs: Vec<u64> = handles.into_iter().map(|handle| handle.join().unwrap()).collect();
+        let unique: BTreeSet<u64> = seqs.iter().copied().collect();
+
+        assert_eq!(unique.len(), writers, "duplicate sequences: {seqs:?}");
+        assert_eq!(unique.into_iter().collect::<Vec<_>>(), (1..=writers as u64).collect::<Vec<_>>());
     }
 }
