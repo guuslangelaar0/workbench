@@ -39,6 +39,11 @@ json_escape() {
   printf '%s' "$s"
 }
 
+json_has_key() {
+  local json="$1" key="$2"
+  printf '%s' "$json" | grep -Eq "\"$key\"[[:space:]]*:"
+}
+
 project_name() {
   local cfg name
   cfg="$PROJECT/.workbench/config.json"
@@ -51,47 +56,53 @@ project_name() {
 }
 
 project_id() {
-  local slug
-  slug="$(project_name | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_-]+/-/g; s/^-+//; s/-+$//')"
-  [ -n "$slug" ] && printf '%s\n' "$slug" || printf 'project\n'
+  sanitize_project_id "$(project_name)"
+}
+
+sanitize_project_id() {
+  awk -v value="$1" '
+    BEGIN {
+      out = ""
+      for (i = 1; i <= length(value); i++) {
+        ch = substr(value, i, 1)
+        lower = tolower(ch)
+        if (lower ~ /^[a-z0-9]$/) {
+          out = out lower
+        } else if (ch == "-" || ch == "_") {
+          out = out ch
+        } else if (out !~ /-$/) {
+          out = out "-"
+        }
+      }
+      gsub(/^-+|-+$/, "", out)
+      print out == "" ? "project" : out
+    }
+  '
 }
 
 status_snapshot() {
-  local snapshot candidate
+  local snapshot
   [ -d "$STATUS_DIR" ] || return 1
   snapshot="$STATUS_DIR/$(project_id).json"
-  if [ ! -f "$snapshot" ]; then
-    snapshot=""
-    for candidate in "$STATUS_DIR"/*.json; do
-      [ -f "$candidate" ] || continue
-      snapshot="$candidate"
-      break
-    done
-  fi
-  [ -n "$snapshot" ] && [ -f "$snapshot" ] || return 1
+  [ -f "$snapshot" ] || return 1
   tr -d '\n' < "$snapshot" 2>/dev/null || true
 }
 
 metadata_url() {
-  local meta json host port token
+  local meta json host port
   meta="$PROJECT/.workbench/mesh/server.json"
   [ -f "$meta" ] || return 1
   json="$(tr -d '\n' < "$meta" 2>/dev/null || true)"
   host="$(json_string_from "$json" host)"
   port="$(json_number_from "$json" port)"
   [ -n "$host" ] && [ -n "$port" ] || return 1
-  token="$(json_string_from "$json" local_token)"
-  if [ -n "$token" ]; then
-    printf 'http://%s:%s?token=%s\n' "$host" "$port" "$token"
-  else
-    printf 'http://%s:%s\n' "$host" "$port"
-  fi
+  printf 'http://%s:%s\n' "$host" "$port"
 }
 
 mesh_status="Mesh server metadata: not found at .workbench/mesh/server.json; mesh may be stopped or not started."
 url="$(metadata_url || true)"
 if [ -n "$url" ]; then
-  mesh_status="Mesh server metadata: found. Command center: $url"
+  mesh_status="Mesh server metadata: found. Command center: $url. Use /workbench:mesh open for local authenticated access."
 fi
 
 snapshot_json="$(status_snapshot || true)"
@@ -118,6 +129,11 @@ TEXT
 
 event="$(json_string_from "$input" hook_event_name)"
 if [ "$event" = "SessionStart" ]; then
+  printf '%s\n' "$context"
+  exit 0
+fi
+
+if [ "$event" != "UserPromptSubmit" ] && ! json_has_key "$input" prompt && ! printf '%s' "$input" | grep -q 'UserPromptSubmit'; then
   printf '%s\n' "$context"
   exit 0
 fi

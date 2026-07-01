@@ -29,31 +29,50 @@ json_array_strings() {
 }
 
 project_name() {
+  local cfg name
+  cfg="$PROJECT/.workbench/config.json"
+  [ -f "$cfg" ] || cfg="$PROJECT/.initlab/config.json"
+  if [ -f "$cfg" ]; then
+    name="$(sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$cfg" | head -1)"
+    [ -n "$name" ] && { printf '%s\n' "$name"; return 0; }
+  fi
   basename "$PROJECT"
 }
 
+sanitize_project_id() {
+  awk -v value="$1" '
+    BEGIN {
+      out = ""
+      for (i = 1; i <= length(value); i++) {
+        ch = substr(value, i, 1)
+        lower = tolower(ch)
+        if (lower ~ /^[a-z0-9]$/) {
+          out = out lower
+        } else if (ch == "-" || ch == "_") {
+          out = out ch
+        } else if (out !~ /-$/) {
+          out = out "-"
+        }
+      }
+      gsub(/^-+|-+$/, "", out)
+      print out == "" ? "project" : out
+    }
+  '
+}
+
 project_id() {
-  local slug
-  slug="$(project_name | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_-]+/-/g; s/^-+//; s/-+$//')"
-  [ -n "$slug" ] && printf '%s\n' "$slug" || printf 'project\n'
+  sanitize_project_id "$(project_name)"
 }
 
 [ -d "$STATUS_DIR" ] || exit 0
 
 snapshot="$STATUS_DIR/$(project_id).json"
-if [ ! -f "$snapshot" ]; then
-  snapshot=""
-  for candidate in "$STATUS_DIR"/*.json; do
-    [ -f "$candidate" ] || continue
-    snapshot="$candidate"
-    break
-  done
-fi
-[ -n "${snapshot:-}" ] && [ -f "$snapshot" ] || exit 0
+[ -f "$snapshot" ] || exit 0
 
 json="$(tr -d '\n' < "$snapshot" 2>/dev/null || true)"
 [ -n "$json" ] || exit 0
 
+project="$(project_id)"
 actor="$(json_string "$json" current_actor)"; [ -n "$actor" ] || actor="solo"
 availability="$(json_string "$json" availability)"; [ -n "$availability" ] || availability="offline"
 doing="$(json_string "$json" doing)"
@@ -65,7 +84,7 @@ unread="$(json_number "$json" unread_mentions)"; [ -n "$unread" ] || unread=0
 activity="$availability"
 [ -n "$doing" ] && activity="$availability: $doing"
 
-line="workbench | $actor | $activity | team $active active, $stale stale"
+line="workbench/$project | $actor | $activity | team $active active, $stale stale"
 [ -n "$watched" ] && line="$line | watching $watched"
 [ "$unread" -gt 0 ] 2>/dev/null && line="$line | $unread unread"
 
