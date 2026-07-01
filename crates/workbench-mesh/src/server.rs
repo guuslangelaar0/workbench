@@ -60,6 +60,13 @@ struct AppState {
     local_role: String,
     tail_scan_seq: Arc<AtomicU64>,
     daemon_broadcast_seqs: Arc<Mutex<BTreeSet<u64>>>,
+    connect_urls: Vec<ConnectUrl>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ConnectUrl {
+    label: String,
+    url: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -111,6 +118,7 @@ struct RevokeInviteRequest {
 struct AcceptInviteRequest {
     token: String,
     device: String,
+    expected_project: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -129,20 +137,6 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
         .await
         .with_context(|| format!("bind {}", bind_info.bind_addr))?;
     let local_addr = listener.local_addr().context("read bound address")?;
-    let store = Arc::new(MeshStore::open(&opts.project_root)?);
-    let tail_scan_seq = Arc::new(AtomicU64::new(current_store_seq(&store)?));
-    let (events_tx, _) = broadcast::channel(256);
-    let state = AppState {
-        project_root: opts.project_root.clone(),
-        home: opts.home.clone(),
-        store,
-        events_tx,
-        daemon_token: daemon_token.clone(),
-        local_role,
-        tail_scan_seq,
-        daemon_broadcast_seqs: Arc::new(Mutex::new(BTreeSet::new())),
-    };
-
     let metadata = ServerMetadata {
         mode: bind_info.mode.clone(),
         host: metadata_host(&bind_info.mode, &bind_info.lan_ips),
@@ -151,6 +145,20 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
         mdns: bind_info.mdns_name,
         lan_ips: bind_info.lan_ips,
         local_token: daemon_token,
+    };
+    let store = Arc::new(MeshStore::open(&opts.project_root)?);
+    let tail_scan_seq = Arc::new(AtomicU64::new(current_store_seq(&store)?));
+    let (events_tx, _) = broadcast::channel(256);
+    let state = AppState {
+        project_root: opts.project_root.clone(),
+        home: opts.home.clone(),
+        store,
+        events_tx,
+        daemon_token: metadata.local_token.clone(),
+        local_role,
+        tail_scan_seq,
+        daemon_broadcast_seqs: Arc::new(Mutex::new(BTreeSet::new())),
+        connect_urls: connect_urls_from_metadata(&metadata),
     };
     write_server_metadata(&opts.project_root, &metadata)?;
     if let Some(pid_file) = opts.pid_file {
@@ -284,6 +292,7 @@ async fn post_invite(
         "role": invite.role,
         "expires_at": invite.expires_at,
         "max_uses": invite.max_uses,
+        "connect_urls": state.connect_urls.clone(),
     })))
 }
 
@@ -309,6 +318,15 @@ async fn post_accept_invite(
     State(state): State<AppState>,
     Json(request): Json<AcceptInviteRequest>,
 ) -> Result<Json<Value>, ApiError> {
+    if let Some(expected_project) = request.expected_project.as_deref() {
+        let project = auth::project_id_for(&state.project_root)?;
+        if expected_project != project {
+            return Err(anyhow::anyhow!(
+                "remote project mismatch: expected {expected_project}, got {project}"
+            )
+            .into());
+        }
+    }
     let credential =
         auth::issue_invite_credential(&state.project_root, &request.token, &request.device)?;
     Ok(Json(json!({
@@ -354,18 +372,25 @@ async fn ws_handler(
     Query(query): Query<WsQuery>,
     ws: WebSocketUpgrade,
 ) -> Result<impl IntoResponse, ApiError> {
-    let role = require_token(&state, &query.token)?;
-    Ok(ws.on_upgrade(move |socket| {
-        websocket_session(socket, state, query.last_seq.unwrap_or(0), role)
-    }))
+    require_token(&state, &query.token)?;
+    let token = query.token;
+    let last_seq = query.last_seq.unwrap_or(0);
+    Ok(ws.on_upgrade(move |socket| websocket_session(socket, state, last_seq, token)))
 }
 
-async fn websocket_session(socket: WebSocket, state: AppState, last_seq: u64, role: String) {
+async fn websocket_session(socket: WebSocket, state: AppState, last_seq: u64, token: String) {
     let (mut sender, mut receiver) = socket.split();
     let mut events_rx = state.events_tx.subscribe();
 
+    if require_token(&state, &token).is_err() {
+        return;
+    }
+
     if let Ok(events) = state.store.list_events_since(last_seq) {
         for event in events {
+            if require_token(&state, &token).is_err() {
+                return;
+            }
             let Ok(text) = serde_json::to_string(&event) else {
                 continue;
             };
@@ -381,6 +406,9 @@ async fn websocket_session(socket: WebSocket, state: AppState, last_seq: u64, ro
                 let Ok(event) = received else {
                     continue;
                 };
+                if require_token(&state, &token).is_err() {
+                    return;
+                }
                 let Ok(text) = serde_json::to_string(&event) else {
                     continue;
                 };
@@ -393,6 +421,9 @@ async fn websocket_session(socket: WebSocket, state: AppState, last_seq: u64, ro
                     return;
                 };
                 if let Message::Text(text) = message {
+                    let Ok(role) = require_token(&state, &token) else {
+                        return;
+                    };
                     let Ok(request) = serde_json::from_str::<WsEventRequest>(&text) else {
                         continue;
                     };
@@ -531,6 +562,7 @@ fn state_json(state: &AppState, role: &str) -> Result<Value> {
         "event_count": events.len(),
         "connected_actor_count": actors.len(),
         "actors": actors.into_iter().collect::<Vec<_>>(),
+        "connect_urls": state.connect_urls.clone(),
         "devices": devices,
         "events": events,
         "last_seq": events.last().map(|event| event.seq).unwrap_or(0),
@@ -606,6 +638,34 @@ fn metadata_host(mode: &str, lan_ips: &[String]) -> String {
             .unwrap_or_else(|| "127.0.0.1".to_string()),
         _ => "127.0.0.1".to_string(),
     }
+}
+
+fn connect_urls_from_metadata(metadata: &ServerMetadata) -> Vec<ConnectUrl> {
+    let mut urls = Vec::new();
+    let mut seen = BTreeSet::new();
+    let mut push = |label: &str, host: &str| {
+        if host.trim().is_empty() {
+            return;
+        }
+        let url = format!("http://{}:{}", host, metadata.port);
+        if seen.insert(url.clone()) {
+            urls.push(ConnectUrl {
+                label: label.to_string(),
+                url,
+            });
+        }
+    };
+
+    push("connect", &metadata.mdns);
+    if metadata.hostname != metadata.mdns {
+        push("connect-host", &metadata.hostname);
+    }
+    for ip in &metadata.lan_ips {
+        push("connect-ip", ip);
+    }
+    push("connect-url", &metadata.host);
+
+    urls
 }
 
 fn random_bearer_token() -> String {
@@ -1092,6 +1152,208 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn revoked_remote_websocket_cannot_receive_or_mutate() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let invite = auth::create_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+        let credential =
+            auth::issue_invite_credential(project.path(), &invite.token, "macbook").unwrap();
+        let store = Arc::new(MeshStore::open(project.path()).unwrap());
+        let last_seq = store.list_events_since(0).unwrap().last().unwrap().seq;
+        let (events_tx, _) = broadcast::channel(256);
+        let state = AppState {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            store: store.clone(),
+            events_tx,
+            daemon_token: "daemon-token".to_string(),
+            local_role: "owner".to_string(),
+            tail_scan_seq: Arc::new(AtomicU64::new(last_seq)),
+            daemon_broadcast_seqs: Arc::new(Mutex::new(BTreeSet::new())),
+            connect_urls: Vec::new(),
+        };
+        let app = Router::new()
+            .route("/ws", get(super::ws_handler))
+            .with_state(state.clone());
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let ws_url = format!(
+            "ws://{}:{}/ws?token={}&last_seq={}",
+            addr.ip(),
+            addr.port(),
+            credential.token,
+            last_seq
+        );
+        let (mut mutating_socket, _) = connect_async(&ws_url).await.unwrap();
+        let (mut listening_socket, _) = connect_async(&ws_url).await.unwrap();
+
+        auth::revoke_device(project.path(), "macbook", "auth:owner").unwrap();
+
+        mutating_socket
+            .send(ClientMessage::Text(
+                json!({
+                    "v": 1,
+                    "type": "message.sent",
+                    "room": "repo:mesh-remote",
+                    "from": "session:revoked",
+                    "payload": { "text": "revoked socket mutation" }
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_revoked_socket_closed_without_text(&mut mutating_socket).await;
+        let events = store.list_events_since(0).unwrap();
+        assert!(!events.iter().any(|event| event
+            .payload
+            .to_string()
+            .contains("revoked socket mutation")));
+
+        let server_event = store
+            .append_event(
+                "message.sent",
+                "repo:mesh-remote",
+                "session:owner",
+                None,
+                json!({ "text": "broadcast after revoke" }),
+            )
+            .unwrap();
+        let _ = state.events_tx.send(server_event);
+        assert_revoked_socket_closed_without_text(&mut listening_socket).await;
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn remote_invite_accept_project_mismatch_does_not_redeem_invite() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let invite = auth::create_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+        let base = format!("http://{}:{}", metadata.host, metadata.port);
+        let client = Client::new();
+
+        let mismatch = client
+            .post(format!("{base}/api/invites/accept"))
+            .json(&json!({
+                "token": invite.token,
+                "device": "wrong-checkout",
+                "expected_project": "other-project"
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(mismatch.status(), reqwest::StatusCode::BAD_REQUEST);
+        assert!(auth::list_devices(project.path()).unwrap().is_empty());
+
+        let accepted: Value = client
+            .post(format!("{base}/api/invites/accept"))
+            .json(&json!({
+                "token": invite.token,
+                "device": "macbook",
+                "expected_project": "mesh-remote"
+            }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(accepted["project"], "mesh-remote");
+        assert_eq!(auth::list_devices(project.path()).unwrap().len(), 1);
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn invite_api_returns_non_secret_connect_url_variants() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let owner_token =
+            auth::local_project_token(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+        let base = format!("http://{}:{}", metadata.host, metadata.port);
+
+        let invite: Value = Client::new()
+            .post(format!("{base}/api/invites"))
+            .bearer_auth(&owner_token)
+            .json(&json!({
+                "role": "worker",
+                "ttl_seconds": 900,
+                "max_uses": 1
+            }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        let connect_urls = invite["connect_urls"].as_array().unwrap();
+        assert!(connect_urls.iter().any(|item| {
+            item["label"] == "connect-url"
+                && item["url"] == format!("http://{}:{}", metadata.host, metadata.port)
+        }));
+        if !metadata.mdns.is_empty() {
+            assert!(connect_urls.iter().any(|item| {
+                item["label"] == "connect"
+                    && item["url"] == format!("http://{}:{}", metadata.mdns, metadata.port)
+            }));
+        }
+        if !metadata.hostname.is_empty() && metadata.hostname != metadata.mdns {
+            assert!(connect_urls.iter().any(|item| {
+                item["label"] == "connect-host"
+                    && item["url"] == format!("http://{}:{}", metadata.hostname, metadata.port)
+            }));
+        }
+        assert!(invite.to_string().find(&metadata.local_token).is_none());
+
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn device_api_requires_owner_or_operator_for_inventory() {
         let project = TempDir::new().unwrap();
         let home = TempDir::new().unwrap();
@@ -1347,6 +1609,7 @@ mod tests {
             local_role: "owner".to_string(),
             tail_scan_seq: Arc::new(AtomicU64::new(0)),
             daemon_broadcast_seqs: Arc::new(Mutex::new(BTreeSet::new())),
+            connect_urls: Vec::new(),
         };
         let app = Router::new()
             .route("/api/events", post(super::post_event))
@@ -1455,6 +1718,22 @@ mod tests {
         match message {
             ClientMessage::Text(text) => serde_json::from_str(&text).unwrap(),
             other => panic!("expected websocket text frame, got {other:?}"),
+        }
+    }
+
+    async fn assert_revoked_socket_closed_without_text<S>(socket: &mut S)
+    where
+        S: StreamExt<Item = Result<ClientMessage, tokio_tungstenite::tungstenite::Error>> + Unpin,
+    {
+        let message = tokio::time::timeout(Duration::from_secs(2), socket.next())
+            .await
+            .unwrap();
+        match message {
+            None | Some(Ok(ClientMessage::Close(_))) | Some(Err(_)) => {}
+            Some(Ok(ClientMessage::Text(text))) => {
+                panic!("revoked websocket received text frame: {text}")
+            }
+            Some(Ok(other)) => panic!("revoked websocket received unexpected frame: {other:?}"),
         }
     }
 

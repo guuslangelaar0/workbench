@@ -314,6 +314,9 @@ async function main() {
     await settle();
     const actualCalls = fetchCalls.slice(before);
     assertActionFetch(action, actualCalls);
+    if (action === "create-invite") {
+      assertInviteOutput();
+    }
   }
 
   console.log("PASS: mesh command center UI action harness");
@@ -434,7 +437,13 @@ function fetch(url, options = {}) {
     return Promise.resolve(jsonResponse({
       token: "invite-token",
       role: JSON.parse(options.body).role,
-      expires_at: "2030-01-01T00:00:00Z"
+      expires_at: "2030-01-01T00:00:00Z",
+      connect_urls: [
+        { label: "connect", url: "http://mesh-host.local:47321" },
+        { label: "connect-host", url: "http://mesh-host:47321" },
+        { label: "connect-ip", url: "http://192.168.1.9:47321" },
+        { label: "connect-url", url: "http://127.0.0.1:47321" }
+      ]
     }));
   }
   if (url === "/api/invites/revoke") {
@@ -459,6 +468,23 @@ function jsonResponse(body) {
       return Promise.resolve(JSON.stringify(body));
     }
   };
+}
+
+function assertInviteOutput() {
+  const output = elements.get("invite-output").textContent;
+  [
+    "connect: /workbench:mesh connect http://mesh-host.local:47321 invite-token <device>",
+    "connect-host: /workbench:mesh connect http://mesh-host:47321 invite-token <device>",
+    "connect-ip: /workbench:mesh connect http://192.168.1.9:47321 invite-token <device>",
+    "connect-url: /workbench:mesh connect http://127.0.0.1:47321 invite-token <device>"
+  ].forEach((line) => {
+    if (!output.includes(line)) {
+      fail("invite output missing connect URL variant", { line, output });
+    }
+  });
+  if (output.includes("127.0.0.1:65535")) {
+    fail("invite output fell back to browser host despite server connect URLs", { output });
+  }
 }
 
 function StubElement(id, action) {

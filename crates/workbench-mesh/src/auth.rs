@@ -328,29 +328,20 @@ pub fn project_token_role(
 ) -> Result<String> {
     let auth_paths = paths(home)?;
     let project_id = project_id(project_root)?;
+    let token_hash = hash_token(token);
+    let devices = device_records(project_root)?;
+
+    if let Some(role) = device_role_for_token(project_root, &project_id, &token_hash, &devices)? {
+        return Ok(role);
+    }
 
     for credential in project_credentials_for(&auth_paths, &project_id)? {
         if credential.project == project_id && credential.token == token {
-            validate_role(&credential.role)?;
-            return Ok(credential.role);
-        }
-    }
-
-    let token_hash = hash_token(token);
-    for device in list_devices(project_root)? {
-        if device.project == project_id && device.credential_hash == token_hash {
-            if device.revoked_at.is_some() {
-                let store = MeshStore::open(project_root)?;
-                store.append_audit(
-                    "device.auth_rejected",
-                    "auth:device",
-                    json!({ "device": device.device, "reason": "revoked" }),
-                )?;
+            if credential_token_revoked(&devices, &project_id, &credential.token) {
                 bail!("token rejected");
             }
-            validate_role(&device.role)?;
-            touch_device_seen(project_root, &device.device)?;
-            return Ok(device.role);
+            validate_role(&credential.role)?;
+            return Ok(credential.role);
         }
     }
 
@@ -461,13 +452,55 @@ fn require_project_credential_with_roles(
     error_message: &str,
 ) -> Result<()> {
     let project_id = project_id(project_root)?;
+    let devices = device_records(project_root)?;
     for credential in project_credentials_for(auth_paths, &project_id)? {
-        if roles.contains(&credential.role.as_str()) {
+        if roles.contains(&credential.role.as_str())
+            && !credential_token_revoked(&devices, &project_id, &credential.token)
+        {
             return Ok(());
         }
     }
 
     bail!("{error_message}")
+}
+
+fn device_role_for_token(
+    project_root: &Path,
+    project_id: &str,
+    token_hash: &str,
+    devices: &[DeviceRecord],
+) -> Result<Option<String>> {
+    for device in devices {
+        if device.project == project_id && device.credential_hash == token_hash {
+            if device.revoked_at.is_some() {
+                let store = MeshStore::open(project_root)?;
+                store.append_audit(
+                    "device.auth_rejected",
+                    "auth:device",
+                    json!({ "device": device.device, "reason": "revoked" }),
+                )?;
+                bail!("token rejected");
+            }
+            validate_role(&device.role)?;
+            touch_device_seen(project_root, &device.device)?;
+            return Ok(Some(device.role.clone()));
+        }
+    }
+
+    Ok(None)
+}
+
+fn credential_token_revoked(devices: &[DeviceRecord], project_id: &str, token: &str) -> bool {
+    let token_hash = hash_token(token);
+    devices.iter().any(|device| {
+        device.project == project_id
+            && device.credential_hash == token_hash
+            && device.revoked_at.is_some()
+    })
+}
+
+fn device_records(project_root: &Path) -> Result<Vec<DeviceRecord>> {
+    read_devices(&project_root.join(".workbench/mesh/devices.json"))
 }
 
 fn project_credentials_for(
@@ -779,8 +812,9 @@ fn write_secret_file(path: &Path, content: &str) -> Result<()> {
 mod tests {
     use super::{
         accept_invite, bootstrap, check, create_invite, issue_invite_credential, list_devices,
-        persist_project_credential, project_token_role, require_local_project_credential,
-        revoke_device, revoke_invite, sanitize_name, validate_role, ProjectCredential,
+        persist_project_credential, project_token_role, require_local_mutating_project_credential,
+        require_local_project_credential, revoke_device, revoke_invite, sanitize_name,
+        validate_role, ProjectCredential,
     };
     use std::fs;
     use std::path::Path;
@@ -1165,6 +1199,53 @@ mod tests {
             std::fs::read_to_string(project.path().join(".workbench/mesh/audit.jsonl"))
                 .unwrap()
                 .contains("device.revoked")
+        );
+    }
+
+    #[test]
+    fn revoke_device_blocks_local_accepted_project_credential() {
+        let project = tempfile::tempdir().unwrap();
+        let owner_home = tempfile::tempdir().unwrap();
+        let joining_home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        bootstrap(project.path(), Some(owner_home.path().to_path_buf())).unwrap();
+        let invite = create_invite(
+            project.path(),
+            Some(owner_home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+        accept_invite(
+            project.path(),
+            Some(joining_home.path().to_path_buf()),
+            &invite.token,
+            "macbook",
+        )
+        .unwrap();
+        let accepted_credential = read_project_credential(joining_home.path(), "macbook.cred");
+
+        revoke_device(project.path(), "macbook", "auth:owner").unwrap();
+
+        let err = project_token_role(
+            project.path(),
+            Some(joining_home.path().to_path_buf()),
+            &accepted_credential.token,
+        )
+        .err()
+        .unwrap();
+        assert_eq!(err.to_string(), "token rejected");
+
+        let err = require_local_mutating_project_credential(
+            project.path(),
+            Some(joining_home.path().to_path_buf()),
+        )
+        .err()
+        .unwrap();
+        assert_eq!(
+            err.to_string(),
+            "local mutating project credential required"
         );
     }
 

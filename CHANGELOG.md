@@ -14,7 +14,7 @@ All notable changes to workbench are documented here. The format follows
 - The command center now includes a Devices inventory and uses the backend `observer` role label.
 
 ### Fixed
-- Remote invite tokens are no longer treated as unsupported or accidentally local-only; revoked remote device credentials stop authenticating immediately.
+- Remote invite tokens are no longer treated as unsupported or accidentally local-only; revoked remote device credentials stop authenticating immediately, including open WebSocket sessions.
 
 ## [0.5.1] - 2026-07-01
 

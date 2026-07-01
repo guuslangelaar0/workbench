@@ -86,9 +86,14 @@ pub async fn accept_remote_invite(
     device: String,
 ) -> Result<()> {
     let metadata = remote_metadata_from_url(&url)?;
+    let local_project = auth::project_id_for(&project_root)?;
     let response = Client::new()
         .post(format!("{}/api/invites/accept", base_url(&metadata)))
-        .json(&json!({ "token": token, "device": device }))
+        .json(&json!({
+            "token": token,
+            "device": device,
+            "expected_project": local_project,
+        }))
         .send()
         .await
         .context("post remote invite accept")?
@@ -98,7 +103,6 @@ pub async fn accept_remote_invite(
         .json()
         .await
         .context("parse remote invite credential")?;
-    let local_project = auth::project_id_for(&project_root)?;
     if credential.project != local_project {
         anyhow::bail!(
             "remote project mismatch: expected {local_project}, got {}",

@@ -241,19 +241,31 @@
     })
       .then(requireOk)
       .then(function (data) {
-        var base = "http://" + window.location.host;
-        els.inviteOutput.textContent = [
+        var lines = [
           "token=" + data.token,
           "role=" + data.role,
-          "expires_at=" + data.expires_at,
-          "connect=/workbench:mesh connect " + base + " " + data.token + " <device>"
-        ].join("\n");
+          "expires_at=" + data.expires_at
+        ];
+        Array.prototype.push.apply(lines, inviteConnectLines(data));
+        els.inviteOutput.textContent = lines.join("\n");
         showToast("Created invite for " + data.role + ".");
         return postEvent(makeEvent("invite.created", commandBase(), "", { role: data.role, expires_at: data.expires_at, source: "command-center" }));
       })
       .catch(function (error) {
         showToast(error.message);
       });
+  }
+
+  function inviteConnectLines(data) {
+    var urls = Array.isArray(data.connect_urls) ? data.connect_urls : [];
+    if (urls.length) {
+      return urls.map(function (item) {
+        return item.label + ": /workbench:mesh connect " + item.url + " " + data.token + " <device>";
+      });
+    }
+    return [
+      "connect: /workbench:mesh connect http://" + window.location.host + " " + data.token + " <device>"
+    ];
   }
 
   function revokeInvite(token) {
