@@ -104,11 +104,11 @@ The command center has three exposure modes:
 
 | Mode | Command | Auth model |
 |------|---------|------------|
-| Local | `/workbench:mesh start --local` | Same-user local credential cached under `WORKBENCH_HOME` (`~/.workbench` by default); intended for this machine. |
+| Local | `/workbench:mesh start --local` | Same-user access for this machine. Durable credential material lives outside git under `$WORKBENCH_HOME` (`~/.workbench` by default) with OS-protected permissions; project-local metadata may only bootstrap the current daemon. |
 | LAN | `/workbench:mesh start --lan` | Explicit opt-in for the local network; another machine joins with a scoped invite token from `/workbench:mesh invite`. |
 | Public | Deferred | Public internet exposure is out of scope in this version. |
 
-When started for LAN, the wrapper prints every address form a user may need to copy: the host name, the `.local` mDNS name, the raw LAN IP, and the port. Runtime metadata is also written to `.workbench/mesh/server.json`, so `/workbench:mesh open` can print the current command-center URL later, including the local token when present.
+When started for LAN, the wrapper prints every address form a user may need to copy: the host name, the `.local` mDNS name, the raw LAN IP, and the port. Ignored runtime metadata is also written to `.workbench/mesh/server.json`, so `/workbench:mesh open` can print the current command-center URL later. That file is for host/port discovery and may include an ephemeral local daemon access token or URL bootstrap, but it is not the durable same-user credential store or root key.
 
 Mesh actors are hierarchical:
 

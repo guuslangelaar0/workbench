@@ -77,19 +77,19 @@ View or reconcile the **context backbone** in `.claude/architecture/` — C4-sty
 ## Workbench Mesh
 
 ### `/workbench:mesh start --local`
-Start the Rust-backed command center on this machine only. The wrapper bootstraps the same-user local credential, launches `bin/workbench-mesh` through `scripts/mesh.sh`, and writes runtime metadata to `.workbench/mesh/server.json`. When the port is auto-assigned, use `/workbench:mesh open` to print the command-center URL with the cached local token.
+Start the Rust-backed command center on this machine only. Durable same-user credential material lives outside git under `$WORKBENCH_HOME` (`~/.workbench` by default) with OS-protected permissions. The wrapper launches `bin/workbench-mesh` through `scripts/mesh.sh` and writes ignored project runtime metadata to `.workbench/mesh/server.json` for host/port discovery; that metadata may include an ephemeral local daemon access token or URL bootstrap, but not the durable credential or root key. When the port is auto-assigned, use `/workbench:mesh open` to print the cached command-center URL.
 
 ### `/workbench:mesh start --lan`
 Start the command center on the local network for another trusted machine on the same LAN. The output shows the hostname form, the `.local` mDNS form, the raw LAN IP, and the port, then keeps public internet exposure unavailable in this version. Use `/workbench:mesh invite --role worker --ttl-seconds 900` to create a scoped invite token.
 
 ### `/workbench:mesh invite [--role ROLE] [--ttl-seconds N] [--max-uses N]`
-Create a LAN invite token. Tokens are the auth boundary for another machine joining the mesh; local same-user access uses the cached local credential instead. `ROLE` defaults to `worker`.
+Create a LAN invite token. Tokens are the auth boundary for another machine joining the mesh; local same-user access uses durable credentials stored under `$WORKBENCH_HOME` / `~/.workbench`, not project-local `.workbench/mesh/server.json`. `ROLE` defaults to `worker`.
 
 ### `/workbench:mesh connect TOKEN [DEVICE]`
 Accept a local project invite token for this device. Remote URL acceptance is intentionally deferred until the Rust runtime supports it end-to-end; the wrapper fails clearly instead of pretending a URL token is local.
 
 ### `/workbench:mesh status | who | jobs | open`
-Inspect the mesh runtime. `status` and `who` show registered actors and rooms, `jobs` lists recent job/task events, and `open` prints the cached command-center URL from `.workbench/mesh/server.json`.
+Inspect the mesh runtime. `status` and `who` show registered actors and rooms, `jobs` lists recent job/task events, and `open` prints the cached command-center URL from ignored discovery metadata in `.workbench/mesh/server.json`.
 
 ### `/workbench:mesh room NAME`
 Create or join a structured room. Lead channels conventionally use names like `lead:checkout` so multiple leads can coordinate without collapsing into one global chat.
