@@ -235,3 +235,29 @@ Files changed:
 Test results:
 - `bash test/mesh-command-center.test.sh` - PASS. The script rebuilt `workbench-mesh` before starting `target/debug/workbench-mesh`.
 - `cargo test -p workbench-mesh` - PASS. `26 passed` in `src/lib.rs`, `1 passed` in `src/main.rs`, doc-tests `0 passed`.
+
+## Task 6 review fix
+
+Files changed:
+- `crates/workbench-mesh/src/server.rs`
+- `test/mesh-command-center.test.sh`
+- `.superpowers/sdd/task-6-report.md`
+
+Implementation summary:
+- Added focused authenticated `POST /api/events` coverage for the structured command-center action payloads requested in review:
+  request help, revoke invite, approve decision, deny decision, reassign task, stop job, retry job, adopt stale lead, close lead, and set availability.
+- Kept the existing HTML, asset, query-token bootstrap, and missing-auth rejection checks.
+- Added static UI response assertions for `Cache-Control: no-store` and `Referrer-Policy: no-referrer`.
+- Added those headers to Rust-owned authenticated static responses for `/`, `/assets/app.js`, and `/assets/style.css`; static routes still require bearer or valid query-token auth.
+
+Commands run:
+- `bash test/mesh-command-center.test.sh` - FAIL before Rust change, expected TDD red. Existing UI/action checks passed; new header checks failed for HTML, JS, and CSS because the headers were missing.
+- `cargo fmt -p workbench-mesh` - PASS/no output. Reverted unrelated `store.rs` formatting drift before commit.
+- `bash -n test/mesh-command-center.test.sh` - PASS/no output.
+- `bash test/mesh-command-center.test.sh` - PASS after implementation. Includes authenticated HTML/assets, query-token HTML/assets, unauthenticated rejection for HTML/JS/CSS, no-store/no-referrer static headers, and all requested structured action payload posts through `/api/events`.
+- `cargo test -p workbench-mesh` - PASS. `26 passed` in `src/lib.rs`, `1 passed` in `src/main.rs`, doc-tests `0 passed`.
+- `bash test/mesh-command-center.test.sh` - PASS. Reconfirmed after `cargo test`; final line `PASS: mesh-command-center`.
+
+Concerns:
+- Query-token browser bootstrap still intentionally exposes the daemon token in local URLs/history. This fix reduces static response caching/referrer leakage but does not remove the bootstrap tradeoff.
+- The shell test still rebuilds `target/debug/workbench-mesh` before launching the server so it exercises the current Rust code.

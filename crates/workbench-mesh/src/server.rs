@@ -6,7 +6,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::http::{header, HeaderMap, HeaderName, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -171,7 +171,7 @@ async fn command_center(
         StaticAuth::Bearer => INDEX_HTML.to_string(),
         StaticAuth::QueryToken(token) => tokenized_command_center_html(&token),
     };
-    Ok(([(header::CONTENT_TYPE, "text/html; charset=utf-8")], html))
+    Ok((static_headers("text/html; charset=utf-8"), html))
 }
 
 async fn command_center_js(
@@ -181,10 +181,7 @@ async fn command_center_js(
 ) -> Result<impl IntoResponse, ApiError> {
     static_auth(&state, &headers, &query)?;
     Ok((
-        [(
-            header::CONTENT_TYPE,
-            "application/javascript; charset=utf-8",
-        )],
+        static_headers("application/javascript; charset=utf-8"),
         APP_JS,
     ))
 }
@@ -195,10 +192,7 @@ async fn command_center_css(
     Query(query): Query<StaticQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
     static_auth(&state, &headers, &query)?;
-    Ok((
-        [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
-        STYLE_CSS,
-    ))
+    Ok((static_headers("text/css; charset=utf-8"), STYLE_CSS))
 }
 
 async fn health(
@@ -378,6 +372,14 @@ fn tokenized_command_center_html(token: &str) -> String {
             &format!("/assets/style.css?token={token}"),
         )
         .replace("/assets/app.js", &format!("/assets/app.js?token={token}"))
+}
+
+fn static_headers(content_type: &'static str) -> [(HeaderName, &'static str); 3] {
+    [
+        (header::CONTENT_TYPE, content_type),
+        (header::CACHE_CONTROL, "no-store"),
+        (HeaderName::from_static("referrer-policy"), "no-referrer"),
+    ]
 }
 
 fn state_json(state: &AppState) -> Result<Value> {
