@@ -204,7 +204,7 @@ workbench/
 ## Works with
 
 - **[graphify](https://github.com/safishamsi/graphify)** — supplies the *extracted reality* half of the context backbone (the real module graph that `/workbench:architecture drift` reconciles against your authored C4 docs).
-- **[Superpowers](https://github.com/anthropics/claude-code/tree/main/plugins/superpowers)** — the companion discipline layer for brainstorm -> spec -> plan, TDD, code review, verification-before-completion, and subagent-driven development. Workbench routes those intents to Superpowers when it is installed.
+- **Superpowers** — the companion discipline layer for brainstorm -> spec -> plan, TDD, code review, verification-before-completion, and subagent-driven development. Workbench routes those intents to Superpowers when it is installed.
 - **[Claude Code](https://claude.com/claude-code)** — the host. workbench is a plugin; everything it scaffolds is plain files that outlive it.
 
 ## Contributing
