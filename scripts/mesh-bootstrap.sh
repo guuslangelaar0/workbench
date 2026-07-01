@@ -102,7 +102,11 @@ fi
 
 extract="$tmp/extract"
 mkdir -p "$extract"
-tar -C "$extract" -xzf "$tarball"
+if ! tar -C "$extract" -xzf "$tarball"; then
+  echo "workbench-mesh: failed to extract $asset" >&2
+  fallback
+  exit 69
+fi
 candidate="$extract/workbench-mesh/bin/workbench-mesh"
 if [ ! -f "$candidate" ]; then
   echo "workbench-mesh: asset missing workbench-mesh/bin/workbench-mesh" >&2
@@ -110,12 +114,24 @@ if [ ! -f "$candidate" ]; then
   exit 69
 fi
 chmod +x "$candidate"
-install_tmp="$plugin_data/mesh/bin/$version/.${platform}.tmp.$$"
-rm -rf "$install_tmp"
-mkdir -p "$install_tmp"
-cp "$candidate" "$install_tmp/workbench-mesh"
-chmod +x "$install_tmp/workbench-mesh"
-mkdir -p "$(dirname "$final_dir")"
-rm -rf "$final_dir"
-mv "$install_tmp" "$final_dir"
+if ! mkdir -p "$final_dir"; then
+  echo "workbench-mesh: failed to create cache directory $final_dir" >&2
+  fallback
+  exit 69
+fi
+tmp_binary="$final_dir/.workbench-mesh.$$"
+rm -f "$tmp_binary"
+if ! cp "$candidate" "$tmp_binary"; then
+  echo "workbench-mesh: failed to stage verified binary" >&2
+  rm -f "$tmp_binary"
+  fallback
+  exit 69
+fi
+chmod +x "$tmp_binary"
+if ! mv -f "$tmp_binary" "$final_dir/workbench-mesh"; then
+  echo "workbench-mesh: failed to install verified binary" >&2
+  rm -f "$tmp_binary"
+  fallback
+  exit 69
+fi
 exec "$final_dir/workbench-mesh" "$@"

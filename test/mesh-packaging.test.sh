@@ -154,6 +154,23 @@ WORKBENCH_MESH_TEST_ARCH="x86_64" \
   "$BOOT_PLUGIN/bin/workbench-mesh" cached > "$BOOT_TMP/cached.out"
 chk "launcher reuses cached binary without release directory" "grep -q 'bootstrapped:cached' '$BOOT_TMP/cached.out'"
 
+ATOMIC_RELEASE="$BOOT_TMP/atomic-release"
+mkdir -p "$ATOMIC_RELEASE" "$BOOT_TMP/payload-v2/workbench-mesh/bin"
+cat > "$BOOT_TMP/payload-v2/workbench-mesh/bin/workbench-mesh" <<'FAKEBOOTV2'
+#!/usr/bin/env bash
+printf 'bootstrapped-v2:%s\n' "$*"
+FAKEBOOTV2
+chmod +x "$BOOT_TMP/payload-v2/workbench-mesh/bin/workbench-mesh"
+printf '0.5.1\n' > "$BOOT_TMP/payload-v2/workbench-mesh/VERSION"
+printf 'linux-x64\n' > "$BOOT_TMP/payload-v2/workbench-mesh/PLATFORM"
+tar -C "$BOOT_TMP/payload-v2" -czf "$ATOMIC_RELEASE/workbench-mesh-v0.5.1-linux-x64.tar.gz" workbench-mesh
+(cd "$ATOMIC_RELEASE" && sha256sum workbench-mesh-v0.5.1-linux-x64.tar.gz > checksums.txt)
+printf 'keep\n' > "$BOOT_DATA/mesh/bin/0.5.1/linux-x64/marker"
+CLAUDE_PLUGIN_DATA="$BOOT_DATA" \
+WORKBENCH_MESH_RELEASE_BASE_URL="file://$ATOMIC_RELEASE" \
+  bash "$BOOT_PLUGIN/scripts/mesh-bootstrap.sh" linux-x64 x86_64-unknown-linux-gnu 0.5.1 atomic > "$BOOT_TMP/atomic.out"
+chk "bootstrap atomically replaces cached binary file" "grep -q 'bootstrapped-v2:atomic' '$BOOT_TMP/atomic.out' && [ -f '$BOOT_DATA/mesh/bin/0.5.1/linux-x64/marker' ]"
+
 BAD_PLUGIN="$BOOT_TMP/bad-plugin"
 BAD_RELEASE="$BOOT_TMP/bad-release"
 BAD_DATA="$BOOT_TMP/bad-data"
@@ -169,6 +186,20 @@ WORKBENCH_MESH_TEST_ARCH="x86_64" \
   "$BAD_PLUGIN/bin/workbench-mesh" fail > "$BOOT_TMP/bad.out" 2>&1 || BAD_RC=$?
 chk "bootstrap rejects checksum mismatch" "[ '$BAD_RC' -ne 0 ] && grep -qi 'checksum' '$BOOT_TMP/bad.out'"
 chk "bootstrap does not cache bad binary" "[ ! -e '$BAD_DATA/mesh/bin/0.5.1/linux-x64/workbench-mesh' ]"
+
+CORRUPT_RELEASE="$BOOT_TMP/corrupt-release"
+CORRUPT_DATA="$BOOT_TMP/corrupt-data"
+mkdir -p "$CORRUPT_RELEASE" "$CORRUPT_DATA"
+printf 'not a tarball\n' > "$CORRUPT_RELEASE/workbench-mesh-v0.5.1-linux-x64.tar.gz"
+(cd "$CORRUPT_RELEASE" && sha256sum workbench-mesh-v0.5.1-linux-x64.tar.gz > checksums.txt)
+CORRUPT_RC=0
+CLAUDE_PLUGIN_DATA="$CORRUPT_DATA" \
+WORKBENCH_MESH_RELEASE_BASE_URL="file://$CORRUPT_RELEASE" \
+WORKBENCH_MESH_TEST_OS="Linux" \
+WORKBENCH_MESH_TEST_ARCH="x86_64" \
+  "$BOOT_PLUGIN/bin/workbench-mesh" fail > "$BOOT_TMP/corrupt.out" 2>&1 || CORRUPT_RC=$?
+chk "bootstrap reports extract failure with fallback" "[ '$CORRUPT_RC' -ne 0 ] && grep -qi 'failed to extract' '$BOOT_TMP/corrupt.out' && grep -q 'cargo build --release -p workbench-mesh' '$BOOT_TMP/corrupt.out'"
+chk "bootstrap does not cache corrupt archive binary" "[ ! -e '$CORRUPT_DATA/mesh/bin/0.5.1/linux-x64/workbench-mesh' ]"
 
 MALFORMED_RELEASE="$BOOT_TMP/malformed-release"
 MALFORMED_DATA="$BOOT_TMP/malformed-data"
