@@ -176,16 +176,13 @@ pub fn issue_invite_credential(
     token: &str,
     device: &str,
 ) -> Result<ProjectCredential> {
-    if device.trim().is_empty() {
-        bail!("device name is required");
-    }
+    let sanitized_device = sanitize_device_identifier(device)?;
 
     let store = MeshStore::open(project_root)?;
     let invite_path = store.root().join("invites.json");
     let token_hash = hash_token(token);
     let now = OffsetDateTime::now_utc();
     let project_id = project_id(project_root)?;
-    let sanitized_device = sanitize_name(device);
 
     let (role, revoked_at) = redeem_invite(&invite_path, &token_hash, now).map_err(|err| {
         let _ = append_invite_rejection_audit(&store, &err, &sanitized_device, &token_hash);
@@ -415,7 +412,7 @@ pub fn list_devices(project_root: &Path) -> Result<Vec<DeviceRecord>> {
 pub fn revoke_device(project_root: &Path, device: &str, actor: &str) -> Result<String> {
     let store = MeshStore::open(project_root)?;
     let path = store.root().join("devices.json");
-    let sanitized_device = sanitize_name(device);
+    let sanitized_device = sanitize_device_identifier(device)?;
     let revoked_at = OffsetDateTime::now_utc()
         .format(&Rfc3339)
         .context("format device revoke timestamp")?;
@@ -550,7 +547,7 @@ fn device_role_for_token(
                 bail!("token rejected");
             }
             validate_role(&device.role)?;
-            touch_device_seen(project_root, &device.device)?;
+            touch_device_seen(project_root, project_id, token_hash)?;
             return Ok(Some(device.role.clone()));
         }
     }
@@ -569,6 +566,17 @@ fn credential_token_revoked(devices: &[DeviceRecord], project_id: &str, token: &
 
 fn device_records(project_root: &Path) -> Result<Vec<DeviceRecord>> {
     read_devices(&project_root.join(".workbench/mesh/devices.json"))
+}
+
+fn sanitize_device_identifier(value: &str) -> Result<String> {
+    if value.trim().is_empty() {
+        bail!("device name is required");
+    }
+    let sanitized = sanitize_name(value);
+    if sanitized == "project" && !value.chars().any(|ch| ch.is_ascii_alphanumeric()) {
+        bail!("device name is invalid");
+    }
+    Ok(sanitized)
 }
 
 fn project_credentials_for(
@@ -778,14 +786,16 @@ fn mutate_devices<T>(
     result
 }
 
-fn touch_device_seen(project_root: &Path, device: &str) -> Result<()> {
+fn touch_device_seen(project_root: &Path, project_id: &str, credential_hash: &str) -> Result<()> {
     let store = MeshStore::open(project_root)?;
     let path = store.root().join("devices.json");
     let seen_at = OffsetDateTime::now_utc()
         .format(&Rfc3339)
         .context("format device seen timestamp")?;
     mutate_devices(&path, |devices| {
-        if let Some(record) = devices.iter_mut().find(|record| record.device == device) {
+        if let Some(record) = devices.iter_mut().find(|record| {
+            record.project == project_id && record.credential_hash == credential_hash
+        }) {
             record.last_seen_at = Some(seen_at);
         }
         Ok(())
@@ -1230,6 +1240,29 @@ mod tests {
     }
 
     #[test]
+    fn issue_invite_credential_rejects_invalid_device_name() {
+        let project = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let invite = create_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+
+        let err = issue_invite_credential(project.path(), &invite.token, "!!!")
+            .err()
+            .unwrap();
+
+        assert_eq!(err.to_string(), "device name is invalid");
+        assert!(list_devices(project.path()).unwrap().is_empty());
+    }
+
+    #[test]
     fn persist_project_credential_writes_joining_home_secret_files() {
         let joining_home = tempfile::tempdir().unwrap();
         let credential = ProjectCredential {
@@ -1291,6 +1324,17 @@ mod tests {
                 .unwrap()
                 .contains("device.revoked")
         );
+    }
+
+    #[test]
+    fn revoke_device_rejects_invalid_device_name() {
+        let project = tempfile::tempdir().unwrap();
+
+        let err = revoke_device(project.path(), "!!!", "auth:owner")
+            .err()
+            .unwrap();
+
+        assert_eq!(err.to_string(), "device name is invalid");
     }
 
     #[test]
@@ -1394,6 +1438,66 @@ mod tests {
         .err()
         .unwrap();
         assert_eq!(err.to_string(), "token rejected");
+    }
+
+    #[test]
+    fn re_enrolled_device_updates_last_seen_on_matching_active_credential() {
+        let project = tempfile::tempdir().unwrap();
+        let owner_home = tempfile::tempdir().unwrap();
+        let joining_home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        bootstrap(project.path(), Some(owner_home.path().to_path_buf())).unwrap();
+        let first_invite = create_invite(
+            project.path(),
+            Some(owner_home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+        accept_invite(
+            project.path(),
+            Some(joining_home.path().to_path_buf()),
+            &first_invite.token,
+            "macbook",
+        )
+        .unwrap();
+        revoke_device(project.path(), "macbook", "auth:owner").unwrap();
+        let second_invite = create_invite(
+            project.path(),
+            Some(owner_home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+        accept_invite(
+            project.path(),
+            Some(joining_home.path().to_path_buf()),
+            &second_invite.token,
+            "macbook",
+        )
+        .unwrap();
+        let second_credential = read_project_credential(joining_home.path(), "macbook.cred");
+
+        project_token_role(
+            project.path(),
+            Some(joining_home.path().to_path_buf()),
+            &second_credential.token,
+        )
+        .unwrap();
+
+        let devices = list_devices(project.path()).unwrap();
+        let revoked = devices
+            .iter()
+            .find(|device| device.revoked_at.is_some())
+            .unwrap();
+        let active = devices
+            .iter()
+            .find(|device| device.revoked_at.is_none())
+            .unwrap();
+        assert!(revoked.last_seen_at.is_none());
+        assert!(active.last_seen_at.is_some());
     }
 
     #[test]
