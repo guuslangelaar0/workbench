@@ -86,6 +86,7 @@ That's the whole rhythm: pick a level, capture work as tasks, let the loop drive
 | `/workbench:park "<title>"` | Park an unrelated bug/feature/follow-up as a real backlog task with origin metadata |
 | `/workbench:epic "<title>"` | Create or list epics — groups of related tasks with a live task rollup (pair level and up) |
 | `/workbench:dispatch <id>` | Move a task to in-development and dispatch it to an engineer |
+| `/workbench:codex-engineer <id>` | Dispatch a task to Codex through the OpenAI Codex plugin while Workbench keeps lifecycle and verification ownership |
 | `/workbench:verify <id>` | Run a task's verification and gate it to `verified/` (or back) |
 | `/workbench:mc` | Mission Control: a text dashboard of tasks, cap, build, and prod |
 | `/workbench:teamlead <topic>` | Scope this session to one track and lock tasks so leads don't collide |
@@ -206,6 +207,7 @@ workbench/
 
 - **[graphify](https://github.com/safishamsi/graphify)** — supplies the *extracted reality* half of the context backbone (the real module graph that `/workbench:architecture drift` reconciles against your authored C4 docs).
 - **Superpowers** — the companion discipline layer for brainstorm -> spec -> plan, TDD, code review, verification-before-completion, and subagent-driven development. Workbench routes those intents to Superpowers when it is installed.
+- **OpenAI Codex plugin** - optional native Codex engineer lane via `/workbench:codex-engineer`, backed by the Codex plugin's `codex:codex-rescue` subagent.
 - **[Claude Code](https://claude.com/claude-code)** — the host. workbench is a plugin; everything it scaffolds is plain files that outlive it.
 
 ## Contributing

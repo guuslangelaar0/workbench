@@ -6,6 +6,9 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Native Codex engineer lane: `/workbench:codex-engineer` dispatches a Workbench task through the OpenAI Codex plugin's `codex:codex-rescue` subagent while keeping Workbench responsible for task lifecycle, review, and verification.
+
 ## [0.6.0] - 2026-07-01
 
 The remote/LAN Mesh onboarding release. Workbench Mesh can now bring another Claude session into a trusted host session from a second machine, using short-lived invites exchanged for revocable device credentials while keeping public internet exposure, relays, WebRTC, and gRPC out of scope for this release.
