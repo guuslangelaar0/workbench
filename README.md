@@ -207,7 +207,7 @@ workbench/
 
 - **[graphify](https://github.com/safishamsi/graphify)** — supplies the *extracted reality* half of the context backbone (the real module graph that `/workbench:architecture drift` reconciles against your authored C4 docs).
 - **Superpowers** — the companion discipline layer for brainstorm -> spec -> plan, TDD, code review, verification-before-completion, and subagent-driven development. Workbench routes those intents to Superpowers when it is installed.
-- **OpenAI Codex plugin** - optional native Codex engineer lane via `/workbench:codex-engineer`, backed by the Codex plugin's `codex:codex-rescue` subagent.
+- **OpenAI Codex plugin** — optional native Codex engineer lane via `/workbench:codex-engineer`, backed by the Codex plugin's `codex:codex-rescue` subagent.
 - **[Claude Code](https://claude.com/claude-code)** — the host. workbench is a plugin; everything it scaffolds is plain files that outlive it.
 
 ## Contributing

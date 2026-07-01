@@ -1,6 +1,6 @@
 ---
 name: codex-bridge
-description: Use when coordinating with Codex (a second coding agent) in a workbench project — the shared disk-based protocol, codex:rescue, and codex:setup.
+description: Use when coordinating with Codex (a second coding agent) in a workbench project — /workbench:codex-engineer, the shared disk-based protocol, codex:rescue, and codex:setup.
 ---
 
 # Codex bridge
