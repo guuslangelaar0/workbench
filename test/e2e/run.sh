@@ -214,7 +214,7 @@ rm -rf "$D8"
 # ---- scenario 9: /workbench:uninstall dry-run previews, mutates nothing -------
 note "9) /workbench:uninstall dry-run previews removals and preserves the project"
 D9="$(scaffold "E2E Nine" crew)"
-out="$(cd "$D9" && drive "$D9" 'Run /workbench:uninstall as a dry-run and show me what it would remove and preserve. Do NOT apply anything.')"
+out="$(cd "$D9" && drive "$D9" 'Run /workbench:uninstall as a dry-run. Do NOT apply anything. Paste the exact dry-run preview output lines that mention removals or preserved files; do not replace the preview with a high-level summary.')"
 { [ -f "$D9/CLAUDE.md" ] && [ -f "$D9/.workbench/manifest.json" ] && [ -f "$D9/scripts/coord/lib.sh" ]; } \
   && ok "dry-run left the project intact" \
   || bad "dry-run mutated the project"
