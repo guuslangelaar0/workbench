@@ -7,6 +7,10 @@ PIDF="$TMP/mesh.pid"
 trap 'kill "$(cat "$PIDF" 2>/dev/null)" >/dev/null 2>&1 || true; rm -rf "$TMP" "$HOME_TMP"' EXIT
 fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
+if ! command -v node >/dev/null 2>&1; then
+  echo "FAIL: node runtime is required for command center UI action harness" >&2
+  exit 1
+fi
 post_ui_action() {
   label="$1"
   event_type="$2"
@@ -18,6 +22,8 @@ post_ui_action() {
   chk "$label accepted by api events" "printf '%s' \"\$response\" | grep -q '\"type\":\"$event_type\"'"
   chk "$label preserves structured payload" "printf '%s' \"\$response\" | grep -q '$marker'"
 }
+
+node "$HERE/test/mesh-command-center-action-harness.js" || exit 1
 
 bash "$HERE/scripts/init.sh" --name "MeshUI" --mission "Test." --target "$TMP" --profile full --level crew >/dev/null 2>&1
 cargo build -p workbench-mesh >/dev/null || exit 1

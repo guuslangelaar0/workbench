@@ -258,6 +258,29 @@ Commands run:
 - `cargo test -p workbench-mesh` - PASS. `26 passed` in `src/lib.rs`, `1 passed` in `src/main.rs`, doc-tests `0 passed`.
 - `bash test/mesh-command-center.test.sh` - PASS. Reconfirmed after `cargo test`; final line `PASS: mesh-command-center`.
 
+## Task 6 UI action harness fix
+
+Files changed:
+- `test/mesh-command-center.test.sh`
+- `test/mesh-command-center-action-harness.js`
+- `.superpowers/sdd/task-6-report.md`
+
+Implementation summary:
+- Added a focused Node harness that reads the real `index.html`, extracts the real `data-action` values, evaluates `app.js` with stubbed DOM, `fetch`, local storage, and WebSocket surfaces, then clicks each action button through the same listener path used by the browser UI.
+- The harness asserts the actual fetch URL, method, bearer/JSON headers, and JSON body built by `runAction()`/`createInvite()` for send message, ask status, request help, create invite, revoke invite, approve decision, deny decision, reassign task, stop job, retry job, adopt stale lead, close lead, and set availability.
+- `test/mesh-command-center.test.sh` now fails clearly if `node` is unavailable, then runs the harness before the existing server-backed checks.
+- Existing authenticated static-route checks, query-token bootstrap checks, unauthenticated rejection checks, static response header checks, handcrafted API projection checks, and no-`jq` constraint were preserved.
+- No production UI behavior or auth behavior was changed; static routes remain authenticated.
+
+Commands run:
+- `node test/mesh-command-center-action-harness.js` - FAIL during harness bring-up because stub element prototype methods were attached after `DOMContentLoaded` ran. Fixed harness setup order before relying on the result.
+- `node test/mesh-command-center-action-harness.js` - PASS. Output: `PASS: mesh command center UI action harness`.
+- `bash test/mesh-command-center.test.sh` - PASS. Includes the new UI action harness and existing authenticated HTML/assets, query-token HTML/assets, unauthenticated HTML/JS/CSS rejection, no-store/no-referrer static headers, and API state projection checks. Final line: `PASS: mesh-command-center`.
+- `cargo test -p workbench-mesh` - PASS. `26 passed` in `src/lib.rs`, `1 passed` in `src/main.rs`, doc-tests `0 passed`.
+- `git diff --check` - PASS/no output.
+
 Concerns:
+- The focused UI action harness depends on `node`; the shell test now reports that dependency explicitly if it is missing.
+- The older handcrafted `/api/events` posts remain as backend projection coverage, but they are no longer the only coverage for command-center action payloads.
 - Query-token browser bootstrap still intentionally exposes the daemon token in local URLs/history. This fix reduces static response caching/referrer leakage but does not remove the bootstrap tradeoff.
 - The shell test still rebuilds `target/debug/workbench-mesh` before launching the server so it exercises the current Rust code.
