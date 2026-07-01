@@ -53,7 +53,7 @@ Create or list **epics** — groups of related tasks under one user-facing outco
 ### `/workbench:dispatch <id> [lane]`
 Move a task to `in-development/` and dispatch it to an engineer subagent in the given lane.
 
-### `/workbench:codex-engineer <id> [--background|--wait] [--model <model>] [--effort <level>]`
+### `/workbench:codex-engineer <id> [--background|--wait] [--fresh|--resume] [--model <model>] [--effort <level>]`
 Move a task to `in-development/` and dispatch it to Codex through the OpenAI Codex plugin's native `codex:codex-rescue` subagent. Workbench still owns task claiming, lifecycle, review, and `/workbench:verify`; Codex acts as the engineer lane. If Codex is not set up, run `/codex:setup`.
 
 ### `/workbench:verify <id>`

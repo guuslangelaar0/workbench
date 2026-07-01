@@ -10,7 +10,11 @@ You are still the Workbench lead. Codex is the engineer. You own task lifecycle,
 
 1. Parse `$ARGUMENTS`:
    - first non-flag token is the 4-digit task id
-   - preserve `--background`, `--wait`, `--fresh`, `--resume`, `--model <value>`, and `--effort <value>` for the Codex request
+   - preserve `--fresh`, `--resume`, `--model <value>`, and `--effort <value>` for the Codex request
+   - build a `runtime_flags` string from preserved `--fresh`/`--resume`, `--model <value>`, and `--effort <value>` flags, or `(none)` when no such flags were passed
+   - map `--background` to Agent `run_in_background: true`
+   - map `--wait` to Agent `run_in_background: false`
+   - if both `--background` and `--wait` are present, stop and ask the user to choose one
    - treat remaining text as a lane/repo hint
    - if no task id is present, ask for the task id
 
@@ -40,12 +44,12 @@ You are still the Workbench lead. Codex is the engineer. You own task lifecycle,
 6. Move the task to in-development:
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-move.sh" <id> in-development --target "${CLAUDE_PROJECT_DIR}"`
 
-7. Append a note to the task's `## Notes` section. Include UTC time, that Codex was assigned, the runtime mode (`--background` or `--wait`), and any `--model`/`--effort` flags. If there is no `## Notes` section, append one.
+7. Append a note to the task's `## Notes` section. Include UTC time, that Codex was assigned, the Agent runtime mode (`--background`, `--wait`, or default foreground behavior), and the `runtime_flags` string. If there is no `## Notes` section, append one.
 
 8. Set this lead session's purpose to the Codex-dispatched task:
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lead.sh" set --target "${CLAUDE_PROJECT_DIR}" --session-id "<session-id>" --mode task --active-task "<id>" --track "<task Track field>" --purpose "<task title>"`
 
-9. Invoke the `Agent` tool with `subagent_type: "codex:codex-rescue"`. Forward this prompt to Codex, preserving explicit runtime flags:
+9. Invoke the `Agent` tool with `subagent_type: "codex:codex-rescue"`. Set `run_in_background: true` when `--background` was passed and `run_in_background: false` when `--wait` was passed. Forward this prompt to Codex, preserving explicit runtime flags:
 
 ```text
 You are Codex acting as a Workbench engineer lane.
@@ -55,6 +59,7 @@ Current branch: <git branch --show-current output>
 Task id: <id>
 Task file: <task file path>
 Lane/repo hint: <lane hint or "(none)">
+Runtime flags: <runtime flags or "(none)">
 
 Task title:
 <title>
