@@ -106,7 +106,7 @@ chk "wrapper open does not call rust binary" "[ ! -s '$LOG' ]"
 printf '{"host":"127.0.0.1","port":47321,"local_token":"fake-local-token"}\n' > "$PROJECT_DIR/.workbench/mesh/server.json"
 : > "$LOG"
 run_wrapper open > "$WRAP_TMP/open-token.out" 2>&1
-chk "wrapper open adds local token when metadata has token" "contains '$WRAP_TMP/open-token.out' 'Command center: http://127.0.0.1:47321?token=fake-local-token'"
+chk "wrapper open does not print local token from metadata" "contains '$WRAP_TMP/open-token.out' 'Command center: http://127.0.0.1:47321' && ! contains '$WRAP_TMP/open-token.out' 'fake-local-token' && ! contains '$WRAP_TMP/open-token.out' 'token='"
 chk "wrapper tokenized open does not call rust binary" "[ ! -s '$LOG' ]"
 
 [ "$fail" = 0 ] && echo "PASS: mesh-packaging" || { echo "mesh-packaging test failed"; exit 1; }

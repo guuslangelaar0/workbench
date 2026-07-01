@@ -95,8 +95,17 @@ curl -fsS -X POST "http://127.0.0.1:$PORT/api/events" \
 
 post_ui_action "request help" "message.help_request" "cmd-help-6" \
   '{"type":"message.help_request","room":"repo:meshui","from":"ui:owner","to":"worker:alpha","payload":{"text":"cmd-help-6","priority":"operator"}}'
-post_ui_action "revoke invite" "invite.revoked" "invite-revoke-6" \
-  '{"type":"invite.revoked","room":"repo:meshui","from":"ui:owner","to":"worker:alpha","payload":{"token_hint":"invite-revoke-6","reason":"operator revoked"}}'
+INVITE_JSON="$(curl -fsS -X POST "http://127.0.0.1:$PORT/api/invites" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"role":"worker","ttl_seconds":900,"max_uses":2}')"
+INVITE_TOKEN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$INVITE_JSON")"
+REVOKE_JSON="$(curl -fsS -X POST "http://127.0.0.1:$PORT/api/invites/revoke" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"token\":\"$INVITE_TOKEN\"}")"
+chk "revoke invite calls real API" "printf '%s' \"\$REVOKE_JSON\" | grep -q '\"ok\":true'"
+REVOKED_ACCEPT_RC=0
+"$BIN" invite accept --target "$TMP" --home "$HOME_TMP" --token "$INVITE_TOKEN" --device revoked-ui >"$TMP/revoked-accept.out" 2>&1 || REVOKED_ACCEPT_RC=$?
+chk "revoked invite cannot be accepted" "[ '$REVOKED_ACCEPT_RC' -ne 0 ] && grep -qi 'invite revoked' '$TMP/revoked-accept.out'"
 post_ui_action "approve decision" "decision.answer" "decision-approve-6" \
   '{"type":"decision.answer","room":"repo:meshui","from":"ui:owner","to":"worker:alpha","payload":{"decision":"decision-approve-6","answer":"approved","approved":true}}'
 post_ui_action "deny decision" "decision.answer" "decision-deny-6" \
@@ -117,7 +126,7 @@ post_ui_action "set availability" "actor.status" "availability.set" \
 STATE="$(curl -fsS "http://127.0.0.1:$PORT/api/state" -H "Authorization: Bearer $TOKEN")"
 chk "state includes ui message" "printf '%s' \"\$STATE\" | grep -q 'hello leads'"
 chk "state includes request help action" "printf '%s' \"\$STATE\" | grep -q 'cmd-help-6'"
-chk "state includes revoke invite action" "printf '%s' \"\$STATE\" | grep -q 'invite-revoke-6'"
+chk "audit includes real invite revocation" "grep -q 'invite.revoked' '$TMP/.workbench/mesh/audit.jsonl'"
 chk "state includes approve decision action" "printf '%s' \"\$STATE\" | grep -q 'decision-approve-6'"
 chk "state includes deny decision action" "printf '%s' \"\$STATE\" | grep -q 'decision-deny-6'"
 chk "state includes reassign task action" "printf '%s' \"\$STATE\" | grep -q 'task-reassign-6'"

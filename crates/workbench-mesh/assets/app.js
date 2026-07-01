@@ -152,7 +152,8 @@
     } else if (action === "request-help") {
       event = makeEvent("message.help_request", base, target, { text: message, priority: "operator" });
     } else if (action === "revoke-invite") {
-      event = makeEvent("invite.revoked", base, target, { token_hint: message || "current", reason: "operator revoked" });
+      revokeInvite(message);
+      return;
     } else if (action === "approve-decision") {
       event = makeEvent("decision.answer", base, target, { decision: message, answer: "approved", approved: true });
     } else if (action === "deny-decision") {
@@ -240,6 +241,34 @@
       .catch(function (error) {
         showToast(error.message);
       });
+  }
+
+  function revokeInvite(token) {
+    if (!state.token) {
+      showToast("Set a bearer token first.");
+      return;
+    }
+    if (!token) {
+      showToast("Paste an invite token to revoke.");
+      return;
+    }
+    fetch("/api/invites/revoke", {
+      method: "POST",
+      headers: headers(true),
+      body: JSON.stringify({ token: token })
+    })
+      .then(requireOk)
+      .then(function () {
+        showToast("Revoked invite.");
+        return postEvent(makeEvent("invite.revoked", commandBase(), "", { token_hint: tokenHint(token), reason: "operator revoked" }));
+      })
+      .catch(function (error) {
+        showToast(error.message);
+      });
+  }
+
+  function tokenHint(token) {
+    return token.length <= 12 ? token : token.slice(0, 12) + "...";
   }
 
   function upsertEvent(event) {

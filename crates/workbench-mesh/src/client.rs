@@ -14,9 +14,10 @@ use crate::store::MeshStore;
 const DEFAULT_ACTOR: &str = "session:lead";
 
 pub async fn status(project_root: PathBuf, home: Option<PathBuf>) -> Result<()> {
-    auth::require_local_project_credential(&project_root, home)?;
+    auth::require_local_project_credential(&project_root, home.clone())?;
+    let token = auth::local_project_token(&project_root, home)?;
     let metadata = read_server_metadata(&project_root)?;
-    let state = get_state(&metadata).await?;
+    let state = get_state(&metadata, &token).await?;
     let event_count = state
         .get("event_count")
         .and_then(Value::as_u64)
@@ -33,9 +34,10 @@ pub async fn status(project_root: PathBuf, home: Option<PathBuf>) -> Result<()> 
 }
 
 pub async fn who(project_root: PathBuf, home: Option<PathBuf>) -> Result<()> {
-    auth::require_local_project_credential(&project_root, home)?;
+    auth::require_local_project_credential(&project_root, home.clone())?;
+    let token = auth::local_project_token(&project_root, home)?;
     let metadata = read_server_metadata(&project_root)?;
-    let state = get_state(&metadata).await?;
+    let state = get_state(&metadata, &token).await?;
     if let Some(actors) = state.get("actors").and_then(Value::as_array) {
         for actor in actors {
             if let Some(actor) = actor.as_str() {
@@ -47,7 +49,8 @@ pub async fn who(project_root: PathBuf, home: Option<PathBuf>) -> Result<()> {
 }
 
 pub async fn bench(project_root: PathBuf, home: Option<PathBuf>, messages: u64) -> Result<()> {
-    auth::require_local_project_credential(&project_root, home)?;
+    auth::require_local_project_credential(&project_root, home.clone())?;
+    let token = auth::local_project_token(&project_root, home)?;
     let metadata = read_server_metadata(&project_root)?;
     let client = Client::new();
     let mut latencies = Vec::with_capacity(messages as usize);
@@ -55,7 +58,7 @@ pub async fn bench(project_root: PathBuf, home: Option<PathBuf>, messages: u64) 
         let started = Instant::now();
         client
             .post(format!("{}/api/events", base_url(&metadata)))
-            .bearer_auth(&metadata.local_token)
+            .bearer_auth(&token)
             .json(&json!({
                 "type": "message.sent",
                 "room": "repo:bench",
@@ -261,10 +264,10 @@ fn append_local_event(
     MeshStore::open(project_root)?.append_event(event_type, room, from, to, payload)
 }
 
-async fn get_state(metadata: &crate::server::ServerMetadata) -> Result<Value> {
+async fn get_state(metadata: &crate::server::ServerMetadata, token: &str) -> Result<Value> {
     let response = Client::new()
         .get(format!("{}/api/state", base_url(metadata)))
-        .bearer_auth(&metadata.local_token)
+        .bearer_auth(token)
         .send()
         .await
         .context("get daemon state")?

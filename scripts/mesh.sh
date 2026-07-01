@@ -66,18 +66,13 @@ lan_ip() {
 }
 
 metadata_url() {
-  local meta host port token
+  local meta host port
   meta="$TARGET/.workbench/mesh/server.json"
   [ -f "$meta" ] || return 1
   host="$(sed -n 's/.*"host"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$meta" | head -1)"
   port="$(sed -n 's/.*"port"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$meta" | head -1)"
   [ -n "$host" ] && [ -n "$port" ] || return 1
-  token="$(sed -n 's/.*"local_token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$meta" | head -1)"
-  if [ -n "$token" ]; then
-    printf 'http://%s:%s?token=%s\n' "$host" "$port" "$token"
-  else
-    printf 'http://%s:%s\n' "$host" "$port"
-  fi
+  printf 'http://%s:%s\n' "$host" "$port"
 }
 
 print_start_info() {
@@ -244,7 +239,7 @@ case "$cmd" in
   open)
     if url="$(metadata_url)"; then
       printf 'Command center: %s\n' "$url"
-      echo "Command center UI is added in a later task; the mesh API is available at this URL now."
+      echo "Open the command center in a browser and use a local project credential token when prompted."
     else
       echo "mesh: no running mesh metadata found at $TARGET/.workbench/mesh/server.json" >&2
       echo "mesh: run /workbench:mesh start first" >&2

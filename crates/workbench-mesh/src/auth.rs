@@ -256,6 +256,45 @@ pub fn accept_invite(
     Ok(format!("device {device} connected\nrole: {role}"))
 }
 
+pub fn revoke_invite(
+    project_root: &Path,
+    home: Option<PathBuf>,
+    token: &str,
+    actor: &str,
+) -> Result<String> {
+    let auth_paths = paths(home)?;
+    require_local_invite_authority(project_root, &auth_paths)?;
+    let store = MeshStore::open(project_root)?;
+    let invite_path = store.root().join("invites.json");
+    let token_hash = hash_token(token);
+    let revoked_at = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .context("format revoke timestamp")?;
+
+    mutate_invites(&invite_path, |invites| {
+        let invite = invites
+            .iter_mut()
+            .find(|invite| invite.token_hash == token_hash)
+            .ok_or_else(|| anyhow::anyhow!("invite not found"))?;
+        if invite.revoked_at.is_none() {
+            invite.revoked_at = Some(revoked_at.clone());
+        }
+        Ok(())
+    })?;
+
+    store.append_audit(
+        "invite.revoked",
+        actor,
+        json!({
+            "reason": "manual",
+            "revoked_at": revoked_at,
+            "token_hash": token_hash,
+        }),
+    )?;
+
+    Ok(format!("invite revoked\nrevoked_at: {revoked_at}"))
+}
+
 pub fn check(project_root: &Path, home: Option<PathBuf>, token: &str) -> Result<String> {
     let project_id = project_id(project_root)?;
     let role = project_token_role(project_root, home, token)?;
@@ -273,6 +312,7 @@ pub fn project_token_role(
 
     for credential in project_credentials_for(&auth_paths, &project_id)? {
         if credential.project == project_id && credential.token == token {
+            validate_role(&credential.role)?;
             return Ok(credential.role);
         }
     }
@@ -526,7 +566,7 @@ fn write_secret_file(path: &Path, content: &str) -> Result<()> {
 mod tests {
     use super::{
         accept_invite, bootstrap, check, create_invite, require_local_project_credential,
-        sanitize_name, validate_role, ProjectCredential,
+        revoke_invite, sanitize_name, validate_role, ProjectCredential,
     };
     use std::fs;
     use std::path::Path;
@@ -644,6 +684,41 @@ mod tests {
         .unwrap();
 
         assert_eq!(invite.role, "observer");
+    }
+
+    #[test]
+    fn revoked_invite_cannot_be_accepted() {
+        let project = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Auth");
+        bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let invite = create_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "worker",
+            900,
+            2,
+        )
+        .unwrap();
+
+        revoke_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            &invite.token,
+            "auth:test",
+        )
+        .unwrap();
+
+        let err = accept_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            &invite.token,
+            "macbook",
+        )
+        .err()
+        .unwrap();
+
+        assert_eq!(err.to_string(), "invite revoked");
     }
 
     #[test]

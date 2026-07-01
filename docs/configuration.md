@@ -125,7 +125,7 @@ Workbench Mesh does not add long-lived config fields to `.workbench/config.json`
 
 | File | Meaning |
 |------|---------|
-| `.workbench/mesh/server.json` | Ignored project runtime metadata for command-center discovery: host, port, and URL bootstrap details. It may include an ephemeral local daemon access token for the current server, but not the durable same-user credential or root key. `/workbench:mesh open` reads this cached snapshot to print the URL. |
+| `.workbench/mesh/server.json` | Ignored project runtime metadata for command-center discovery: host and port. It may include an ephemeral local daemon access token for the current server, but not the durable same-user credential or root key. `/workbench:mesh open` reads this cached snapshot to print a non-tokenized URL. |
 | `$WORKBENCH_HOME/mesh/` | Durable same-user credential material and scoped LAN invite tokens (`~/.workbench/mesh/` by default). This lives outside git and should be protected with OS user-only permissions. Treat this directory as private runtime state. |
 | `$WORKBENCH_HOME/mesh/statusline/<project>.json` | Cached statusline snapshot: actor presence, availability, and current `doing` text. The statusline hook reads the cache instead of querying the live service on every prompt. |
 
@@ -133,7 +133,7 @@ Start modes set the auth boundary:
 
 | Mode | Command | Boundary |
 |------|---------|----------|
-| Local | `/workbench:mesh start --local` | This machine only, using durable same-user credentials from `$WORKBENCH_HOME` / `~/.workbench` and only ephemeral daemon bootstrap metadata in the project. |
+| Local | `/workbench:mesh start --local` | This machine only, using durable same-user credentials from `$WORKBENCH_HOME` / `~/.workbench`; ephemeral daemon metadata is not printed as invite/open URL authority. |
 | LAN | `/workbench:mesh start --lan` | Trusted local network, explicit invite token for each joining device/session. |
 | Public | Deferred | Public internet exposure is not implemented or documented as supported. |
 

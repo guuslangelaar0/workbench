@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -18,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
+use tokio::time::{sleep, Duration};
 
 use crate::auth;
 use crate::net::detect_bind;
@@ -56,6 +58,7 @@ struct AppState {
     events_tx: broadcast::Sender<EventEnvelope>,
     daemon_token: String,
     local_role: String,
+    last_broadcast_seq: Arc<AtomicU64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -98,6 +101,11 @@ struct InviteRequest {
     max_uses: Option<u32>,
 }
 
+#[derive(Debug, Deserialize)]
+struct RevokeInviteRequest {
+    token: String,
+}
+
 pub async fn serve(opts: ServeOptions) -> Result<()> {
     auth::require_local_project_credential(&opts.project_root, opts.home.clone())?;
     let credential_token = auth::local_project_token(&opts.project_root, opts.home.clone())?;
@@ -110,6 +118,13 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
         .with_context(|| format!("bind {}", bind_info.bind_addr))?;
     let local_addr = listener.local_addr().context("read bound address")?;
     let store = Arc::new(MeshStore::open(&opts.project_root)?);
+    let last_broadcast_seq = Arc::new(AtomicU64::new(
+        store
+            .list_events_since(0)?
+            .last()
+            .map(|event| event.seq)
+            .unwrap_or(0),
+    ));
     let (events_tx, _) = broadcast::channel(256);
     let state = AppState {
         project_root: opts.project_root.clone(),
@@ -118,6 +133,7 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
         events_tx,
         daemon_token: daemon_token.clone(),
         local_role,
+        last_broadcast_seq,
     };
 
     let metadata = ServerMetadata {
@@ -135,6 +151,8 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
             .with_context(|| format!("write pid file {}", pid_file.display()))?;
     }
 
+    tokio::spawn(tail_store_events(state.clone()));
+
     let app = Router::new()
         .route("/", get(command_center))
         .route("/assets/app.js", get(command_center_js))
@@ -143,6 +161,7 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
         .route("/api/state", get(api_state))
         .route("/api/events", get(api_events).post(post_event))
         .route("/api/invites", post(post_invite))
+        .route("/api/invites/revoke", post(post_revoke_invite))
         .route("/ws", get(ws_handler))
         .with_state(state);
 
@@ -226,7 +245,10 @@ async fn post_event(
     headers: HeaderMap,
     Json(request): Json<EventRequest>,
 ) -> Result<Json<EventEnvelope>, ApiError> {
-    require_bearer(&state, &headers)?;
+    let role = bearer_role(&state, &headers)?;
+    if role == "observer" {
+        return Err(ApiError::forbidden("observer bearer cannot mutate events"));
+    }
     let event = append_event(&state, request)?;
     Ok(Json(event))
 }
@@ -255,16 +277,36 @@ async fn post_invite(
     })))
 }
 
+async fn post_revoke_invite(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<RevokeInviteRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let role = bearer_role(&state, &headers)?;
+    if !matches!(role.as_str(), "owner" | "operator") {
+        return Err(ApiError::forbidden("owner/operator bearer required"));
+    }
+    let output = auth::revoke_invite(
+        &state.project_root,
+        state.home.clone(),
+        &request.token,
+        &format!("auth:{role}"),
+    )?;
+    Ok(Json(json!({ "ok": true, "result": output })))
+}
+
 async fn ws_handler(
     State(state): State<AppState>,
     Query(query): Query<WsQuery>,
     ws: WebSocketUpgrade,
 ) -> Result<impl IntoResponse, ApiError> {
-    require_token(&state, &query.token)?;
-    Ok(ws.on_upgrade(move |socket| websocket_session(socket, state, query.last_seq.unwrap_or(0))))
+    let role = require_token(&state, &query.token)?;
+    Ok(ws.on_upgrade(move |socket| {
+        websocket_session(socket, state, query.last_seq.unwrap_or(0), role)
+    }))
 }
 
-async fn websocket_session(socket: WebSocket, state: AppState, last_seq: u64) {
+async fn websocket_session(socket: WebSocket, state: AppState, last_seq: u64, role: String) {
     let (mut sender, mut receiver) = socket.split();
     let mut events_rx = state.events_tx.subscribe();
 
@@ -303,6 +345,9 @@ async fn websocket_session(socket: WebSocket, state: AppState, last_seq: u64) {
                     if request.v != 1 {
                         continue;
                     };
+                    if role == "observer" {
+                        continue;
+                    }
                     let Ok(event) = append_event(&state, request.event) else {
                         continue;
                     };
@@ -324,6 +369,9 @@ fn append_event(state: &AppState, request: EventRequest) -> Result<EventEnvelope
         request.to.as_deref(),
         request.payload,
     )?;
+    state
+        .last_broadcast_seq
+        .fetch_max(event.seq, Ordering::SeqCst);
     let _ = state.events_tx.send(event.clone());
     Ok(event)
 }
@@ -342,8 +390,7 @@ fn bearer_role(state: &AppState, headers: &HeaderMap) -> Result<String, ApiError
     let Some(token) = value.strip_prefix("Bearer ") else {
         return Err(ApiError::unauthorized());
     };
-    require_token(state, token)?;
-    Ok(state.local_role.clone())
+    require_token(state, token)
 }
 
 enum StaticAuth {
@@ -400,11 +447,27 @@ fn state_json(state: &AppState) -> Result<Value> {
     }))
 }
 
-fn require_token(state: &AppState, token: &str) -> Result<(), ApiError> {
+fn require_token(state: &AppState, token: &str) -> Result<String, ApiError> {
     if token == state.daemon_token {
-        Ok(())
-    } else {
-        Err(ApiError::unauthorized())
+        return Ok(state.local_role.clone());
+    }
+    auth::project_token_role(&state.project_root, state.home.clone(), token)
+        .map_err(|_| ApiError::unauthorized())
+}
+
+async fn tail_store_events(state: AppState) {
+    loop {
+        sleep(Duration::from_millis(100)).await;
+        let since = state.last_broadcast_seq.load(Ordering::SeqCst);
+        let Ok(events) = state.store.list_events_since(since) else {
+            continue;
+        };
+        for event in events {
+            state
+                .last_broadcast_seq
+                .fetch_max(event.seq, Ordering::SeqCst);
+            let _ = state.events_tx.send(event);
+        }
     }
 }
 
@@ -494,7 +557,6 @@ impl IntoResponse for ApiError {
         (self.status, Json(json!({ "error": self.message }))).into_response()
     }
 }
-
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -502,6 +564,7 @@ mod tests {
     use std::time::Duration;
 
     use futures_util::{SinkExt, StreamExt};
+    use reqwest::Client;
     use serde_json::{json, Value};
     use tempfile::TempDir;
     use tokio::time::sleep;
@@ -510,6 +573,7 @@ mod tests {
 
     use super::{read_server_metadata, serve, server_metadata_path, ServeOptions};
     use crate::auth;
+    use crate::client;
     use crate::store::MeshStore;
 
     #[tokio::test]
@@ -597,6 +661,255 @@ mod tests {
         server.abort();
     }
 
+    #[tokio::test]
+    async fn accepted_invite_credential_authenticates_api_and_websocket() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Service");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let invite = auth::create_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+        auth::accept_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            &invite.token,
+            "macbook",
+        )
+        .unwrap();
+        let accepted_token = read_project_credential_token(home.path(), "macbook.cred");
+
+        MeshStore::open(project.path())
+            .unwrap()
+            .append_event(
+                "presence.join",
+                "repo:mesh-service",
+                "session:existing",
+                None,
+                json!({ "role": "lead" }),
+            )
+            .unwrap();
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+        }));
+
+        let metadata = wait_for_metadata(project.path()).await;
+        let api_state: Value = Client::new()
+            .get(format!(
+                "http://{}:{}/api/state",
+                metadata.host, metadata.port
+            ))
+            .bearer_auth(&accepted_token)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(api_state["event_count"], 1);
+
+        let (mut socket, _) = connect_async(format!(
+            "ws://{}:{}/ws?token={}&last_seq=0",
+            metadata.host, metadata.port, accepted_token
+        ))
+        .await
+        .unwrap();
+        let replay = read_ws_json(&mut socket).await;
+        assert_eq!(replay["type"], "presence.join");
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn durable_bearer_role_controls_invites_and_mutations() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Service");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let owner_token =
+            auth::local_project_token(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let operator_token = accept_role(project.path(), home.path(), "operator", "operator");
+        let worker_token = accept_role(project.path(), home.path(), "worker", "worker");
+        let observer_token = accept_role(project.path(), home.path(), "observer", "observer");
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+        let client = Client::new();
+        let base = format!("http://{}:{}", metadata.host, metadata.port);
+
+        for token in [&owner_token, &operator_token] {
+            let response = client
+                .post(format!("{base}/api/invites"))
+                .bearer_auth(token)
+                .json(&json!({
+                    "role": "worker",
+                    "ttl_seconds": 900,
+                    "max_uses": 1
+                }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), reqwest::StatusCode::OK);
+        }
+
+        let worker_invite_response = client
+            .post(format!("{base}/api/invites"))
+            .bearer_auth(&worker_token)
+            .json(&json!({
+                "role": "worker",
+                "ttl_seconds": 900,
+                "max_uses": 1
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            worker_invite_response.status(),
+            reqwest::StatusCode::FORBIDDEN
+        );
+
+        let observer_event_response = client
+            .post(format!("{base}/api/events"))
+            .bearer_auth(&observer_token)
+            .json(&json!({
+                "type": "message.sent",
+                "room": "repo:mesh-service",
+                "from": "session:observer",
+                "payload": { "text": "read-only should fail" }
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            observer_event_response.status(),
+            reqwest::StatusCode::FORBIDDEN
+        );
+
+        let worker_event_response = client
+            .post(format!("{base}/api/events"))
+            .bearer_auth(&worker_token)
+            .json(&json!({
+                "type": "message.sent",
+                "room": "repo:mesh-service",
+                "from": "session:worker",
+                "payload": { "text": "worker can chat" }
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(worker_event_response.status(), reqwest::StatusCode::OK);
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn api_revoke_invite_prevents_later_acceptance() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Service");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let owner_token =
+            auth::local_project_token(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let invite = auth::create_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "worker",
+            900,
+            2,
+        )
+        .unwrap();
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+
+        let response = Client::new()
+            .post(format!(
+                "http://{}:{}/api/invites/revoke",
+                metadata.host, metadata.port
+            ))
+            .bearer_auth(&owner_token)
+            .json(&json!({ "token": invite.token }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+
+        let err = auth::accept_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            &invite.token,
+            "after-revoke",
+        )
+        .err()
+        .unwrap();
+        assert_eq!(err.to_string(), "invite revoked");
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn websocket_receives_locally_appended_cli_event() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Service");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let durable_token =
+            auth::local_project_token(project.path(), Some(home.path().to_path_buf())).unwrap();
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+        let (mut socket, _) = connect_async(format!(
+            "ws://{}:{}/ws?token={}&last_seq=0",
+            metadata.host, metadata.port, durable_token
+        ))
+        .await
+        .unwrap();
+
+        client::send_message(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "lead:checkout".to_string(),
+            "what are you touching?".to_string(),
+        )
+        .unwrap();
+
+        let broadcast = read_ws_json(&mut socket).await;
+        assert_eq!(broadcast["type"], "message.sent");
+        assert_eq!(broadcast["payload"]["text"], "what are you touching?");
+
+        server.abort();
+    }
+
     async fn wait_for_metadata(project: &Path) -> super::ServerMetadata {
         for _ in 0..50 {
             if server_metadata_path(project).is_file() {
@@ -629,5 +942,19 @@ mod tests {
             format!(r#"{{"project":{{"name":"{name}"}}}}"#),
         )
         .unwrap();
+    }
+
+    fn accept_role(project: &Path, home: &Path, role: &str, device: &str) -> String {
+        let invite = auth::create_invite(project, Some(home.to_path_buf()), role, 900, 1).unwrap();
+        auth::accept_invite(project, Some(home.to_path_buf()), &invite.token, device).unwrap();
+        read_project_credential_token(home, &format!("{device}.cred"))
+    }
+
+    fn read_project_credential_token(home: &Path, filename: &str) -> String {
+        let content = fs::read(home.join("mesh/projects").join(filename)).unwrap();
+        serde_json::from_slice::<Value>(&content).unwrap()["token"]
+            .as_str()
+            .unwrap()
+            .to_string()
     }
 }

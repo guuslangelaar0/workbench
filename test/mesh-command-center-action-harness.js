@@ -196,13 +196,18 @@ const expectedPayloads = {
     }
   },
   "revoke-invite": {
-    url: "/api/events",
+    url: "/api/invites/revoke",
     body: {
-      type: "invite.revoked",
-      room: "repo:harness",
-      from: "ui:harness",
-      to: "worker:alpha",
-      payload: { token_hint: "invite-token", reason: "operator revoked" }
+      token: "invite-token"
+    },
+    followup: {
+      url: "/api/events",
+      body: {
+        type: "invite.revoked",
+        room: "repo:harness",
+        from: "ui:harness",
+        payload: { token_hint: "invite-token", reason: "operator revoked" }
+      }
     }
   },
   "approve-decision": {
@@ -420,6 +425,9 @@ function fetch(url, options = {}) {
       role: JSON.parse(options.body).role,
       expires_at: "2030-01-01T00:00:00Z"
     }));
+  }
+  if (url === "/api/invites/revoke") {
+    return Promise.resolve(jsonResponse({ ok: true }));
   }
   if (url === "/api/events") {
     const event = JSON.parse(options.body);
