@@ -83,10 +83,13 @@ checksums="$tmp/checksums.txt"
 tarball="$tmp/$asset"
 
 download "$url_base/checksums.txt" "$checksums" || { fallback; exit 69; }
-expected="$(awk -v asset="$asset" '$2 == asset { print $1 }' "$checksums" | head -1)"
-case "$expected" in
-  ""|*[!0-9a-fA-F]*) echo "workbench-mesh: checksum entry missing or malformed for $asset" >&2; rm -f "$tarball"; fallback; exit 69 ;;
-esac
+expected="$(awk -v asset="$asset" 'NF == 2 && $2 == asset { print $1 }' "$checksums" | head -1)"
+if [ "${#expected}" -ne 64 ] || ! printf '%s\n' "$expected" | grep -Eq '^[0-9a-fA-F]{64}$'; then
+  echo "workbench-mesh: checksum entry missing or malformed for $asset" >&2
+  rm -f "$tarball"
+  fallback
+  exit 69
+fi
 
 download "$url_base/$asset" "$tarball" || { fallback; exit 69; }
 actual="$(sha256_file "$tarball")"

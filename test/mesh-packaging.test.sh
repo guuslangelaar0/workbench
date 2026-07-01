@@ -170,6 +170,19 @@ WORKBENCH_MESH_TEST_ARCH="x86_64" \
 chk "bootstrap rejects checksum mismatch" "[ '$BAD_RC' -ne 0 ] && grep -qi 'checksum' '$BOOT_TMP/bad.out'"
 chk "bootstrap does not cache bad binary" "[ ! -e '$BAD_DATA/mesh/bin/0.5.1/linux-x64/workbench-mesh' ]"
 
+MALFORMED_RELEASE="$BOOT_TMP/malformed-release"
+MALFORMED_DATA="$BOOT_TMP/malformed-data"
+mkdir -p "$MALFORMED_RELEASE" "$MALFORMED_DATA"
+printf 'abc  workbench-mesh-v0.5.1-linux-x64.tar.gz\n' > "$MALFORMED_RELEASE/checksums.txt"
+MALFORMED_RC=0
+CLAUDE_PLUGIN_DATA="$MALFORMED_DATA" \
+WORKBENCH_MESH_RELEASE_BASE_URL="file://$MALFORMED_RELEASE" \
+WORKBENCH_MESH_TEST_OS="Linux" \
+WORKBENCH_MESH_TEST_ARCH="x86_64" \
+  "$BOOT_PLUGIN/bin/workbench-mesh" fail > "$BOOT_TMP/malformed.out" 2>&1 || MALFORMED_RC=$?
+chk "bootstrap rejects malformed checksum length before asset download" "[ '$MALFORMED_RC' -ne 0 ] && grep -qi 'checksum entry missing or malformed' '$BOOT_TMP/malformed.out' && ! grep -qi 'No such file' '$BOOT_TMP/malformed.out'"
+chk "bootstrap does not cache malformed checksum binary" "[ ! -e '$MALFORMED_DATA/mesh/bin/0.5.1/linux-x64/workbench-mesh' ]"
+
 UNSUPPORTED_RC=0
 CLAUDE_PLUGIN_DATA="$BOOT_TMP/unsupported-data" \
 WORKBENCH_MESH_TEST_OS="Plan9" \
