@@ -222,7 +222,9 @@ chk "release workflow declares linux-arm64 asset" "grep -q 'platform: linux-arm6
 chk "release workflow declares macos-arm64 asset" "grep -q 'platform: macos-arm64' '$HERE/.github/workflows/release-binaries.yml'"
 chk "release workflow omits macos intel runner" "! grep -q 'macos-15-intel' '$HERE/.github/workflows/release-binaries.yml'"
 chk "release workflow uploads checksums" "grep -q 'checksums.txt' '$HERE/.github/workflows/release-binaries.yml'"
+chk "release workflow creates release before upload" "grep -q 'gh release create' '$HERE/.github/workflows/release-binaries.yml'"
 chk "release workflow uploads release assets on tags" "grep -q 'gh release upload' '$HERE/.github/workflows/release-binaries.yml'"
+chk "release workflow provides GitHub repo context" "grep -q 'GH_REPO:' '$HERE/.github/workflows/release-binaries.yml' || grep -q -- '--repo' '$HERE/.github/workflows/release-binaries.yml'"
 chk "release workflow avoids target-triple asset names" "! grep -q 'workbench-mesh-\${{ matrix.target }}' '$HERE/.github/workflows/release-binaries.yml'"
 
 [ "$fail" = 0 ] && echo "PASS: mesh-packaging" || { echo "mesh-packaging test failed"; exit 1; }
