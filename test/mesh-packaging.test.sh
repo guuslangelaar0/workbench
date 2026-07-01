@@ -198,4 +198,31 @@ WORKBENCH_MESH_TEST_ARCH="x86_64" \
   "$BOOT_PLUGIN/bin/workbench-mesh" nope > "$BOOT_TMP/macos-x64.out" 2>&1 || MAC_RC=$?
 chk "macos-x64 has source-build fallback" "[ '$MAC_RC' -ne 0 ] && grep -q 'no verified prebuilt binary available for macos-x64' '$BOOT_TMP/macos-x64.out' && grep -q 'cargo build --release -p workbench-mesh' '$BOOT_TMP/macos-x64.out'"
 
+# --- friendly release asset packaging ---
+PKG_TMP="$(mktemp -d "${TMPDIR:-/tmp}/mesh-package.XXXXXX")"
+trap 'rm -rf "$WRAP_TMP" "$BOOT_TMP" "$PKG_TMP"' EXIT
+mkdir -p "$PKG_TMP/repo/target/x86_64-unknown-linux-gnu/release" "$PKG_TMP/out"
+cat > "$PKG_TMP/repo/target/x86_64-unknown-linux-gnu/release/workbench-mesh" <<'FAKEPKG'
+#!/usr/bin/env bash
+echo packaged
+FAKEPKG
+chmod +x "$PKG_TMP/repo/target/x86_64-unknown-linux-gnu/release/workbench-mesh"
+(cd "$PKG_TMP/repo" && bash "$HERE/scripts/package-mesh-asset.sh" x86_64-unknown-linux-gnu linux-x64 0.5.1 "$PKG_TMP/out")
+chk "packager creates friendly asset name" "[ -f '$PKG_TMP/out/workbench-mesh-v0.5.1-linux-x64.tar.gz' ]"
+tar -C "$PKG_TMP/out" -tzf "$PKG_TMP/out/workbench-mesh-v0.5.1-linux-x64.tar.gz" > "$PKG_TMP/tar.list"
+chk "packager uses product layout" "grep -qx 'workbench-mesh/bin/workbench-mesh' '$PKG_TMP/tar.list' && grep -qx 'workbench-mesh/VERSION' '$PKG_TMP/tar.list' && grep -qx 'workbench-mesh/PLATFORM' '$PKG_TMP/tar.list'"
+tar -C "$PKG_TMP/out/extract" -xzf "$PKG_TMP/out/workbench-mesh-v0.5.1-linux-x64.tar.gz" 2>/dev/null || mkdir -p "$PKG_TMP/out/extract"
+rm -rf "$PKG_TMP/out/extract"
+mkdir -p "$PKG_TMP/out/extract"
+tar -C "$PKG_TMP/out/extract" -xzf "$PKG_TMP/out/workbench-mesh-v0.5.1-linux-x64.tar.gz"
+chk "packager writes version and platform" "grep -qx '0.5.1' '$PKG_TMP/out/extract/workbench-mesh/VERSION' && grep -qx 'linux-x64' '$PKG_TMP/out/extract/workbench-mesh/PLATFORM'"
+
+chk "release workflow declares linux-x64 asset" "grep -q 'platform: linux-x64' '$HERE/.github/workflows/release-binaries.yml'"
+chk "release workflow declares linux-arm64 asset" "grep -q 'platform: linux-arm64' '$HERE/.github/workflows/release-binaries.yml'"
+chk "release workflow declares macos-arm64 asset" "grep -q 'platform: macos-arm64' '$HERE/.github/workflows/release-binaries.yml'"
+chk "release workflow omits macos intel runner" "! grep -q 'macos-15-intel' '$HERE/.github/workflows/release-binaries.yml'"
+chk "release workflow uploads checksums" "grep -q 'checksums.txt' '$HERE/.github/workflows/release-binaries.yml'"
+chk "release workflow uploads release assets on tags" "grep -q 'gh release upload' '$HERE/.github/workflows/release-binaries.yml'"
+chk "release workflow avoids target-triple asset names" "! grep -q 'workbench-mesh-\${{ matrix.target }}' '$HERE/.github/workflows/release-binaries.yml'"
+
 [ "$fail" = 0 ] && echo "PASS: mesh-packaging" || { echo "mesh-packaging test failed"; exit 1; }

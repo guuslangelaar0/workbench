@@ -6,19 +6,24 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            platform: linux-x64
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
+            platform: linux-arm64
           - os: macos-14
             target: aarch64-apple-darwin
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
+            platform: macos-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -36,13 +41,37 @@ jobs:
           else
             cargo build --release -p workbench-mesh --target "${{ matrix.target }}"
           fi
-      - run: |
-          mkdir -p "dist/workbench/bin/workbench-mesh.d/${{ matrix.target }}"
-          cp "target/${{ matrix.target }}/release/workbench-mesh" "dist/workbench/bin/workbench-mesh.d/${{ matrix.target }}/workbench-mesh"
-          cp bin/workbench-mesh dist/workbench/bin/workbench-mesh
-          chmod +x dist/workbench/bin/workbench-mesh dist/workbench/bin/workbench-mesh.d/${{ matrix.target }}/workbench-mesh
-          tar -C dist -czf "workbench-mesh-${{ matrix.target }}.tar.gz" workbench
+      - name: Package friendly asset
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [ "$version" = "$GITHUB_REF_NAME" ]; then
+            version="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .claude-plugin/plugin.json | head -1)"
+          fi
+          bash scripts/package-mesh-asset.sh "${{ matrix.target }}" "${{ matrix.platform }}" "$version" dist
       - uses: actions/upload-artifact@v4
         with:
-          name: workbench-mesh-${{ matrix.target }}
-          path: workbench-mesh-${{ matrix.target }}.tar.gz
+          name: workbench-mesh-${{ matrix.platform }}
+          path: dist/workbench-mesh-*.tar.gz
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: workbench-mesh-*
+          path: dist
+          merge-multiple: true
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum workbench-mesh-*.tar.gz > checksums.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workbench-mesh-checksums
+          path: dist/checksums.txt
+      - name: Attach assets to GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/workbench-mesh-*.tar.gz dist/checksums.txt --clobber
