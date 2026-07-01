@@ -33,12 +33,24 @@ Map the user's intent to the right workbench surface — don't hand-roll what a 
 | asks to **plan / decompose a big multi-part effort** | capture it as tracked work on disk, not just a prose plan. At **fleet**, group the parts under an **epic** (`/workbench:epic`); at lighter levels (**solo/pair/crew**) decompose into **flat backlog tasks** (`/workbench:task` for each part). Don't leave the breakdown only in chat. |
 | asks to verify / "mark it done" / "this looks done" | **`/workbench:verify`** — the gate requires real evidence at crew/fleet; do not bypass it. |
 | asks whether to level up / graduate | **`/workbench:level`** — recommend-only; never change the level unprompted. |
+| asks to release / tag / publish a version | follow the **Release notes contract** below before calling the release finished; never leave auto-generated GitHub release text. |
 
 ## Honesty (non-negotiable)
 
 - "In review" is not "done." Say "code committed, awaiting verification" until verified with evidence.
 - Never say "should work" — either verification passed or it did not.
 - Claim only what you checked against the source of truth (git, disk, a passing command, a real browser).
+
+## Release notes contract
+
+When creating or editing a GitHub release, keep the Workbench style consistent:
+
+- Title format: `vX.Y.Z — short release name`.
+- Body starts with one concise release paragraph.
+- Use these sections, when relevant: `### What's New`, `### Changes`, `### Bug Fixes / Hardening`, `### Verification`, and `### Assets`.
+- Verification must name the real commands/results used for that release.
+- Binary/assets releases must list attached assets and checksum files.
+- After editing a release, read it back from GitHub before saying it is done.
 
 ## Repo map
 

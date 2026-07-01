@@ -29,6 +29,8 @@ chk "changelog has v0.5.1 date" "grep -q '^## \\[0.5.1\\] - 2026-07-01' '$HERE/C
 chk "changelog names checksum assets" "grep -qi 'checksum-verified' '$HERE/CHANGELOG.md' && grep -q 'checksums.txt' '$HERE/CHANGELOG.md'"
 chk "README documents Superpowers" "grep -q 'Superpowers' '$HERE/README.md' && grep -q '/plugin install superpowers@claude-plugins-official' '$HERE/README.md'"
 chk "README documents verified Mesh binary acquisition" "grep -q 'checksum-verified' '$HERE/README.md' && grep -q 'checksums.txt' '$HERE/README.md'"
+chk "release notes style documented for contributors" "grep -q 'vX.Y.Z — short release name' '$HERE/CONTRIBUTING.md' && grep -q 'Bug Fixes / Hardening' '$HERE/CONTRIBUTING.md' && grep -q 'auto-generated release text' '$HERE/CONTRIBUTING.md'"
+chk "release notes style documented for Claude and Codex" "grep -q 'vX.Y.Z — short release name' '$HERE/CLAUDE.md' && grep -q 'vX.Y.Z — short release name' '$HERE/AGENTS.md'"
 
 # --- negatives: the validator must REJECT broken manifests ---
 mkbad() { # builds a temp plugin dir; $1 = plugin.json body, $2 = marketplace.json body, $3 = write LICENSE? (1/0)

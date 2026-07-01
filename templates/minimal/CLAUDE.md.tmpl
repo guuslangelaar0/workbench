@@ -23,6 +23,18 @@ All task tracking is local and file-based, under `.claude/tasks/`. Status is the
 - **status / overview / "where do things stand"** → run `/workbench:mc`; don't reconstruct it by hand.
 - **"start work on X"** → create a task with `/workbench:task` to capture it, even while clarifying details.
 - **"verify" / "mark done"** → `/workbench:verify`; the gate needs real evidence at crew/fleet.
+- **release / tag / publish a version** → follow the release notes contract below; never leave auto-generated GitHub release text.
+
+## Release notes contract
+
+When creating or editing a GitHub release, keep the Workbench style consistent:
+
+- Title format: `vX.Y.Z — short release name`.
+- Body starts with one concise release paragraph.
+- Use these sections, when relevant: `### What's New`, `### Changes`, `### Bug Fixes / Hardening`, `### Verification`, and `### Assets`.
+- Verification must name the real commands/results used for that release.
+- Binary/assets releases must list attached assets and checksum files.
+- After editing a release, read it back from GitHub before saying it is done.
 
 ## Configuration
 

@@ -54,6 +54,15 @@ bash scripts/validate-plugin.sh
 
 It checks that `.claude-plugin/plugin.json` and `marketplace.json` are valid JSON, carry the required fields, agree on name + version, declare a real OSI license that matches the `LICENSE` file, and that the plugin actually exposes commands/skills/agents. Bump `version` in **both** manifests together; `test/marketplace.test.sh` enforces they match.
 
+GitHub release notes must match the Workbench release style:
+
+- Title format: `vX.Y.Z — short release name`.
+- Body starts with one concise release paragraph.
+- Use these sections, when relevant: `### What's New`, `### Changes`, `### Bug Fixes / Hardening`, `### Verification`, and `### Assets`.
+- Verification must name the real commands/results used for that release.
+- Binary/assets releases must list attached assets and checksum files.
+- Never leave auto-generated release text; edit the release and read it back before calling the release finished.
+
 ## Documentation
 
 If you change a command, dial, lifecycle stage, or config field, update the relevant doc under `docs/` and the `README.md` table in the same PR. Stale docs are bugs.

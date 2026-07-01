@@ -8,3 +8,14 @@ This file grounds any coding agent (Claude Code, Codex, or other) working in thi
 - `.claude/CODEX_COORDINATION.md` — if present, the shared Claude↔Codex operating agreement.
 
 Before non-trivial work: read those, check `git status`, and pick up in-development tasks before starting new ones. Disk is the source of truth — trust it over chat summaries. Keep commits scoped (`git commit -- <paths>`) when other sessions may be active.
+
+## Release notes contract
+
+When creating or editing a GitHub release, keep the Workbench style consistent:
+
+- Title format: `vX.Y.Z — short release name`.
+- Body starts with one concise release paragraph.
+- Use these sections, when relevant: `### What's New`, `### Changes`, `### Bug Fixes / Hardening`, `### Verification`, and `### Assets`.
+- Verification must name the real commands/results used for that release.
+- Binary/assets releases must list attached assets and checksum files.
+- After editing a release, read it back from GitHub before saying it is done.
