@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -58,7 +58,8 @@ struct AppState {
     events_tx: broadcast::Sender<EventEnvelope>,
     daemon_token: String,
     local_role: String,
-    last_broadcast_seq: Arc<AtomicU64>,
+    tail_scan_seq: Arc<AtomicU64>,
+    daemon_broadcast_seqs: Arc<Mutex<BTreeSet<u64>>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -118,13 +119,7 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
         .with_context(|| format!("bind {}", bind_info.bind_addr))?;
     let local_addr = listener.local_addr().context("read bound address")?;
     let store = Arc::new(MeshStore::open(&opts.project_root)?);
-    let last_broadcast_seq = Arc::new(AtomicU64::new(
-        store
-            .list_events_since(0)?
-            .last()
-            .map(|event| event.seq)
-            .unwrap_or(0),
-    ));
+    let tail_scan_seq = Arc::new(AtomicU64::new(current_store_seq(&store)?));
     let (events_tx, _) = broadcast::channel(256);
     let state = AppState {
         project_root: opts.project_root.clone(),
@@ -133,7 +128,8 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
         events_tx,
         daemon_token: daemon_token.clone(),
         local_role,
-        last_broadcast_seq,
+        tail_scan_seq,
+        daemon_broadcast_seqs: Arc::new(Mutex::new(BTreeSet::new())),
     };
 
     let metadata = ServerMetadata {
@@ -369,9 +365,9 @@ fn append_event(state: &AppState, request: EventRequest) -> Result<EventEnvelope
         request.to.as_deref(),
         request.payload,
     )?;
-    state
-        .last_broadcast_seq
-        .fetch_max(event.seq, Ordering::SeqCst);
+    if let Ok(mut seqs) = state.daemon_broadcast_seqs.lock() {
+        seqs.insert(event.seq);
+    }
     let _ = state.events_tx.send(event.clone());
     Ok(event)
 }
@@ -458,17 +454,34 @@ fn require_token(state: &AppState, token: &str) -> Result<String, ApiError> {
 async fn tail_store_events(state: AppState) {
     loop {
         sleep(Duration::from_millis(100)).await;
-        let since = state.last_broadcast_seq.load(Ordering::SeqCst);
-        let Ok(events) = state.store.list_events_since(since) else {
-            continue;
-        };
-        for event in events {
-            state
-                .last_broadcast_seq
-                .fetch_max(event.seq, Ordering::SeqCst);
+        tail_store_events_once(&state).await;
+    }
+}
+
+async fn tail_store_events_once(state: &AppState) {
+    let since = state.tail_scan_seq.load(Ordering::SeqCst);
+    let Ok(events) = state.store.list_events_since(since) else {
+        return;
+    };
+    for event in events {
+        state.tail_scan_seq.fetch_max(event.seq, Ordering::SeqCst);
+        let already_broadcast = state
+            .daemon_broadcast_seqs
+            .lock()
+            .map(|mut seqs| seqs.remove(&event.seq))
+            .unwrap_or(false);
+        if !already_broadcast {
             let _ = state.events_tx.send(event);
         }
     }
+}
+
+fn current_store_seq(store: &MeshStore) -> Result<u64> {
+    Ok(store
+        .list_events_since(0)?
+        .last()
+        .map(|event| event.seq)
+        .unwrap_or(0))
 }
 
 fn metadata_host(mode: &str, lan_ips: &[String]) -> String {
@@ -559,19 +572,26 @@ impl IntoResponse for ApiError {
 }
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
     use std::fs;
     use std::path::Path;
+    use std::sync::atomic::AtomicU64;
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
+    use axum::routing::{get, post};
+    use axum::Router;
     use futures_util::{SinkExt, StreamExt};
     use reqwest::Client;
     use serde_json::{json, Value};
     use tempfile::TempDir;
+    use tokio::net::TcpListener;
+    use tokio::sync::broadcast;
     use tokio::time::sleep;
     use tokio_tungstenite::connect_async;
     use tokio_tungstenite::tungstenite::Message as ClientMessage;
 
-    use super::{read_server_metadata, serve, server_metadata_path, ServeOptions};
+    use super::{read_server_metadata, serve, server_metadata_path, AppState, ServeOptions};
     use crate::auth;
     use crate::client;
     use crate::store::MeshStore;
@@ -906,6 +926,79 @@ mod tests {
         let broadcast = read_ws_json(&mut socket).await;
         assert_eq!(broadcast["type"], "message.sent");
         assert_eq!(broadcast["payload"]["text"], "what are you touching?");
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn websocket_tailer_broadcasts_local_event_even_after_daemon_append_advances_broadcast_seq(
+    ) {
+        let project = TempDir::new().unwrap();
+        let store = Arc::new(MeshStore::open(project.path()).unwrap());
+        let (events_tx, _) = broadcast::channel(256);
+        let state = AppState {
+            project_root: project.path().to_path_buf(),
+            home: None,
+            store: store.clone(),
+            events_tx,
+            daemon_token: "daemon-token".to_string(),
+            local_role: "owner".to_string(),
+            tail_scan_seq: Arc::new(AtomicU64::new(0)),
+            daemon_broadcast_seqs: Arc::new(Mutex::new(BTreeSet::new())),
+        };
+        let app = Router::new()
+            .route("/api/events", post(super::post_event))
+            .route("/ws", get(super::ws_handler))
+            .with_state(state.clone());
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let (mut socket, _) = connect_async(format!(
+            "ws://{}:{}/ws?token={}&last_seq=0",
+            addr.ip(),
+            addr.port(),
+            state.daemon_token
+        ))
+        .await
+        .unwrap();
+
+        store
+            .append_event(
+                "message.sent",
+                "repo:mesh-service",
+                "session:local",
+                None,
+                json!({ "text": "local before daemon" }),
+            )
+            .unwrap();
+
+        let daemon_event_response = Client::new()
+            .post(format!("http://{addr}/api/events"))
+            .bearer_auth(&state.daemon_token)
+            .json(&json!({
+                "type": "message.sent",
+                "room": "repo:mesh-service",
+                "from": "session:daemon",
+                "payload": { "text": "daemon after local" }
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(daemon_event_response.status(), reqwest::StatusCode::OK);
+
+        super::tail_store_events_once(&state).await;
+
+        let first = read_ws_json(&mut socket).await;
+        let second = read_ws_json(&mut socket).await;
+        let received = [first, second];
+        assert!(received.iter().any(|event| {
+            event["seq"] == 1
+                && event["type"] == "message.sent"
+                && event["payload"]["text"] == "local before daemon"
+        }));
 
         server.abort();
     }
