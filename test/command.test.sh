@@ -23,5 +23,9 @@ chk "mesh command uses mesh.sh"  "grep -q 'scripts/mesh.sh' '$HERE/commands/mesh
 chk "mesh command blocks public exposure" "grep -qi 'Never expose public internet' '$HERE/commands/mesh.md'"
 chk "mesh command maps room chat intent" "grep -q 'message lead:checkout what are you touching' '$HERE/commands/mesh.md'"
 chk "mesh command routes remote natural intent" "grep -q 'talk to my MacBook Claude' '$HERE/commands/mesh.md' && grep -q 'connect URL TOKEN' '$HERE/commands/mesh.md'"
+chk "codex-engineer command exists" "[ -f '$HERE/commands/codex-engineer.md' ]"
+chk "codex-engineer command has frontmatter" "head -1 '$HERE/commands/codex-engineer.md' | grep -q '^---'"
+chk "codex-engineer command uses Agent" "grep -q 'Agent' '$HERE/commands/codex-engineer.md'"
+chk "codex-engineer command routes Codex natural intent" "grep -qi 'dispatch.*Codex\\|Codex.*engineer\\|give.*Codex' '$HERE/commands/codex-engineer.md'"
 
 [ "$fail" = 0 ] && echo "PASS: command" || { echo "command test failed"; exit 1; }
