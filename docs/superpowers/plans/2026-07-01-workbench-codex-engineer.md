@@ -55,8 +55,6 @@ chk "codex engineer command avoids direct companion shellout" "! grep -q 'codex-
 chk "codex engineer command preserves runtime flags" "grep -q -- '--background' '$HERE/commands/codex-engineer.md' && grep -q -- '--wait' '$HERE/commands/codex-engineer.md' && grep -q -- '--model' '$HERE/commands/codex-engineer.md' && grep -q -- '--effort' '$HERE/commands/codex-engineer.md'"
 chk "codex engineer command has setup fallback" "grep -q '/codex:setup' '$HERE/commands/codex-engineer.md'"
 chk "codex engineer keeps workbench verification owner" "grep -q '/workbench:verify' '$HERE/commands/codex-engineer.md' && grep -qi 'do not mark the task verified' '$HERE/commands/codex-engineer.md'"
-chk "codex bridge skill names native engineer command" "grep -q '/workbench:codex-engineer' '$HERE/skills/codex-bridge/SKILL.md'"
-chk "codex coordination template names native engineer command" "grep -q '/workbench:codex-engineer' '$HERE/templates/codex/CODEX_COORDINATION.md.tmpl'"
 ```
 
 - [ ] **Step 2: Extend `test/command.test.sh` with generic command checks**
@@ -137,7 +135,7 @@ You are still the Workbench lead. Codex is the engineer. You own task lifecycle,
    - `## Scenarios`
    - `## Verification ladder`
 
-3. If the OpenAI Codex plugin or `codex:codex-rescue` subagent is unavailable when invoking `Agent`, stop and tell the user to run `/codex:setup`. Do not call another plugin's `codex-companion.mjs` script directly from Workbench.
+3. If the OpenAI Codex plugin or `codex:codex-rescue` subagent is unavailable when invoking `Agent`, stop and tell the user to run `/codex:setup`. Do not call another plugin's private runtime directly from Workbench.
 
 4. Check `way_of_working.codex` in `.workbench/config.json` when present:
    - `off`: continue only if the user explicitly asked for Codex; say the handoff is user-directed
@@ -219,7 +217,7 @@ PASS: command
 - [ ] **Step 3: Commit the command**
 
 ```bash
-git add commands/codex-engineer.md test/codex.test.sh test/command.test.sh
+git add commands/codex-engineer.md
 git commit -m "feat: add codex engineer command"
 ```
 
@@ -273,7 +271,16 @@ Add this paragraph after the "Codex should act as one of these" section:
 Claude can dispatch a task to Codex through `/workbench:codex-engineer <task-id>`. That command claims the task, moves it to `in-development`, invokes the OpenAI Codex plugin's native `codex:codex-rescue` subagent, and leaves verification with Workbench. Codex should update the task notes and report evidence, but it should not move the task to `verified`.
 ```
 
-- [ ] **Step 4: Run routing tests**
+- [ ] **Step 4: Extend `test/codex.test.sh` with routing checks**
+
+Insert these checks after the Codex engineer command assertions:
+
+```bash
+chk "codex bridge skill names native engineer command" "grep -q '/workbench:codex-engineer' '$HERE/skills/codex-bridge/SKILL.md'"
+chk "codex coordination template names native engineer command" "grep -q '/workbench:codex-engineer' '$HERE/templates/codex/CODEX_COORDINATION.md.tmpl'"
+```
+
+- [ ] **Step 5: Run routing tests**
 
 Run:
 
@@ -289,10 +296,10 @@ PASS: codex
 PASS: orchestration
 ```
 
-- [ ] **Step 5: Commit routing guidance**
+- [ ] **Step 6: Commit routing guidance**
 
 ```bash
-git add skills/codex-bridge/SKILL.md skills/orchestration/SKILL.md templates/codex/CODEX_COORDINATION.md.tmpl
+git add skills/codex-bridge/SKILL.md skills/orchestration/SKILL.md templates/codex/CODEX_COORDINATION.md.tmpl test/codex.test.sh
 git commit -m "docs: route codex engineer work"
 ```
 
