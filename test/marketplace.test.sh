@@ -23,6 +23,10 @@ ok=any(isinstance(d, dict) and d.get('name')=='superpowers' and d.get('version')
 docs='/plugin install superpowers@claude-plugins-official' in open(sys.argv[2]).read()
 raise SystemExit(0 if (ok or docs) else 1)
 PY"
+chk "plugin version is v0.5.1" "[ \"\$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))[\"version\"])' '$HERE/.claude-plugin/plugin.json')\" = 0.5.1 ]"
+chk "marketplace version is v0.5.1" "[ \"\$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))[\"plugins\"][0][\"version\"])' '$HERE/.claude-plugin/marketplace.json')\" = 0.5.1 ]"
+chk "changelog has v0.5.1 date" "grep -q '^## \\[0.5.1\\] - 2026-07-01' '$HERE/CHANGELOG.md'"
+chk "changelog names checksum assets" "grep -qi 'checksum-verified' '$HERE/CHANGELOG.md' && grep -q 'checksums.txt' '$HERE/CHANGELOG.md'"
 chk "README documents Superpowers" "grep -q 'Superpowers' '$HERE/README.md' && grep -q '/plugin install superpowers@claude-plugins-official' '$HERE/README.md'"
 chk "README documents verified Mesh binary acquisition" "grep -q 'checksum-verified' '$HERE/README.md' && grep -q 'checksums.txt' '$HERE/README.md'"
 

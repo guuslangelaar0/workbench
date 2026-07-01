@@ -6,6 +6,19 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-01
+
+### Added
+- Mesh first-use binary acquisition: `/workbench:mesh` now resolves a bundled, cached, local, or GitHub release binary and stores checksum-verified downloads under `${CLAUDE_PLUGIN_DATA}`.
+- Superpowers integration guidance: Workbench declares/points to Superpowers for brainstorm -> spec -> plan, TDD, code review, verification, and subagent-driven development.
+
+### Changed
+- Mesh release assets use friendly names such as `workbench-mesh-v0.5.1-linux-x64.tar.gz` instead of raw Rust target triples, with a `checksums.txt` file for SHA-256 verification.
+- The release workflow publishes Linux x64, Linux ARM64, and macOS ARM64 Mesh assets, while macOS Intel stays on the source-build fallback path.
+
+### Fixed
+- Marketplace installs no longer leave Mesh users stranded with only a local Rust build hint; unsupported or unavailable platforms now get a clear, secure fallback without executing unsigned downloads.
+
 ## [0.5.0] - 2026-07-01
 
 ### Added
