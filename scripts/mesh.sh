@@ -93,9 +93,16 @@ metadata_lan_ips() {
 }
 
 print_connect_commands() {
-  local token="$1" port host mdns ip url
+  local token="$1" mode port host mdns ip url
   port="$(metadata_port || true)"
   [ -n "$port" ] || return 0
+  mode="$(metadata_field mode || true)"
+  if [ "$mode" != "lan" ]; then
+    if url="$(metadata_url)"; then
+      printf 'connect-url: /workbench:mesh connect %s %s <device>\n' "$url" "$token"
+    fi
+    return 0
+  fi
   host="$(metadata_field hostname || true)"
   mdns="$(metadata_field mdns || true)"
   [ -n "$mdns" ] && printf 'connect: /workbench:mesh connect http://%s:%s %s <device>\n' "$mdns" "$port" "$token"

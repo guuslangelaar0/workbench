@@ -57,7 +57,7 @@ struct AppState {
     store: Arc<MeshStore>,
     events_tx: broadcast::Sender<EventEnvelope>,
     daemon_token: String,
-    local_role: String,
+    local_credential_token: String,
     tail_scan_seq: Arc<AtomicU64>,
     daemon_broadcast_seqs: Arc<Mutex<BTreeSet<u64>>>,
     connect_urls: Vec<ConnectUrl>,
@@ -129,8 +129,6 @@ struct RevokeDeviceRequest {
 pub async fn serve(opts: ServeOptions) -> Result<()> {
     auth::require_local_project_credential(&opts.project_root, opts.home.clone())?;
     let credential_token = auth::local_project_token(&opts.project_root, opts.home.clone())?;
-    let local_role =
-        auth::project_token_role(&opts.project_root, opts.home.clone(), &credential_token)?;
     let daemon_token = random_bearer_token();
     let bind_info = detect_bind(&opts.bind, opts.port)?;
     let listener = TcpListener::bind(bind_info.bind_addr)
@@ -155,7 +153,7 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
         store,
         events_tx,
         daemon_token: metadata.local_token.clone(),
-        local_role,
+        local_credential_token: credential_token,
         tail_scan_seq,
         daemon_broadcast_seqs: Arc::new(Mutex::new(BTreeSet::new())),
         connect_urls: connect_urls_from_metadata(&metadata),
@@ -279,6 +277,11 @@ async fn post_invite(
     let role = bearer_role(&state, &headers)?;
     if !matches!(role.as_str(), "owner" | "operator") {
         return Err(ApiError::forbidden("owner/operator bearer required"));
+    }
+    if request.role == "owner" && role != "owner" {
+        return Err(ApiError::forbidden(
+            "owner bearer required for owner invite",
+        ));
     }
     let invite = auth::create_invite(
         &state.project_root,
@@ -586,7 +589,12 @@ fn redacted_devices(project_root: &Path) -> Result<Vec<Value>> {
 
 fn require_token(state: &AppState, token: &str) -> Result<String, ApiError> {
     if token == state.daemon_token {
-        return Ok(state.local_role.clone());
+        return auth::project_token_role(
+            &state.project_root,
+            state.home.clone(),
+            &state.local_credential_token,
+        )
+        .map_err(|_| ApiError::unauthorized());
     }
     auth::project_token_role(&state.project_root, state.home.clone(), token)
         .map_err(|_| ApiError::unauthorized())
@@ -654,6 +662,11 @@ fn connect_urls_from_metadata(metadata: &ServerMetadata) -> Vec<ConnectUrl> {
             });
         }
     };
+
+    if metadata.mode != "lan" {
+        push("connect-url", &metadata.host);
+        return urls;
+    }
 
     push("connect", &metadata.mdns);
     if metadata.hostname != metadata.mdns {
@@ -962,6 +975,22 @@ mod tests {
             assert_eq!(response.status(), reqwest::StatusCode::OK);
         }
 
+        let operator_owner_invite_response = client
+            .post(format!("{base}/api/invites"))
+            .bearer_auth(&operator_token)
+            .json(&json!({
+                "role": "owner",
+                "ttl_seconds": 900,
+                "max_uses": 1
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            operator_owner_invite_response.status(),
+            reqwest::StatusCode::FORBIDDEN
+        );
+
         let worker_invite_response = client
             .post(format!("{base}/api/invites"))
             .bearer_auth(&worker_token)
@@ -1008,6 +1037,61 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(worker_event_response.status(), reqwest::StatusCode::OK);
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn daemon_local_token_is_rejected_after_starting_device_is_revoked() {
+        let project = TempDir::new().unwrap();
+        let owner_home = TempDir::new().unwrap();
+        let device_home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        auth::bootstrap(project.path(), Some(owner_home.path().to_path_buf())).unwrap();
+        let invite = auth::create_invite(
+            project.path(),
+            Some(owner_home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+        auth::accept_invite(
+            project.path(),
+            Some(device_home.path().to_path_buf()),
+            &invite.token,
+            "macbook",
+        )
+        .unwrap();
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(device_home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+        let base = format!("http://{}:{}", metadata.host, metadata.port);
+        let client = Client::new();
+
+        let before_revoke = client
+            .get(format!("{base}/api/state"))
+            .bearer_auth(&metadata.local_token)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(before_revoke.status(), reqwest::StatusCode::OK);
+
+        auth::revoke_device(project.path(), "macbook", "auth:owner").unwrap();
+
+        let after_revoke = client
+            .get(format!("{base}/api/state"))
+            .bearer_auth(&metadata.local_token)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(after_revoke.status(), reqwest::StatusCode::UNAUTHORIZED);
 
         server.abort();
     }
@@ -1179,7 +1263,11 @@ mod tests {
             store: store.clone(),
             events_tx,
             daemon_token: "daemon-token".to_string(),
-            local_role: "owner".to_string(),
+            local_credential_token: auth::local_project_token(
+                project.path(),
+                Some(home.path().to_path_buf()),
+            )
+            .unwrap(),
             tail_scan_seq: Arc::new(AtomicU64::new(last_seq)),
             daemon_broadcast_seqs: Arc::new(Mutex::new(BTreeSet::new())),
             connect_urls: Vec::new(),
@@ -1372,25 +1460,57 @@ mod tests {
             .unwrap();
 
         let connect_urls = invite["connect_urls"].as_array().unwrap();
-        assert!(connect_urls.iter().any(|item| {
-            item["label"] == "connect-url"
-                && item["url"] == format!("http://{}:{}", metadata.host, metadata.port)
-        }));
-        if !metadata.mdns.is_empty() {
-            assert!(connect_urls.iter().any(|item| {
-                item["label"] == "connect"
-                    && item["url"] == format!("http://{}:{}", metadata.mdns, metadata.port)
-            }));
-        }
-        if !metadata.hostname.is_empty() && metadata.hostname != metadata.mdns {
-            assert!(connect_urls.iter().any(|item| {
-                item["label"] == "connect-host"
-                    && item["url"] == format!("http://{}:{}", metadata.hostname, metadata.port)
-            }));
-        }
+        assert_eq!(connect_urls.len(), 1);
+        assert_eq!(connect_urls[0]["label"], "connect-url");
+        assert_eq!(
+            connect_urls[0]["url"],
+            format!("http://{}:{}", metadata.host, metadata.port)
+        );
         assert!(invite.to_string().find(&metadata.local_token).is_none());
 
         server.abort();
+    }
+
+    #[test]
+    fn local_mode_connect_urls_only_include_loopback_url() {
+        let metadata = super::ServerMetadata {
+            mode: "local".to_string(),
+            host: "127.0.0.1".to_string(),
+            port: 47321,
+            hostname: "workstation".to_string(),
+            mdns: "workstation.local".to_string(),
+            lan_ips: vec!["192.168.1.8".to_string()],
+            local_token: "local-token".to_string(),
+        };
+
+        let urls = super::connect_urls_from_metadata(&metadata);
+
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0].label, "connect-url");
+        assert_eq!(urls[0].url, "http://127.0.0.1:47321");
+    }
+
+    #[test]
+    fn lan_mode_connect_urls_include_lan_variants() {
+        let metadata = super::ServerMetadata {
+            mode: "lan".to_string(),
+            host: "192.168.1.8".to_string(),
+            port: 47321,
+            hostname: "workstation".to_string(),
+            mdns: "workstation.local".to_string(),
+            lan_ips: vec!["192.168.1.8".to_string()],
+            local_token: "local-token".to_string(),
+        };
+
+        let urls = super::connect_urls_from_metadata(&metadata);
+        let pairs = urls
+            .iter()
+            .map(|url| (url.label.as_str(), url.url.as_str()))
+            .collect::<Vec<_>>();
+
+        assert!(pairs.contains(&("connect", "http://workstation.local:47321")));
+        assert!(pairs.contains(&("connect-host", "http://workstation:47321")));
+        assert!(pairs.contains(&("connect-ip", "http://192.168.1.8:47321")));
     }
 
     #[tokio::test]
@@ -1638,15 +1758,20 @@ mod tests {
     async fn websocket_tailer_broadcasts_local_event_even_after_daemon_append_advances_broadcast_seq(
     ) {
         let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Service");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let local_credential_token =
+            auth::local_project_token(project.path(), Some(home.path().to_path_buf())).unwrap();
         let store = Arc::new(MeshStore::open(project.path()).unwrap());
         let (events_tx, _) = broadcast::channel(256);
         let state = AppState {
             project_root: project.path().to_path_buf(),
-            home: None,
+            home: Some(home.path().to_path_buf()),
             store: store.clone(),
             events_tx,
             daemon_token: "daemon-token".to_string(),
-            local_role: "owner".to_string(),
+            local_credential_token,
             tail_scan_seq: Arc::new(AtomicU64::new(0)),
             daemon_broadcast_seqs: Arc::new(Mutex::new(BTreeSet::new())),
             connect_urls: Vec::new(),

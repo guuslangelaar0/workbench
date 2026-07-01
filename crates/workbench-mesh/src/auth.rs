@@ -128,7 +128,10 @@ pub fn create_invite(
     }
 
     let auth_paths = paths(home)?;
-    require_local_invite_authority(project_root, &auth_paths)?;
+    let authority = require_local_invite_authority(project_root, &auth_paths)?;
+    if role == "owner" && authority.role != "owner" {
+        bail!("local owner credential required for owner invite");
+    }
     let token = format!("wb_invite_{}", random_secret());
     let expires_at = (OffsetDateTime::now_utc() + duration_from_secs(ttl_seconds)?)
         .format(&Rfc3339)
@@ -459,8 +462,11 @@ fn resolve_home(home: Option<PathBuf>) -> Result<PathBuf> {
     Ok(PathBuf::from(home).join(".workbench"))
 }
 
-fn require_local_invite_authority(project_root: &Path, auth_paths: &AuthPaths) -> Result<()> {
-    require_project_credential_with_roles(
+fn require_local_invite_authority(
+    project_root: &Path,
+    auth_paths: &AuthPaths,
+) -> Result<ProjectCredential> {
+    select_project_credential_with_roles(
         project_root,
         auth_paths,
         &["owner", "operator"],
@@ -990,6 +996,29 @@ mod tests {
         .unwrap();
 
         assert_eq!(invite.role, "observer");
+    }
+
+    #[test]
+    fn create_invite_rejects_operator_owner_escalation() {
+        let project = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Auth");
+        write_project_credential(home.path(), "operator.cred", "mesh-auth", "operator");
+
+        let err = create_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "owner",
+            900,
+            1,
+        )
+        .err()
+        .unwrap();
+
+        assert_eq!(
+            err.to_string(),
+            "local owner credential required for owner invite"
+        );
     }
 
     #[test]

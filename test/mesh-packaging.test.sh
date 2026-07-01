@@ -36,7 +36,7 @@ if [ "${1:-}" = "invite" ] && [ "${2:-}" = "create" ]; then
 fi
 FAKE
 chmod +x "$FAKE_PLUGIN/bin/workbench-mesh"
-printf '{"host":"127.0.0.1","port":47321}\n' > "$PROJECT_DIR/.workbench/mesh/server.json"
+printf '{"mode":"local","host":"127.0.0.1","port":47321,"hostname":"mesh-host","mdns":"mesh-host.local","lan_ips":["192.168.1.9"]}\n' > "$PROJECT_DIR/.workbench/mesh/server.json"
 
 run_wrapper() {
   CLAUDE_PLUGIN_ROOT="$FAKE_PLUGIN" \
@@ -57,6 +57,7 @@ chk "wrapper start default output points to metadata" "contains '$WRAP_TMP/start
 run_wrapper invite --ttl-seconds 60 > "$WRAP_TMP/invite.out" 2>&1
 chk "wrapper invite defaults worker role" "contains '$LOG' 'cmd|invite|create|--target|$PROJECT_DIR|--home|$MESH_HOME|--role|worker|--ttl-seconds|60'"
 chk "wrapper invite prints metadata URL" "contains '$WRAP_TMP/invite.out' 'url: http://127.0.0.1:47321'"
+chk "wrapper invite local mode only prints loopback connect" "contains '$WRAP_TMP/invite.out' 'connect-url: /workbench:mesh connect http://127.0.0.1:47321 fake-token <device>' && ! contains '$WRAP_TMP/invite.out' 'connect-host:' && ! contains '$WRAP_TMP/invite.out' 'connect-ip:' && ! contains '$WRAP_TMP/invite.out' 'connect: /workbench:mesh connect http://mesh-host.local'"
 
 : > "$LOG"
 run_wrapper connect local-token laptop > "$WRAP_TMP/connect-local.out" 2>&1
