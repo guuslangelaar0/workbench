@@ -79,6 +79,7 @@ if not surfaces:
 mesh_command = os.path.join(root, "commands", "mesh.md")
 mesh_script = os.path.join(root, "scripts", "mesh.sh")
 mesh_launcher = os.path.join(root, "bin", "workbench-mesh")
+mesh_bootstrap = os.path.join(root, "scripts", "mesh-bootstrap.sh")
 mesh_skill = os.path.join(root, "skills", "mesh", "SKILL.md")
 cargo_toml = os.path.join(root, "Cargo.toml")
 
@@ -112,6 +113,17 @@ if os.path.exists(mesh_script):
         detail = (result.stderr or result.stdout).strip()
         err(f"scripts/mesh.sh fails bash -n: {detail}")
 
+if os.path.exists(mesh_bootstrap):
+    result = subprocess.run(
+        ["bash", "-n", mesh_bootstrap],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        err(f"scripts/mesh-bootstrap.sh fails bash -n: {detail}")
+
 if os.path.exists(mesh_launcher):
     packaged_bins = [
         path for path in glob.glob(os.path.join(root, "bin", "workbench-mesh.d", "*", "workbench-mesh"))
@@ -122,12 +134,19 @@ if os.path.exists(mesh_launcher):
     except Exception as e:
         launcher_body = ""
         err(f"bin/workbench-mesh is not readable: {e}")
+    bootstrap = os.path.join(root, "scripts", "mesh-bootstrap.sh")
+    bootstrap_support = (
+        os.path.isfile(bootstrap)
+        and os.access(bootstrap, os.X_OK)
+        and "mesh-bootstrap.sh" in launcher_body
+        and "CLAUDE_PLUGIN_DATA" in launcher_body
+    )
     clear_error = (
         "packaged binary missing" in launcher_body
         and "cargo build -p workbench-mesh" in launcher_body
     )
-    if not packaged_bins and not clear_error:
-        err("bin/workbench-mesh has no packaged target binaries and no clear missing-binary error")
+    if not packaged_bins and not (bootstrap_support or clear_error):
+        err("bin/workbench-mesh has no packaged target binaries and no bootstrap downloader/checksum support")
 
 if problems:
     print("PLUGIN NOT PUBLISHABLE:")

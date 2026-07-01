@@ -1,19 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-os="$(uname -s)"
-arch="$(uname -m)"
+os="${WORKBENCH_MESH_TEST_OS:-$(uname -s)}"
+arch="${WORKBENCH_MESH_TEST_ARCH:-$(uname -m)}"
 case "$os:$arch" in
-  Darwin:arm64)  target="aarch64-apple-darwin" ;;
-  Darwin:x86_64) target="x86_64-apple-darwin" ;;
-  Linux:aarch64|Linux:arm64) target="aarch64-unknown-linux-gnu" ;;
-  Linux:x86_64) target="x86_64-unknown-linux-gnu" ;;
+  Darwin:arm64)  target="aarch64-apple-darwin"; platform="macos-arm64" ;;
+  Darwin:x86_64) target="x86_64-apple-darwin"; platform="macos-x64" ;;
+  Linux:aarch64|Linux:arm64) target="aarch64-unknown-linux-gnu"; platform="linux-arm64" ;;
+  Linux:x86_64) target="x86_64-unknown-linux-gnu"; platform="linux-x64" ;;
   *) echo "workbench-mesh: unsupported platform $os/$arch" >&2; exit 70 ;;
 esac
 
-bin="$ROOT/bin/workbench-mesh.d/$target/workbench-mesh"
-if [ -x "$bin" ]; then
-  exec "$bin" "$@"
+version="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$ROOT/.claude-plugin/plugin.json" | head -1)"
+[ -n "$version" ] || { echo "workbench-mesh: could not read plugin version" >&2; exit 69; }
+
+bundled="$ROOT/bin/workbench-mesh.d/$target/workbench-mesh"
+if [ -x "$bundled" ]; then
+  exec "$bundled" "$@"
+fi
+
+if [ -n "${CLAUDE_PLUGIN_DATA:-}" ]; then
+  cached="$CLAUDE_PLUGIN_DATA/mesh/bin/$version/$platform/workbench-mesh"
+  if [ -x "$cached" ]; then
+    exec "$cached" "$@"
+  fi
 fi
 
 if [ -x "$ROOT/target/release/workbench-mesh" ]; then
@@ -23,6 +33,4 @@ if [ -x "$ROOT/target/debug/workbench-mesh" ]; then
   exec "$ROOT/target/debug/workbench-mesh" "$@"
 fi
 
-echo "workbench-mesh: packaged binary missing for $target" >&2
-echo "run: cargo build -p workbench-mesh --release" >&2
-exit 69
+exec "$ROOT/scripts/mesh-bootstrap.sh" "$platform" "$target" "$version" "$@"

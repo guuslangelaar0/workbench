@@ -109,4 +109,80 @@ run_wrapper open > "$WRAP_TMP/open-token.out" 2>&1
 chk "wrapper open does not print local token from metadata" "contains '$WRAP_TMP/open-token.out' 'Command center: http://127.0.0.1:47321' && ! contains '$WRAP_TMP/open-token.out' 'fake-local-token' && ! contains '$WRAP_TMP/open-token.out' 'token='"
 chk "wrapper tokenized open does not call rust binary" "[ ! -s '$LOG' ]"
 
+# --- first-use mesh binary bootstrap ---
+BOOT_TMP="$(mktemp -d "${TMPDIR:-/tmp}/mesh-bootstrap.XXXXXX")"
+trap 'rm -rf "$WRAP_TMP" "$BOOT_TMP"' EXIT
+BOOT_PLUGIN="$BOOT_TMP/plugin"
+BOOT_RELEASE="$BOOT_TMP/release"
+BOOT_DATA="$BOOT_TMP/data"
+mkdir -p "$BOOT_PLUGIN" "$BOOT_RELEASE" "$BOOT_DATA"
+cp -R "$HERE/bin" "$HERE/scripts" "$HERE/.claude-plugin" "$BOOT_PLUGIN/"
+python3 - "$BOOT_PLUGIN/.claude-plugin/plugin.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+with open(path) as f:
+    data = json.load(f)
+data["version"] = "0.5.1"
+with open(path, "w") as f:
+    json.dump(data, f)
+    f.write("\n")
+PY
+mkdir -p "$BOOT_TMP/payload/workbench-mesh/bin"
+cat > "$BOOT_TMP/payload/workbench-mesh/bin/workbench-mesh" <<'FAKEBOOT'
+#!/usr/bin/env bash
+printf 'bootstrapped:%s\n' "$*"
+FAKEBOOT
+chmod +x "$BOOT_TMP/payload/workbench-mesh/bin/workbench-mesh"
+printf '0.5.1\n' > "$BOOT_TMP/payload/workbench-mesh/VERSION"
+printf 'linux-x64\n' > "$BOOT_TMP/payload/workbench-mesh/PLATFORM"
+tar -C "$BOOT_TMP/payload" -czf "$BOOT_RELEASE/workbench-mesh-v0.5.1-linux-x64.tar.gz" workbench-mesh
+(cd "$BOOT_RELEASE" && sha256sum workbench-mesh-v0.5.1-linux-x64.tar.gz > checksums.txt)
+
+BOOT_OUT="$BOOT_TMP/bootstrap.out"
+CLAUDE_PLUGIN_DATA="$BOOT_DATA" \
+WORKBENCH_MESH_RELEASE_BASE_URL="file://$BOOT_RELEASE" \
+WORKBENCH_MESH_TEST_OS="Linux" \
+WORKBENCH_MESH_TEST_ARCH="x86_64" \
+  "$BOOT_PLUGIN/bin/workbench-mesh" hello world > "$BOOT_OUT"
+chk "launcher bootstraps verified linux-x64 asset" "grep -q 'bootstrapped:hello world' '$BOOT_OUT'"
+chk "launcher caches verified binary" "[ -x '$BOOT_DATA/mesh/bin/0.5.1/linux-x64/workbench-mesh' ]"
+
+rm -rf "$BOOT_RELEASE"
+CLAUDE_PLUGIN_DATA="$BOOT_DATA" \
+WORKBENCH_MESH_TEST_OS="Linux" \
+WORKBENCH_MESH_TEST_ARCH="x86_64" \
+  "$BOOT_PLUGIN/bin/workbench-mesh" cached > "$BOOT_TMP/cached.out"
+chk "launcher reuses cached binary without release directory" "grep -q 'bootstrapped:cached' '$BOOT_TMP/cached.out'"
+
+BAD_PLUGIN="$BOOT_TMP/bad-plugin"
+BAD_RELEASE="$BOOT_TMP/bad-release"
+BAD_DATA="$BOOT_TMP/bad-data"
+cp -R "$BOOT_PLUGIN" "$BAD_PLUGIN"
+mkdir -p "$BAD_RELEASE" "$BAD_DATA"
+printf 'not a tarball\n' > "$BAD_RELEASE/workbench-mesh-v0.5.1-linux-x64.tar.gz"
+printf '0000000000000000000000000000000000000000000000000000000000000000  workbench-mesh-v0.5.1-linux-x64.tar.gz\n' > "$BAD_RELEASE/checksums.txt"
+BAD_RC=0
+CLAUDE_PLUGIN_DATA="$BAD_DATA" \
+WORKBENCH_MESH_RELEASE_BASE_URL="file://$BAD_RELEASE" \
+WORKBENCH_MESH_TEST_OS="Linux" \
+WORKBENCH_MESH_TEST_ARCH="x86_64" \
+  "$BAD_PLUGIN/bin/workbench-mesh" fail > "$BOOT_TMP/bad.out" 2>&1 || BAD_RC=$?
+chk "bootstrap rejects checksum mismatch" "[ '$BAD_RC' -ne 0 ] && grep -qi 'checksum' '$BOOT_TMP/bad.out'"
+chk "bootstrap does not cache bad binary" "[ ! -e '$BAD_DATA/mesh/bin/0.5.1/linux-x64/workbench-mesh' ]"
+
+UNSUPPORTED_RC=0
+CLAUDE_PLUGIN_DATA="$BOOT_TMP/unsupported-data" \
+WORKBENCH_MESH_TEST_OS="Plan9" \
+WORKBENCH_MESH_TEST_ARCH="x86_64" \
+  "$BOOT_PLUGIN/bin/workbench-mesh" nope > "$BOOT_TMP/unsupported.out" 2>&1 || UNSUPPORTED_RC=$?
+chk "launcher reports unsupported platform" "[ '$UNSUPPORTED_RC' -ne 0 ] && grep -qi 'unsupported platform Plan9/x86_64' '$BOOT_TMP/unsupported.out'"
+
+MAC_RC=0
+CLAUDE_PLUGIN_DATA="$BOOT_TMP/mac-data" \
+WORKBENCH_MESH_RELEASE_BASE_URL="file://$BOOT_TMP/no-such-release" \
+WORKBENCH_MESH_TEST_OS="Darwin" \
+WORKBENCH_MESH_TEST_ARCH="x86_64" \
+  "$BOOT_PLUGIN/bin/workbench-mesh" nope > "$BOOT_TMP/macos-x64.out" 2>&1 || MAC_RC=$?
+chk "macos-x64 has source-build fallback" "[ '$MAC_RC' -ne 0 ] && grep -q 'no verified prebuilt binary available for macos-x64' '$BOOT_TMP/macos-x64.out' && grep -q 'cargo build --release -p workbench-mesh' '$BOOT_TMP/macos-x64.out'"
+
 [ "$fail" = 0 ] && echo "PASS: mesh-packaging" || { echo "mesh-packaging test failed"; exit 1; }
