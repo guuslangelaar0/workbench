@@ -420,12 +420,17 @@ pub fn revoke_device(project_root: &Path, device: &str, actor: &str) -> Result<S
         .format(&Rfc3339)
         .context("format device revoke timestamp")?;
     mutate_devices(&path, |devices| {
-        let record = devices
-            .iter_mut()
-            .find(|record| record.device == sanitized_device)
-            .ok_or_else(|| anyhow::anyhow!("device not found"))?;
-        if record.revoked_at.is_none() {
-            record.revoked_at = Some(revoked_at.clone());
+        let mut found = false;
+        for record in devices.iter_mut() {
+            if record.device == sanitized_device {
+                found = true;
+                if record.revoked_at.is_none() {
+                    record.revoked_at = Some(revoked_at.clone());
+                }
+            }
+        }
+        if !found {
+            bail!("device not found");
         }
         Ok(())
     })?;
@@ -719,7 +724,6 @@ fn append_invite_rejection_audit(
 
 fn register_device_record(root: &Path, record: DeviceRecord) -> Result<()> {
     mutate_devices(&root.join("devices.json"), |devices| {
-        devices.retain(|existing| existing.device != record.device);
         devices.push(record);
         Ok(())
     })
@@ -1334,6 +1338,62 @@ mod tests {
             err.to_string(),
             "local mutating project credential required"
         );
+    }
+
+    #[test]
+    fn re_enrolling_device_does_not_resurrect_revoked_local_credential() {
+        let project = tempfile::tempdir().unwrap();
+        let owner_home = tempfile::tempdir().unwrap();
+        let joining_home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        bootstrap(project.path(), Some(owner_home.path().to_path_buf())).unwrap();
+        let first_invite = create_invite(
+            project.path(),
+            Some(owner_home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+        accept_invite(
+            project.path(),
+            Some(joining_home.path().to_path_buf()),
+            &first_invite.token,
+            "macbook",
+        )
+        .unwrap();
+        let first_credential = read_project_credential(joining_home.path(), "macbook.cred");
+        revoke_device(project.path(), "macbook", "auth:owner").unwrap();
+
+        let second_invite = create_invite(
+            project.path(),
+            Some(owner_home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+        accept_invite(
+            project.path(),
+            Some(joining_home.path().to_path_buf()),
+            &second_invite.token,
+            "macbook",
+        )
+        .unwrap();
+
+        let devices = list_devices(project.path()).unwrap();
+        assert_eq!(devices.len(), 2);
+        assert!(devices.iter().any(|device| device.revoked_at.is_some()));
+        assert!(devices.iter().any(|device| device.revoked_at.is_none()));
+
+        let err = project_token_role(
+            project.path(),
+            Some(joining_home.path().to_path_buf()),
+            &first_credential.token,
+        )
+        .err()
+        .unwrap();
+        assert_eq!(err.to_string(), "token rejected");
     }
 
     #[test]
