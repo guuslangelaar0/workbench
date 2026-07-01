@@ -11,7 +11,25 @@ case "$os:$arch" in
   *) echo "workbench-mesh: unsupported platform $os/$arch" >&2; exit 70 ;;
 esac
 
-version="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$ROOT/.claude-plugin/plugin.json" | head -1)"
+read_plugin_version() {
+  local manifest="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$manifest" <<'PY' 2>/dev/null && return 0
+import json
+import sys
+
+with open(sys.argv[1]) as f:
+    version = json.load(f).get("version", "")
+if isinstance(version, str) and version:
+    print(version)
+else:
+    sys.exit(1)
+PY
+  fi
+  sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$manifest" | head -1
+}
+
+version="$(read_plugin_version "$ROOT/.claude-plugin/plugin.json" || true)"
 [ -n "$version" ] || { echo "workbench-mesh: could not read plugin version" >&2; exit 69; }
 
 bundled="$ROOT/bin/workbench-mesh.d/$target/workbench-mesh"
