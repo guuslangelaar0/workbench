@@ -1,18 +1,19 @@
 ---
-description: Dispatch a backlog task to an engineer — move it to in-development and spawn the lane
+description: Dispatch a specific unblocked backlog task by id — checks claims, dependencies, and in-review pressure before spawning an engineer lane
 allowed-tools: ["Bash", "Read", "Task", "TodoWrite"]
 argument-hint: "<id> [--worktree [name]|--shared] [--background|--wait] [lane/repo]"
 ---
 
 Dispatch a task to an engineer. Follow the `orchestration` skill — **you are the lead; you do not write the code yourself.**
 
-1. Parse `$ARGUMENTS`: the task `<id>` (4-digit) and an optional lane/repo hint.
+1. Parse `$ARGUMENTS`: the task `<id>` (4-digit) and an optional lane/repo hint. If no explicit ID was supplied, do not guess and do not spawn a lane. Run `/workbench:mc` or `deps.sh ready` and tell the user which task is actually ready.
    - `--worktree [name]`: prefer a native Claude Code worktree lane. Use the given name or `wb-<id>-<slug>`.
    - `--shared`: avoid a persistent/background worktree and use the normal foreground Task-tool path. The engineer agent can still run in Claude's temporary `isolation: worktree` sandbox.
    - `--background`: for a native CLI lane, launch it with `claude --worktree <name> --bg --agent engineer "<prompt>"`.
    - `--wait`: keep the engineer in the current session foreground path.
    - if `--background` and `--wait` are both present, stop and ask the user to choose one.
-2. Read the task file under `.claude/tasks/` for that id (its `## Why`, acceptance criteria, `**Repo(s):**`, `**Verification:**`).
+2. Read the task file under `.claude/tasks/` for that id (its `## Why`, acceptance criteria, `**Repo(s):**`, `**Verification:**`). If it has `**Blocked-by:**` IDs that have not reached `verified/`/`shipped/`, stop and report the blocker; do not start the lane.
+   Before spawning, check the in-review cap via `/workbench:mc` or by counting `.claude/tasks/in-review/`. If the queue is at/over the hard-drain threshold, stop and tell the user to drain/verify in-review first.
 3. **Claim the task** so no other live lead takes it (multi-teamlead safety — see the `coordination` skill). First check it's free, then claim it:
    - `bash "${CLAUDE_PROJECT_DIR}/scripts/coord/wb-coord" claims task:<id>` — if it reports the task claimed by another live session, STOP (someone else owns it).
    - otherwise `bash "${CLAUDE_PROJECT_DIR}/scripts/coord/wb-coord" claim task:<id>` (skip silently if `scripts/coord/wb-coord` doesn't exist — coordination is full-profile only).

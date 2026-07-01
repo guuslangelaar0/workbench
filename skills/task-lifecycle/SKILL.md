@@ -15,6 +15,12 @@ Use `/workbench:task "<title>"`, or directly:
 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-new.sh" --title "<t>" --target "${CLAUDE_PROJECT_DIR}" [--track T] [--repos "a,b"] [--estimate "~1 day"]`
 It allocates the next ID from `_next-id`, renders the canonical template, and bumps the counter atomically. Never hand-edit `_next-id`.
 
+Natural routing:
+- A committed "start work on X" request becomes a task before implementation.
+- Bugs, regressions, security/privacy bugs, plaintext-password/secret leaks, and failing checks are auto-filed as tasks.
+- Missing repo/code context is not a reason to skip bug filing. Create the task and record "locate affected repo/code path" as the first blocker/acceptance criterion.
+- Irreversible forks go to `.claude/tasks/decisions/` via `/workbench:decision`, not normal backlog.
+
 ## Epics (pair level and up)
 
 When the `decomposition` dial is grouped (pair = light-epics, crew = epics, fleet = themes-epics), related tasks group under an **epic** — a file in `.claude/epics/NNNN-title.md` describing one user-facing outcome. `solo` (decomposition = tasks) is flat and has no epics dir.
@@ -35,3 +41,5 @@ A task is **not done** until it reaches `verified/` (or `shipped/` when deploy-g
 
 ## The in-review cap
 `lifecycle.in_review_cap` (default 10) bounds `in-review/`. When the count reaches `cap − 3`, **hard-drain**: stop taking new work and verify oldest-first (by ID) until the count is `cap − 6` or lower. An unbounded in-review queue is where "done" claims pile up and the directory stops reflecting reality — the cap forces verification to happen continuously.
+
+When the user asks to "grab the next feature" and the cap is at/over hard-drain, the correct response is to say the queue must drain and then verify in-review work. Do not dispatch new backlog work on top of a full in-review queue.

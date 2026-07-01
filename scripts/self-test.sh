@@ -5,15 +5,26 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUN_SUITE=1
+RUN_LIVE=0
+RUN_LIVE_CODING=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --skip-suite) RUN_SUITE=0; shift ;;
+    --live) RUN_LIVE=1; shift ;;
+    --live-coding) RUN_LIVE=1; RUN_LIVE_CODING=1; shift ;;
     *) echo "self-test.sh: unknown arg '$1'" >&2; exit 64 ;;
   esac
 done
 
 cd "$ROOT"
+if [ "$RUN_LIVE" = 1 ]; then
+  args=(--live)
+  [ "$RUN_LIVE_CODING" = 1 ] && args+=(--live-coding)
+  [ "$RUN_SUITE" = 0 ] && args+=(--skip-suite)
+  exec bash "$ROOT/scripts/release-gate.sh" "${args[@]}"
+fi
+
 # python3 backs the JSON validity checks below; fail cleanly if it's absent.
 command -v python3 >/dev/null 2>&1 || { echo "self-test: python3 is required for the JSON validity checks but was not found on PATH." >&2; exit 3; }
 

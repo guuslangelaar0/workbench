@@ -18,11 +18,14 @@
 #
 # Live invocation costs API tokens and is gated by WB_BENCH=1; --simulate runs free offline.
 # Usage: bench-intents.sh [--simulate] [--keep] [--only <id>] [--set train|holdout|all]
+# Env:
+#   WB_BENCH_TIMEOUT=240  live per-case timeout in seconds
 set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SELF_DIR/.." && pwd)"
 CASES="$ROOT/test/benchmark/intents/cases"
 SIMULATE=0 KEEP=0 ONLY="" SET="all"
+LIVE_TIMEOUT="${WB_BENCH_TIMEOUT:-240}"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --simulate) SIMULATE=1; shift ;;
@@ -33,6 +36,8 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 case "$SET" in train|holdout|all) ;; *) echo "bench-intents.sh: --set must be train|holdout|all (got '$SET')" >&2; exit 64 ;; esac
+case "$LIVE_TIMEOUT" in ''|*[!0-9]*) echo "bench-intents.sh: WB_BENCH_TIMEOUT must be a positive integer" >&2; exit 64 ;; esac
+[ "$LIVE_TIMEOUT" -gt 0 ] || { echo "bench-intents.sh: WB_BENCH_TIMEOUT must be a positive integer" >&2; exit 64; }
 [ -d "$CASES" ] || { echo "bench-intents.sh: no cases dir at $CASES" >&2; exit 1; }
 if [ "$SIMULATE" = 0 ] && [ "${WB_BENCH:-0}" != 1 ]; then
   echo "bench-intents.sh: the LIVE conformance run drives a real model and COSTS API TOKENS." >&2
@@ -51,6 +56,7 @@ for cdir in "$CASES"/*/; do
   total=$((total+1))
   level="$(tr -d ' \n' < "$cdir/level" 2>/dev/null)"; [ -n "$level" ] || level=crew
   prompt="$(cat "$cdir/prompt")"
+  timed_out=0
 
   P="$(mktemp -d)"
   # seed a concrete mission so cases test intent ROUTING, not cold-start ambiguity
@@ -64,12 +70,22 @@ for cdir in "$CASES"/*/; do
     : > "$P/.run-output"   # exists first; a simulate may legitimately write to it (e.g. mc output)
     ( cd "$P" && ROOT="$ROOT" bash "$cdir/simulate.sh" ) >/dev/null 2>&1
   else
-    out="$( cd "$P" && claude -p --plugin-dir "$ROOT" --dangerously-skip-permissions "$prompt" 2>/dev/null )" || true
+    out="$( cd "$P" && timeout "$LIVE_TIMEOUT" claude -p --plugin-dir "$ROOT" --dangerously-skip-permissions "$prompt" 2>/dev/null )"
+    live_rc=$?
+    if [ "$live_rc" -eq 124 ]; then
+      timed_out=1
+      out="TIMEOUT after ${LIVE_TIMEOUT}s: $prompt"
+    elif [ "$live_rc" -ne 0 ]; then
+      out="${out}
+CLAUDE_EXIT_${live_rc}"
+    fi
     printf '%s' "$out" > "$P/.run-output"
   fi
 
   if ( cd "$P" && RUN_OUTPUT="$P/.run-output" ROOT="$ROOT" bash "$cdir/oracle.sh" ) >/dev/null 2>&1; then
     verdict="PASS"; pass=$((pass+1))
+  elif [ "$timed_out" = 1 ]; then
+    verdict="TIMEOUT"
   else
     verdict="fail"
   fi

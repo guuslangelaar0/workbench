@@ -32,8 +32,13 @@ for t in full minimal; do
   if grep -qi 'Intent routing' "$ROOT/templates/$t/CLAUDE.md.tmpl" 2>/dev/null; then ok "routing table present in $t CLAUDE.md"; else no "routing table MISSING in $t CLAUDE.md"; fi
 done
 # 2. routing keywords in the descriptions that drive tool selection
-grep -qiE 'status|overview|where do things stand' "$ROOT/commands/mc.md"   && ok "mc description has status/overview routing"   || no "mc description lost its status/overview routing keywords"
+grep -qiE 'status|overview|where do things stand' "$ROOT/commands/mc.md" && grep -q 'Mission Control' "$ROOT/commands/mc.md" && ok "mc description has status/overview routing" || no "mc description lost its status/overview routing keywords"
 grep -qiE 'idea'                                   "$ROOT/commands/suggest.md" && ok "suggest description names 'idea'"          || no "suggest description lost the feature-idea routing keyword"
+grep -qiE 'start work|committed work|security'     "$ROOT/commands/task.md" && ok "task description routes committed work/security bugs" || no "task description lost committed-work/security routing"
+grep -qiE 'in-review cap|Blocked-by|unblocked'     "$ROOT/commands/loop.md" && ok "loop description routes cap/dependency checks" || no "loop description lost cap/dependency routing"
+grep -qiE 'grab/start the next|in-review cap|Blocked-by' "$ROOT/commands/next.md" && ok "next description routes cheap cap/dependency preflight" || no "next description lost cheap preflight routing"
+grep -qiE 'multi-part effort|initiative|fleet'     "$ROOT/commands/epic.md" && ok "epic description routes big-effort planning" || no "epic description lost big-effort routing"
+grep -qiE 'decision fork|expensive to reverse|--state decisions' "$ROOT/commands/decision.md" && ok "decision command routes irreversible forks" || no "decision command lost irreversible-fork routing"
 # 3. every command + skill has a non-empty description (the SlashCommand/skill routing signal)
 miss=0
 for f in "$ROOT"/commands/*.md; do

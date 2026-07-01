@@ -58,6 +58,21 @@ WB_SKIP_VERIFY_GATE=1 bash "$ROOT/scripts/task-move.sh" "$fid" verified --target
 chk "oracle 05 catches bypassed gate" "! ( cd '$P' && RUN_OUTPUT='$P/.run-output' bash '$CASES/05-verify-gate-holds/oracle.sh' ) >/dev/null 2>&1"
 rm -rf "$P"
 
+FAKEBIN="$(mktemp -d "${TMPDIR:-/tmp}/bench-intents-fakebin.XXXXXX")"
+cat > "$FAKEBIN/claude" <<'SH'
+#!/usr/bin/env bash
+sleep 3
+printf 'late fake claude output\n'
+SH
+chmod +x "$FAKEBIN/claude"
+T0="$(date +%s)"
+TOUT="$(WB_BENCH=1 WB_BENCH_TIMEOUT=1 PATH="$FAKEBIN:$PATH" bash "$BI" --only 01-bug-autofile 2>&1)"
+TRC=$?
+T1="$(date +%s)"
+ELAPSED=$((T1-T0))
+chk "live case timeout does not hang" "[ $TRC -eq 0 ] && [ $ELAPSED -lt 4 ] && printf '%s' \"\$TOUT\" | grep -q 'TIMEOUT'"
+rm -rf "$FAKEBIN"
+
 # live path refuses without WB_BENCH=1
 chk "live refuses (exit 2)"      "bash '$BI' >/dev/null 2>&1; [ \$? -eq 2 ]"
 

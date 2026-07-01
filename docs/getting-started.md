@@ -111,6 +111,7 @@ These two cleanups are separate: `/workbench:uninstall` affects files scaffolded
 bash test/all.sh                 # fast, offline — no API, no cost
 bash scripts/self-test.sh        # package JSON + shell syntax + publishability + all tests
 WB_E2E=1 bash test/e2e/run.sh    # live — loads the real plugin into a headless session (needs auth, costs tokens)
+bash scripts/release-gate.sh --live  # release — offline + live E2E + live intent conformance, writes evidence
 ```
 
 See [the test section of the README](../README.md#tests) for what each layer covers.

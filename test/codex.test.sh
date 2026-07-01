@@ -19,6 +19,9 @@ chk "codex engineer maps agent background mode" "grep -q 'run_in_background: tru
 chk "codex engineer rejects conflicting runtime modes" "grep -q -- '--background.*--wait\\|--wait.*--background' '$HERE/commands/codex-engineer.md' && grep -qi 'ask the user to choose one' '$HERE/commands/codex-engineer.md'"
 chk "codex engineer command has setup fallback" "grep -q '/codex:setup' '$HERE/commands/codex-engineer.md'"
 chk "codex engineer keeps workbench verification owner" "grep -q '/workbench:verify' '$HERE/commands/codex-engineer.md' && grep -qi 'do not mark the task verified' '$HERE/commands/codex-engineer.md'"
+chk "codex engineer supports no-callback reconciliation" "grep -q -- '--reconcile' '$HERE/commands/codex-engineer.md' && grep -qi 'no active.*thread\\|active.*thread' '$HERE/commands/codex-engineer.md'"
+chk "codex engineer uses disk lane lease" "grep -q 'lane.sh start' '$HERE/commands/codex-engineer.md' && grep -q 'lane.sh beat' '$HERE/commands/codex-engineer.md' && grep -q 'lane.sh status' '$HERE/commands/codex-engineer.md'"
+chk "codex bridge warns callback is best effort" "grep -qi 'callback.*best-effort\\|notification.*best-effort\\|may finish without' '$HERE/skills/codex-bridge/SKILL.md'"
 chk "codex bridge skill names native engineer command" "grep -q '/workbench:codex-engineer' '$HERE/skills/codex-bridge/SKILL.md'"
 chk "codex coordination template names native engineer command" "grep -q '/workbench:codex-engineer' '$HERE/templates/codex/CODEX_COORDINATION.md.tmpl'"
 

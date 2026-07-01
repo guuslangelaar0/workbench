@@ -11,6 +11,8 @@ chk "CLAUDE has MISSION ph"      "grep -q '{{MISSION}}' '$T/minimal/CLAUDE.md.tm
 chk "CLAUDE has LAUNCH ph"       "grep -q '{{LAUNCH}}' '$T/minimal/CLAUDE.md.tmpl'"
 chk "minimal CLAUDE has release notes contract" "grep -q 'Release notes contract' '$T/minimal/CLAUDE.md.tmpl' && grep -q 'vX.Y.Z — short release name' '$T/minimal/CLAUDE.md.tmpl'"
 chk "full CLAUDE has release notes contract" "grep -q 'Release notes contract' '$T/full/CLAUDE.md.tmpl' && grep -q 'Bug Fixes / Hardening' '$T/full/CLAUDE.md.tmpl'"
+chk "minimal CLAUDE routes decisions and blockers" "grep -q '/workbench:decision' '$T/minimal/CLAUDE.md.tmpl' && grep -q 'Blocked-by' '$T/minimal/CLAUDE.md.tmpl'"
+chk "full CLAUDE routes decisions and blockers" "grep -q '/workbench:decision' '$T/full/CLAUDE.md.tmpl' && grep -q 'Blocked-by' '$T/full/CLAUDE.md.tmpl'"
 chk "AGENTS has release notes contract" "grep -q 'Release notes contract' '$T/full/AGENTS.md.tmpl' && grep -q 'vX.Y.Z — short release name' '$T/full/AGENTS.md.tmpl'"
 chk "task README exists"         "[ -f '$T/minimal/tasks/README.md' ]"
 chk "_next-id is 0001"           "[ \"\$(cat '$T/minimal/tasks/_next-id')\" = 0001 ]"

@@ -7,8 +7,11 @@ All notable changes to workbench are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Release live gate: `scripts/release-gate.sh --live` runs the offline release checks plus real Claude plugin E2E and live intent conformance, fails if required live layers skip, and writes ignored evidence under `.workbench/release/`; `/workbench:self-test --live` delegates to it.
 - Native Codex engineer lane: `/workbench:codex-engineer` dispatches a Workbench task through the OpenAI Codex plugin's `codex:codex-rescue` subagent while keeping Workbench responsible for task lifecycle, review, and verification.
+- Codex engineer reconciliation: `/workbench:codex-engineer <id> --reconcile` checks `claude agents`, lane leases, task notes, and git state when Codex finishes without returning a second notification.
 - Native Claude Code worktree lanes: Workbench engineer/verifier agents now declare `isolation: worktree`, `/workbench:dispatch` documents `--worktree --background` for same-repo parallel lanes, and coordination guidance prefers Claude Code's `--worktree`, `--bg`, `claude agents`, and `worktree.baseRef` surfaces with the existing Workbench worktree helper as fallback.
+- Natural intent routing hardening: added `/workbench:decision`, `/workbench:next`, and an offline intent-router hook; strengthened task/loop/dispatch/epic routing for committed work, security bugs, in-review cap pressure, blocked dependencies, and level-aware big-effort capture.
 
 ## [0.6.0] - 2026-07-01
 

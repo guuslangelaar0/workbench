@@ -1,10 +1,12 @@
 ---
-description: Create or list epics — groups of related tasks (pair level and up)
+description: Create/list epics for big multi-part efforts, themes, initiatives, or fleet-level decomposition into related tasks
 allowed-tools: ["Bash", "Read"]
 argument-hint: "[\"<title>\"] [--theme <theme>] | list"
 ---
 
 You are the `/workbench:epic` command. Epics group related tasks under one user-facing outcome. They exist at levels whose `decomposition` dial is grouped (pair = light-epics, crew = epics, fleet = themes-epics); a `solo` project uses flat tasks and has no `.claude/epics/` dir.
+
+Use this when the user asks to plan or decompose a big multi-part effort such as "full billing system", "subscriptions/invoices/refunds/webhooks", "launch program", "theme", or "initiative". At fleet level, create the epic first so the plan exists on disk; then create/link child tasks as needed.
 
 Read `$ARGUMENTS` and act:
 

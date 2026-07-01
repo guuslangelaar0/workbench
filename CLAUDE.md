@@ -13,7 +13,8 @@ the established Workbench style from `v0.2.0` onward:
 - Body starts with one concise release paragraph.
 - Use these sections, when relevant: `### What's New`, `### Changes`,
   `### Bug Fixes / Hardening`, `### Verification`, and `### Assets`.
-- Verification must name the real commands/results used for that release.
+- Verification must name the real commands/results used for that release, including the
+  `scripts/release-gate.sh --live` evidence path or an explicit live-skip reason.
 - Binary/assets releases must list attached assets and checksum files.
 - Do not leave auto-generated release text like "Workbench mesh binaries for
   vX.Y.Z"; edit the GitHub release and read it back before calling the release
@@ -27,12 +28,11 @@ When the user asks to deploy/release a Workbench version:
   `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`, promotes
   `CHANGELOG.md` from `Unreleased` into `## [X.Y.Z] - YYYY-MM-DD`, and keeps the
   release notes in the contract above.
-- Run the relevant release gate before merging. For Mesh releases this includes
-  `cargo fmt --check`, `cargo test -p workbench-mesh`, the Mesh shell suites,
-  `bash scripts/validate-plugin.sh`, `bash scripts/bench.sh`, and
-  `git diff --check`. Also run `bash test/all.sh` or wait for the equivalent
-  GitHub CI suite before tagging, because CI covers release metadata assertions
-  beyond the Mesh-focused gate.
+- Run `bash scripts/release-gate.sh --live` before merging a release branch. It
+  runs the offline gate plus `WB_E2E=1 test/e2e/run.sh` and `WB_BENCH=1
+  scripts/bench-intents.sh`, fails if a required live layer skips, and writes evidence
+  under `.workbench/release/`. If live cannot run, say so explicitly in the
+  release notes; do not call the release live-tested.
 - Merge the verified branch to `main`, rerun the release gate on `main`, then
   push `main` and tag the same commit as `vX.Y.Z`.
 - The `Release mesh binaries` workflow is tag-driven and should attach

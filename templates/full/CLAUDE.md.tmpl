@@ -24,14 +24,22 @@ See `.claude/tasks/README.md` for the file format and the in-review cap.
 
 Map the user's intent to the right workbench surface — don't hand-roll what a command does, and don't put things in the wrong place:
 
+Hard routing rule: **"grab/pull/start the next task/feature from backlog" is `/workbench:next`, not `/workbench:loop`.** Run the cheap preflight and stop after reporting cap pressure, blockers, or the safe dispatch command. Do not verify, dispatch, spawn engineers, or enter the autonomous loop from that wording alone.
+
+Hard routing rule: **"start/build <title>" first searches existing backlog tasks for that title.** If a matching task exists, run `/workbench:next <title>` or `deps.sh status <id>` before asking scope/stack questions. If it is blocked, report the dependency and stop. Do not invoke inception just because the repo is empty or the stack is undefined.
+
+Hard routing rule: **"plan/decompose a big multi-part effort" is a lightweight capture first.** At fleet create one epic; at solo create flat backlog task stubs for the named parts. Do not choose providers, open decisions, initialize git, commit, or write a full spec unless the user explicitly asks for that depth.
+
 | When the user… | Do this |
 |---|---|
-| reports a bug / "X is broken" / "this crashes" | **auto-file a task** (`/workbench:task`, into `in-development/` or `backlog/`). Bugs are tracked, not just discussed. |
+| reports a bug / "X is broken" / "this crashes" / security or privacy bug / plaintext password or secret leak | **auto-file a task** (`/workbench:task`, into `in-development/` or `backlog/`). Bugs are tracked, not just discussed. If the repo/code path is missing, still file it and record "locate affected repo/code path" as the first blocker. |
 | floats a feature **idea** — "would be cool", "for later", "idea:" | **`/workbench:suggest add`** — the suggestion surface. An un-committed idea does **not** go in the task backlog (the backlog is for committed work) and is **never** auto-built. |
-| asks for status / an overview / "where do things stand" / "what's the state" | run **`/workbench:mc`** (Mission Control) — don't reconstruct it by hand; the dashboard is the answer. |
+| asks for status / an overview / "where do things stand" / "what's the state" | run **`/workbench:mc`** and include the **Mission Control** dashboard output — don't reconstruct it by hand; the dashboard is the answer. |
 | says "let's start work on X" / "we need X" | create a task with **`/workbench:task`** to capture it — even if you then ask clarifying questions, the intent is recorded first. |
-| says "grab/pull the next task" / "start the next feature from the backlog" | **first check the in-review cap** (`/workbench:mc`, or count `.claude/tasks/in-review/`) — if it's at/over the cap, **drain it by verifying** oldest-first before opening new work; only then pull the next unblocked task. Don't blindly start new work on top of a full in-review queue. |
-| asks to **plan / decompose a big multi-part effort** | capture it as tracked work on disk, not just a prose plan. At **fleet**, group the parts under an **epic** (`/workbench:epic`); at lighter levels (**solo/pair/crew**) decompose into **flat backlog tasks** (`/workbench:task` for each part). Don't leave the breakdown only in chat. |
+| says "grab/pull the next task" / "start the next feature from the backlog" | run **`/workbench:next`** and stop after its preflight result. It checks the in-review cap and dependencies; if at/over cap, report drain/verify before opening new work. Don't blindly start new work on top of a full in-review queue. |
+| asks to start/build a named task that exists in backlog and has unfinished `Blocked-by` dependencies | run **`/workbench:next <hint>`** or `deps.sh status <id>`; report the blocker and do **not** dispatch it until the dependency is verified/shipped. |
+| asks to **plan / decompose a big multi-part effort** | capture it as tracked work on disk, not just a prose plan. At **fleet**, group the parts under an **epic** (`/workbench:epic`); at lighter levels (**solo/pair/crew**) decompose into **flat backlog task stubs** (`/workbench:task` for each named part). Keep this lightweight; don't choose providers, initialize git, or write the full spec unless asked. |
+| asks for an irreversible call — architecture, schema, crypto, public API, infra, dependency swap, "expensive to reverse" | write a durable **decision** with `/workbench:decision`; give compact options/tradeoffs, then keep moving on safe work. |
 | asks to verify / "mark it done" / "this looks done" | **`/workbench:verify`** — the gate requires real evidence at crew/fleet; do not bypass it. |
 | asks whether to level up / graduate | **`/workbench:level`** — recommend-only; never change the level unprompted. |
 | asks to release / tag / publish a version | follow the **Release notes contract** below before calling the release finished; never leave auto-generated GitHub release text. |

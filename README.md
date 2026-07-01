@@ -80,13 +80,15 @@ That's the whole rhythm: pick a level, capture work as tasks, let the loop drive
 | `/workbench:init` | Scaffold non-interactively (the wizard's config is preserved) |
 | `/workbench:uninstall` | Safely remove workbench-managed project files and side effects using `.workbench/manifest.json` |
 | `/workbench:level` | Show the level + dials, or move `up` / `down` / to a named level |
-| `/workbench:loop` | Run the autonomous teamlead loop (pick → dispatch → verify-gate → never stop) |
-| `/workbench:task "<title>"` | Create a task (allocates the next ID, renders the canonical format) |
+| `/workbench:loop` | Run the autonomous teamlead loop (drain cap → pick unblocked work → dispatch → verify-gate → never stop) |
+| `/workbench:next` | Fast preflight for the next safe task: cap pressure, blockers, or ready dispatch command |
+| `/workbench:task "<title>"` | Create a tracked task for committed work, bugs, security issues, and concrete fixes |
 | `/workbench:lead` | Show, set, adopt, or clear this session's durable lead purpose |
 | `/workbench:park "<title>"` | Park an unrelated bug/feature/follow-up as a real backlog task with origin metadata |
 | `/workbench:epic "<title>"` | Create or list epics — groups of related tasks with a live task rollup (pair level and up) |
+| `/workbench:decision "<title>"` | Capture an irreversible architecture/product fork in `decisions/` |
 | `/workbench:dispatch <id>` | Move a task to in-development and dispatch it to an engineer, using native worktree isolation for parallel lanes |
-| `/workbench:codex-engineer <id>` | Dispatch a task to Codex through the OpenAI Codex plugin while Workbench keeps lifecycle and verification ownership |
+| `/workbench:codex-engineer <id>` | Dispatch a task to Codex through the OpenAI Codex plugin while Workbench keeps lifecycle and verification ownership; `--reconcile` handles Codex lanes that finish without a callback |
 | `/workbench:verify <id>` | Run a task's verification and gate it to `verified/` (or back) |
 | `/workbench:mc` | Mission Control: a text dashboard of tasks, cap, build, and prod |
 | `/workbench:teamlead <topic>` | Scope this session to one track and lock tasks so leads don't collide |
@@ -98,7 +100,7 @@ That's the whole rhythm: pick a level, capture work as tasks, let the loop drive
 | `/workbench:upgrade` | Reconcile this project's workbench files to the current plugin version (preserves your edits) |
 | `/workbench:doctor` | Health-check: drift, stale state, in-review cap |
 | `/workbench:remote` | Operate the project from your phone over Telegram, with a catastrophic-command guard |
-| `/workbench:self-test` | Run plugin-source validation: package JSON, shell syntax, publishability, and optionally the full shell suite |
+| `/workbench:self-test` | Run plugin-source validation, or `--live` for the release gate that drives real Claude plugin E2E/bench checks |
 
 → Full reference: **[docs/commands.md](docs/commands.md)**.
 
@@ -183,9 +185,10 @@ cargo test --workspace          # Rust control-plane tests
 bash test/all.sh                 # fast, offline unit + integration suites (no API, no cost)
 bash scripts/validate-plugin.sh  # plugin/package publishability check
 WB_E2E=1 bash test/e2e/run.sh    # live: loads the real plugin into a headless Claude session
+bash scripts/release-gate.sh --live  # release gate: offline + live E2E + live intent conformance, with evidence JSON
 ```
 
-The offline suite covers shell behavior, Rust protocol/auth/service tests, the command-center API, packaging, hooks/statusline snapshots, and outcome-level plugin checks without calling external APIs. CI runs Rust tests, builds the `workbench-mesh` crate, runs `test/all.sh`, and validates the plugin. The gated `test/e2e/` harness loads the actual plugin via `claude -p --plugin-dir` and asserts on what the real model + commands + hooks do — the only layer that proves the markdown surface works end-to-end. It needs an authenticated `claude` CLI and costs tokens, so it skips cleanly unless `WB_E2E=1`.
+The offline suite covers shell behavior, Rust protocol/auth/service tests, the command-center API, packaging, hooks/statusline snapshots, and outcome-level plugin checks without calling external APIs. CI runs Rust tests, builds the `workbench-mesh` crate, runs `test/all.sh`, and validates the plugin. The gated `test/e2e/` harness loads the actual plugin via `claude -p --plugin-dir` and asserts on what the real model + commands + hooks do — the only layer that proves the markdown surface works end-to-end. It needs an authenticated `claude` CLI and costs tokens, so it skips cleanly unless `WB_E2E=1`. For releases, use `scripts/release-gate.sh --live`: it treats skipped live layers as failures, runs live intent conformance directly so per-case failures are preserved, and writes ignored evidence under `.workbench/release/`.
 
 ## Project layout
 
@@ -196,7 +199,7 @@ workbench/
 ├── skills/             the operating disciplines (levels, orchestration, continuity, architecture, …)
 ├── agents/             engineer + verifier subagents
 ├── hooks/              SessionStart / PreCompact / PostToolUse / PreToolUse / Notification
-├── scripts/            the CLI: init, task-new, task-move, mc, mesh, levels, loop-policy, graduate, drift, upgrade, uninstall, doctor, self-test
+├── scripts/            the CLI: init, task-new, task-move, mc, mesh, levels, loop-policy, graduate, drift, upgrade, uninstall, doctor, self-test, release-gate
 ├── crates/             Rust runtime crates, including workbench-mesh
 ├── templates/          what gets scaffolded into a project (minimal | full profiles)
 ├── test/               all.sh (offline suites) + e2e/ (live-plugin)

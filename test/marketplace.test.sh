@@ -33,6 +33,7 @@ chk "README documents Superpowers" "grep -q 'Superpowers' '$HERE/README.md' && g
 chk "README documents verified Mesh binary acquisition" "grep -q 'checksum-verified' '$HERE/README.md' && grep -q 'checksums.txt' '$HERE/README.md'"
 chk "release notes style documented for contributors" "grep -q 'vX.Y.Z — short release name' '$HERE/CONTRIBUTING.md' && grep -q 'Bug Fixes / Hardening' '$HERE/CONTRIBUTING.md' && grep -q 'auto-generated release text' '$HERE/CONTRIBUTING.md'"
 chk "release notes style documented for Claude and Codex" "grep -q 'vX.Y.Z — short release name' '$HERE/CLAUDE.md' && grep -q 'vX.Y.Z — short release name' '$HERE/AGENTS.md'"
+chk "release gate documented for contributors and agents" "grep -q 'scripts/release-gate.sh --live' '$HERE/CONTRIBUTING.md' && grep -q 'scripts/release-gate.sh --live' '$HERE/CLAUDE.md' && grep -q 'scripts/release-gate.sh --live' '$HERE/AGENTS.md'"
 
 # --- negatives: the validator must REJECT broken manifests ---
 mkbad() { # builds a temp plugin dir; $1 = plugin.json body, $2 = marketplace.json body, $3 = write LICENSE? (1/0)

@@ -19,10 +19,20 @@ All task tracking is local and file-based, under `.claude/tasks/`. Status is the
 
 ## Intent routing (what the user means → what you do)
 
-- **bug / "X is broken"** → auto-file a task (`/workbench:task`); bugs are tracked, not just discussed.
+Hard routing rule: **"grab/pull/start the next task/feature from backlog" is `/workbench:next`, not `/workbench:loop`.** Run the cheap preflight and stop after reporting cap pressure, blockers, or the safe dispatch command.
+
+Hard routing rule: **"start/build <title>" first searches existing backlog tasks for that title.** If a matching task exists, run `/workbench:next <title>` or `deps.sh status <id>` before asking scope/stack questions. If it is blocked, report the dependency and stop.
+
+Hard routing rule: **"plan/decompose a big multi-part effort" is a lightweight capture first.** At fleet create one epic; at solo create flat backlog task stubs for the named parts. Do not choose providers, open decisions, initialize git, commit, or write a full spec unless the user explicitly asks for that depth.
+
+- **bug / "X is broken" / security or privacy bug / plaintext password or secret leak** → auto-file a task (`/workbench:task`); bugs are tracked, not just discussed. If the repo/code path is missing, still file it and record "locate affected repo/code path" as the first blocker.
 - **feature idea / "would be cool" / "for later"** → `/workbench:suggest add` (the suggestion surface) — not the task backlog, and never auto-built.
-- **status / overview / "where do things stand"** → run `/workbench:mc`; don't reconstruct it by hand.
+- **status / overview / "where do things stand"** → run `/workbench:mc` and include the **Mission Control** dashboard output; don't reconstruct it by hand.
 - **"start work on X"** → create a task with `/workbench:task` to capture it, even while clarifying details.
+- **"grab/pull the next task" / "start the next feature from backlog"** → run `/workbench:next` first. It reports cap pressure, blockers, or the safe dispatch command.
+- **blocked work / unfinished `Blocked-by` dependency** → run `/workbench:next <hint>` or `deps.sh status <id>`, explain the dependency, and do not dispatch until the blocker is verified/shipped.
+- **big multi-part effort / theme / initiative** → at fleet create `/workbench:epic`; at lighter levels create tracked backlog task stubs. Keep it lightweight; do not choose providers, initialize git, or write a full spec unless asked.
+- **irreversible architecture/schema/crypto/API/infra/dependency fork** → create `/workbench:decision`; decisions live in `.claude/tasks/decisions/`.
 - **"verify" / "mark done"** → `/workbench:verify`; the gate needs real evidence at crew/fleet.
 - **release / tag / publish a version** → follow the release notes contract below; never leave auto-generated GitHub release text.
 

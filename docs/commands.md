@@ -36,10 +36,13 @@ Graduation is recommend-only; it never changes your level without confirmation. 
 ## The work loop
 
 ### `/workbench:loop`
-Run the autonomous teamlead loop: pick the highest-impact unblocked task → dispatch to an engineer → verify-gate → advance or send back → replenish the queue → repeat. The lead coordinates; it does not write code. Bugs auto-file as tasks; new features are suggested, never auto-built. Autonomy scales with your level. See [concepts.md](concepts.md#the-orchestration-loop).
+Run the autonomous teamlead loop: drain in-review cap pressure → pick the highest-impact unblocked task → dispatch to an engineer → verify-gate → advance or send back → replenish the queue → repeat. The lead coordinates; it does not write code. Bugs auto-file as tasks; new features are suggested, never auto-built. Autonomy scales with your level. See [concepts.md](concepts.md#the-orchestration-loop).
+
+### `/workbench:next [task title/id hint]`
+Fast preflight for "grab/start the next task". It checks in-review cap pressure and `Blocked-by` dependencies, then reports either the reason to drain/wait or the exact safe `/workbench:dispatch <id>` command. It does not spawn engineers or move files.
 
 ### `/workbench:task "<title>"`
-Create a task. Allocates the next ID from `_next-id`, renders the canonical task format into `backlog/`. Optional fields: track, repos, estimate.
+Create a task for committed work, bugs, security/privacy issues, and concrete fixes. Allocates the next ID from `_next-id`, renders the canonical task format into `backlog/`. Optional fields: track, repos, estimate.
 
 ### `/workbench:lead [status | set "<purpose>" | adopt | clear]`
 Manage this session's durable lead purpose. A lead purpose records what this session is for — one active task, one track, or an intentional backlog-scouting pass — under `.workbench/leads/`. `status` shows the current purpose and the latest open purpose if this session has none. `set` pins a new purpose. `adopt` copies the latest open purpose into this session after a resume or new tab. `clear` closes the purpose when the task/track is no longer owned.
@@ -50,11 +53,14 @@ Park unrelated work as a real backlog task with origin metadata: session, active
 ### `/workbench:epic "<title>" [--theme <t>]` / `/workbench:epic list`
 Create or list **epics** — groups of related tasks under one user-facing outcome (`.claude/epics/NNNN-title.md`). Available at levels whose `decomposition` dial is grouped (pair = light-epics, crew = epics, fleet = themes-epics); `solo` uses flat tasks and has no epics. Epics draw from the shared `.claude/tasks/_next-id` counter, so epic and task IDs never collide. Link a task with `/workbench:task "<t>" --epic <id>`; the epic's `done/total` rollup shows in `/workbench:mc`. See [concepts.md](concepts.md#task-lifecycle).
 
-### `/workbench:dispatch <id> [--worktree [name]|--shared] [--background|--wait] [lane]`
-Move a task to `in-development/` and dispatch it to an engineer subagent in the given lane. Engineer/verifier agents use Claude Code native `isolation: worktree`; for multiple same-repo lanes, use `--worktree --background` to launch a native `claude --worktree <name> --bg --agent engineer` lane and monitor it with `claude agents`. `--shared` avoids a persistent/background worktree and uses the normal foreground Task-tool lane; that lane can still use Claude's temporary worktree isolation. When a lane needs current-branch state, commit/push that state or set Claude Code `worktree.baseRef` to `"head"` before launch.
+### `/workbench:decision "<title>"`
+Capture an irreversible architecture/product fork in `.claude/tasks/decisions/` with compact options and tradeoffs. Use it for crypto, schema, public API, infrastructure, dependency, or expensive-to-reverse calls so the lead can keep moving on safe work.
 
-### `/workbench:codex-engineer <id> [--background|--wait] [--fresh|--resume] [--model <model>] [--effort <level>]`
-Move a task to `in-development/` and dispatch it to Codex through the OpenAI Codex plugin's native `codex:codex-rescue` subagent. Workbench still owns task claiming, lifecycle, review, and `/workbench:verify`; Codex acts as the engineer lane. If Codex is not set up, run `/codex:setup`.
+### `/workbench:dispatch <id> [--worktree [name]|--shared] [--background|--wait] [lane]`
+Move an explicit unblocked task to `in-development/` and dispatch it to an engineer subagent in the given lane. It must respect task claims, `Blocked-by` dependencies, and in-review cap pressure before spawning work. Engineer/verifier agents use Claude Code native `isolation: worktree`; for multiple same-repo lanes, use `--worktree --background` to launch a native `claude --worktree <name> --bg --agent engineer` lane and monitor it with `claude agents`. `--shared` avoids a persistent/background worktree and uses the normal foreground Task-tool lane; that lane can still use Claude's temporary worktree isolation. When a lane needs current-branch state, commit/push that state or set Claude Code `worktree.baseRef` to `"head"` before launch.
+
+### `/workbench:codex-engineer <id> [--background|--wait|--reconcile] [--fresh|--resume] [--model <model>] [--effort <level>]`
+Move a task to `in-development/` and dispatch it to Codex through the OpenAI Codex plugin's native `codex:codex-rescue` subagent. Workbench still owns task claiming, lifecycle, review, and `/workbench:verify`; Codex acts as the engineer lane. Codex completion callbacks are best-effort, so `--reconcile` checks `claude agents`, the disk lane lease, task notes, and git state when Codex finished without returning a second notification. If Codex is not set up, run `/codex:setup`.
 
 ### `/workbench:verify <id>`
 Run a task's declared verification, review the diff, build, and gate it: on pass → `verified/` (or `staged/` if deploy-gated) with evidence captured; on fail → back to `in-development/`.
@@ -131,7 +137,7 @@ Reconcile this project's scaffolded files to the current plugin version: regener
 Health-check: validate the config against the schema, report drift between the manifest and the files on disk, flag stale state and an over-cap in-review queue.
 
 ### `/workbench:self-test`
-Plugin-source self-test for workbench contributors. Validates plugin JSON, marketplace JSON, shell syntax, publishability via `scripts/validate-plugin.sh`, and the full offline shell suite unless called with `--skip-suite`.
+Plugin-source self-test for workbench contributors. Validates plugin JSON, marketplace JSON, shell syntax, publishability via `scripts/validate-plugin.sh`, and the full offline shell suite unless called with `--skip-suite`. Use `/workbench:self-test --live` before releases to run `scripts/release-gate.sh --live`: it executes the offline gates plus `WB_E2E=1 test/e2e/run.sh` and `WB_BENCH=1 scripts/bench-intents.sh`, fails if a required live layer skips, and writes ignored evidence under `.workbench/release/`.
 
 ---
 
@@ -161,5 +167,6 @@ The commands are thin markdown wrappers over the scripts in `scripts/`, which yo
 | `upgrade.sh` | Deterministic upgrade classifier (`ok`, `edited`, `missing`, `preexisting`, `template-changed`) |
 | `doctor.sh` | Deterministic health report for scaffolded projects |
 | `self-test.sh` | Contributor self-test for plugin source validation |
+| `release-gate.sh` | Release gate for offline + live plugin E2E/bench verification with evidence |
 | `arch-drift.sh` | Align authored C4 docs against graphify-extracted reality (architecture drift) |
 | `mesh.sh` | Wrapper for the Rust `bin/workbench-mesh` runtime and natural `/workbench:mesh` operations |

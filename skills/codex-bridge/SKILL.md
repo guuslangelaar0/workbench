@@ -9,6 +9,7 @@ Claude and Codex can work the same workbench project. Disk is the shared source 
 
 - **Source of truth:** `CLAUDE.md`, `AGENTS.md`, `.claude/SESSION_STATE.md`, `.claude/tasks/`, `.claude/CODEX_COORDINATION.md` (the shared operating agreement). Read them before non-trivial work.
 - **Native Workbench Codex engineer lane:** use `/workbench:codex-engineer <task-id>` when the user explicitly asks for Codex, when a task needs an independent Codex implementation pass, or when `way_of_working.codex` is `full-lane`. This command keeps Workbench as the lead/lifecycle owner and invokes the OpenAI Codex plugin through `subagent_type: "codex:codex-rescue"`.
+- **Completion callback is best-effort:** Codex may finish without the same return notification Claude engineer lanes provide. If the active Codex thread disappears, run `/workbench:codex-engineer <task-id> --reconcile` and judge from disk: task notes, git state, lane lease, and verification evidence.
 - **Fallback rescue:** use `/codex:rescue` directly only when you are outside a Workbench task lifecycle or need a one-off Codex diagnosis. Use `/codex:setup` if the OpenAI Codex plugin is unavailable or unauthenticated.
 - **Ownership:** before editing, check `git status` + the task file; claim via the task's `## Notes` owner line and `wb-coord claim`. Keep commits scoped so parallel agents don't sweep each other.
 - **Codex as teamlead:** the generated `codex-teamlead-prompt` (rendered into the project when codex is enabled) lets Codex run the coordinator loop with the same lifecycle + honesty rules.

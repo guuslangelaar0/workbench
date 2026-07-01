@@ -11,7 +11,7 @@ chk "has PreCompact"           "grep -q 'PreCompact' '$HERE/hooks/hooks.json'"
 chk "has PostToolUse"          "grep -q 'PostToolUse' '$HERE/hooks/hooks.json'"
 chk "has UserPromptSubmit"     "grep -q 'UserPromptSubmit' '$HERE/hooks/hooks.json'"
 chk "uses PLUGIN_ROOT"         "grep -q 'CLAUDE_PLUGIN_ROOT' '$HERE/hooks/hooks.json'"
-for s in ground-session precompact-checkpoint coord-ping lead-purpose-nudge mesh-context mesh-statusline; do
+for s in ground-session precompact-checkpoint coord-ping lead-purpose-nudge intent-router mesh-context mesh-statusline; do
   chk "$s syntactically valid" "bash -n '$HERE/hooks/bin/$s.sh'"
 done
 # precompact writes a marker for a workbench project, no-ops elsewhere
@@ -44,5 +44,24 @@ chk "lead nudge emits valid json" "python3 -m json.tool '$LP/nudge.json' >/dev/n
 chk "lead nudge names current purpose" "grep -q 'ship checkout retry' '$LP/nudge.json'"
 chk "lead nudge sets session title" "grep -q 'lead:0007' '$LP/nudge.json'"
 rm -rf "$LP"
+
+# Intent router nudges natural language toward the cheap Workbench surface before
+# the model drifts into long implementation paths.
+IR="$(mktemp -d)"
+bash "$HERE/scripts/init.sh" --profile full --level fleet --name "IntentRouter" --mission m --target "$IR" >/dev/null 2>&1
+printf '{"hook_event_name":"UserPromptSubmit","session_id":"s","prompt":"Let'\''s grab the next feature from the backlog and start building it."}' \
+  | CLAUDE_PROJECT_DIR="$IR" CLAUDE_PLUGIN_ROOT="$HERE" bash "$HERE/hooks/bin/intent-router.sh" > "$IR/next.json"
+chk "intent router emits valid next json" "python3 -m json.tool '$IR/next.json' >/dev/null"
+chk "intent router routes next to workbench next" "grep -q '/workbench:next' '$IR/next.json'"
+printf '{"hook_event_name":"UserPromptSubmit","session_id":"s","prompt":"Big architectural call: should we encrypt with per-user keys or a master key? Expensive to reverse."}' \
+  | CLAUDE_PROJECT_DIR="$IR" CLAUDE_PLUGIN_ROOT="$HERE" bash "$HERE/hooks/bin/intent-router.sh" > "$IR/decision.json"
+chk "intent router routes decisions" "grep -q '/workbench:decision' '$IR/decision.json'"
+printf '{"hook_event_name":"UserPromptSubmit","session_id":"s","prompt":"I just realized plaintext passwords go into logs."}' \
+  | CLAUDE_PROJECT_DIR="$IR" CLAUDE_PLUGIN_ROOT="$HERE" bash "$HERE/hooks/bin/intent-router.sh" > "$IR/security.json"
+chk "intent router routes security bugs" "grep -q '/workbench:task' '$IR/security.json'"
+printf '{"hook_event_name":"UserPromptSubmit","session_id":"s","prompt":"Plan out a big multi-part effort: a full billing system."}' \
+  | CLAUDE_PROJECT_DIR="$IR" CLAUDE_PLUGIN_ROOT="$HERE" bash "$HERE/hooks/bin/intent-router.sh" > "$IR/epic.json"
+chk "intent router routes fleet epics" "grep -q '/workbench:epic' '$IR/epic.json'"
+rm -rf "$IR"
 
 [ "$fail" = 0 ] && echo "PASS: hooks" || { echo "hooks test failed"; exit 1; }
