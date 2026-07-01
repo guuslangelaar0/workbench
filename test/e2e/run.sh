@@ -73,6 +73,32 @@ cleanup_mesh() { # <dir>
   fi
 }
 
+contains() { # <text> <extended-regex>
+  printf '%s' "$1" | grep -qiE "$2"
+}
+
+mesh_server_is_local() { # <dir>
+  python3 - "$1/.workbench/mesh/server.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    metadata = json.load(f)
+
+if metadata.get("host") != "127.0.0.1":
+    raise SystemExit("host is not local")
+if not isinstance(metadata.get("port"), int) or metadata["port"] <= 0:
+    raise SystemExit("port is not a positive integer")
+PY
+}
+
+mesh_event_contains() { # <dir> <event-type> <payload-regex>
+  local events="$1/.workbench/mesh/events.jsonl"
+  [ -f "$events" ] || return 1
+  grep -q "\"type\":\"$2\"" "$events" || return 1
+  grep -qiE "$3" "$events"
+}
+
 # ---- scenario 1: the plugin loads and /workbench:task creates a task ---------
 note "1) /workbench:task creates a backlog task"
 D1="$(scaffold "E2E One" solo)"
@@ -192,34 +218,40 @@ rm -rf "$D10"
 # ---- scenario 11: /workbench:mesh starts the local command center ------------
 note "11) /workbench:mesh starts local command center and prints URL"
 D11="$(scaffold "E2E Mesh Start" crew)"
-out="$(cd "$D11" && drive "$D11" "Use Bash to start Workbench mesh in the background by running exactly this shell command:
-\"$PLUGIN_ROOT/scripts/mesh.sh\" start --local --port 0 --pid-file mesh.pid > mesh.log 2>&1 &
-After that, wait until .workbench/mesh/server.json exists, then run /workbench:mesh open and show me the command center URL. Do not expose LAN. Do not run mesh start in the foreground.")"
-printf '%s' "$out" | grep -qiE 'command center|127\.0\.0\.1|mesh' \
+out="$(cd "$D11" && drive "$D11" 'Run /workbench:mesh start --local --port 0 --pid-file mesh.pid > mesh.log 2>&1 & through the Workbench plugin slash-command surface so it stays in the background. Wait until .workbench/mesh/server.json exists, then run /workbench:mesh open and print the exact Command center URL. Do not bypass the slash-command surface. Do not expose LAN. Do not run mesh start in the foreground.')"
+contains "$out" 'Command center' \
+  && contains "$out" 'http://127\.0\.0\.1:[0-9]+' \
+  && mesh_server_is_local "$D11" \
   && ok "mesh start reports local command center" \
-  || bad "mesh start did not report command center"
+  || bad "mesh start did not report local command center URL (model output: $(printf '%s' "$out" | tail -3 | tr '\n' ' '))"
 cleanup_mesh "$D11"
 rm -rf "$D11"
 
 # ---- scenario 12: /workbench:mesh creates a worker invite -------------------
 note "12) /workbench:mesh invite creates a worker invite"
 D12="$(scaffold "E2E Mesh Invite" crew)"
-out="$(cd "$D12" && drive "$D12" "Use Bash to start Workbench mesh in the background by running exactly this shell command:
-\"$PLUGIN_ROOT/scripts/mesh.sh\" start --local --port 0 --pid-file mesh.pid > mesh.log 2>&1 &
-After that, wait until .workbench/mesh/server.json exists, then run /workbench:mesh invite --role worker --ttl-seconds 900 and /workbench:mesh open. Show the token, role, expiry, host, IP and port. Do not run mesh start in the foreground.")"
-printf '%s' "$out" | grep -qiE 'wb_invite_|role: worker|127\.0\.0\.1|port|host' \
+out="$(cd "$D12" && drive "$D12" 'Run /workbench:mesh start --local --port 0 --pid-file mesh.pid > mesh.log 2>&1 & through the Workbench plugin slash-command surface so it stays in the background. Wait until .workbench/mesh/server.json exists. Then run /workbench:mesh invite --role worker --ttl-seconds 900 and paste the exact invite command output, including token:, role:, expires:, and max_uses:. Then run /workbench:mesh open and paste its exact Command center URL. Do not summarize instead of showing the token, role, expiry, host/IP, and port. Do not bypass the slash-command surface. Do not run mesh start in the foreground.')"
+contains "$out" 'wb_invite_' \
+  && contains "$out" 'role:[[:space:]]*worker' \
+  && contains "$out" 'expires:' \
+  && contains "$out" 'http://127\.0\.0\.1:[0-9]+' \
+  && mesh_server_is_local "$D12" \
+  && grep -q 'invite.created' "$D12/.workbench/mesh/audit.jsonl" \
   && ok "mesh invite reports secure connection details" \
-  || bad "mesh invite missing connection details"
+  || bad "mesh invite missing token, role, expiry, or local connection details (model output: $(printf '%s' "$out" | tail -3 | tr '\n' ' '))"
 cleanup_mesh "$D12"
 rm -rf "$D12"
 
 # ---- scenario 13: /workbench:mesh maps natural collaboration intent ---------
 note "13) /workbench:mesh maps natural team intent to chat/status events"
 D13="$(scaffold "E2E Mesh Natural" crew)"
-out="$(cd "$D13" && drive "$D13" 'Use workbench mesh to open a checkout lead room, send a message asking what files are being touched, and show who is connected. Do it directly.')"
-printf '%s' "$out" | grep -qiE 'checkout|message|who|lead|mesh' \
+out="$(cd "$D13" && drive "$D13" 'Run /workbench:mesh start --local --port 0 --pid-file mesh.pid > mesh.log 2>&1 & through the Workbench plugin slash-command surface so local credentials exist and the daemon stays in the background. Wait until .workbench/mesh/server.json exists. Then run these exact slash-command operations: /workbench:mesh room lead:checkout; /workbench:mesh message lead:checkout what are you touching?; /workbench:mesh who. Paste the concrete room, message, and who command results. Do not add a create subcommand to room. Do not bypass the slash-command surface. Do it directly.')"
+mesh_event_contains "$D13" 'room.created' 'lead:checkout' \
+  && mesh_event_contains "$D13" 'message.sent' 'what are you touching' \
+  && contains "$out" 'connected_actor_count|session:lead|actor' \
   && ok "mesh natural intent produces collaboration output" \
-  || bad "mesh natural intent failed"
+  || bad "mesh natural intent did not persist room and message events (model output: $(printf '%s' "$out" | tail -3 | tr '\n' ' '))"
+cleanup_mesh "$D13"
 rm -rf "$D13"
 
 # NOTE — known coverage gap: SessionStart / PreCompact hooks do NOT fire (or their
