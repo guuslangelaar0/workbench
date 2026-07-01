@@ -6,6 +6,8 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-01
+
 ### Added
 - Workbench Mesh design implementation: Rust control-plane binary, local/LAN command center, authenticated invites, structured lead/worker rooms, actor hierarchy, statusline presence, and outcome-level plugin tests.
 
