@@ -11,7 +11,7 @@ chk "has PreCompact"           "grep -q 'PreCompact' '$HERE/hooks/hooks.json'"
 chk "has PostToolUse"          "grep -q 'PostToolUse' '$HERE/hooks/hooks.json'"
 chk "has UserPromptSubmit"     "grep -q 'UserPromptSubmit' '$HERE/hooks/hooks.json'"
 chk "uses PLUGIN_ROOT"         "grep -q 'CLAUDE_PLUGIN_ROOT' '$HERE/hooks/hooks.json'"
-for s in ground-session precompact-checkpoint coord-ping lead-purpose-nudge; do
+for s in ground-session precompact-checkpoint coord-ping lead-purpose-nudge mesh-context mesh-statusline; do
   chk "$s syntactically valid" "bash -n '$HERE/hooks/bin/$s.sh'"
 done
 # precompact writes a marker for a workbench project, no-ops elsewhere

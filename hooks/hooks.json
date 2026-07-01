@@ -5,7 +5,8 @@
       {
         "matcher": "startup|resume|compact",
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/ground-session.sh\"", "timeout": 10 }
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/ground-session.sh\"", "timeout": 10 },
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/mesh-context.sh\"", "timeout": 10 }
         ]
       }
     ],
@@ -44,7 +45,8 @@
     "UserPromptSubmit": [
       {
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/lead-purpose-nudge.sh\"", "timeout": 10 }
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/lead-purpose-nudge.sh\"", "timeout": 10 },
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/mesh-context.sh\"", "timeout": 10 }
         ]
       }
     ],
