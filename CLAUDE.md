@@ -30,7 +30,9 @@ When the user asks to deploy/release a Workbench version:
 - Run the relevant release gate before merging. For Mesh releases this includes
   `cargo fmt --check`, `cargo test -p workbench-mesh`, the Mesh shell suites,
   `bash scripts/validate-plugin.sh`, `bash scripts/bench.sh`, and
-  `git diff --check`.
+  `git diff --check`. Also run `bash test/all.sh` or wait for the equivalent
+  GitHub CI suite before tagging, because CI covers release metadata assertions
+  beyond the Mesh-focused gate.
 - Merge the verified branch to `main`, rerun the release gate on `main`, then
   push `main` and tag the same commit as `vX.Y.Z`.
 - The `Release mesh binaries` workflow is tag-driven and should attach

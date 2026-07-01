@@ -41,16 +41,17 @@ REP
 printf '| request | API client | TS | api |\n' >> "$C/.claude/architecture/containers.md"
 printf '### api\n| encryptedUpload | upload path | core |\n| Sync Client | live sync | core |\n| Ghost Module | not built yet | none |\n' >> "$C/.claude/architecture/components.md"
 
-OUT="$(bash "$S" "$C" 2>/dev/null)"
-chk "names the extracted graph"          "printf '%s' \"\$OUT\" | grep -qi 'graphify-out/GRAPH_REPORT.md'"
-chk "documented god-node reads yes (request)"        "printf '%s' \"\$OUT\" | grep -qE '^[[:space:]]*yes[[:space:]].*request\\(\\)'"
-chk "documented god-node reads yes (encryptedUpload)" "printf '%s' \"\$OUT\" | grep -qE '^[[:space:]]*yes[[:space:]].*encryptedUpload\\(\\)'"
-chk "multi-word doc name matches (Sync Client->SyncClient)" "printf '%s' \"\$OUT\" | grep -qE '^[[:space:]]*yes[[:space:]].*SyncClient'"
+OUT_FILE="$C/arch-drift.out"
+bash "$S" "$C" > "$OUT_FILE" 2>/dev/null
+chk "names the extracted graph"          "grep -qi 'graphify-out/GRAPH_REPORT.md' '$OUT_FILE'"
+chk "documented god-node reads yes (request)"        "grep -qE '^[[:space:]]*yes[[:space:]].*request\\(\\)' '$OUT_FILE'"
+chk "documented god-node reads yes (encryptedUpload)" "grep -qE '^[[:space:]]*yes[[:space:]].*encryptedUpload\\(\\)' '$OUT_FILE'"
+chk "multi-word doc name matches (Sync Client->SyncClient)" "grep -qE '^[[:space:]]*yes[[:space:]].*SyncClient' '$OUT_FILE'"
 # THE honesty regression: a wasm runtime shim must NOT be reported as documented.
-chk "wasm runtime shim reads no (passArray8ToWasm0)" "printf '%s' \"\$OUT\" | grep -qE '^[[:space:]]*no[[:space:]].*passArray8ToWasm0\\(\\)'"
-chk "pure-intent component flagged as orphan (Ghost Module)" "printf '%s' \"\$OUT\" | grep -q 'Ghost Module'"
-chk "documented component NOT flagged as orphan"     "! printf '%s' \"\$OUT\" | grep -E 'no token match' | grep -q 'encryptedUpload'"
-chk "honesty caveat present (not a verdict)"         "printf '%s' \"\$OUT\" | grep -qi 'heuristic'"
+chk "wasm runtime shim reads no (passArray8ToWasm0)" "grep -qE '^[[:space:]]*no[[:space:]].*passArray8ToWasm0\\(\\)' '$OUT_FILE'"
+chk "pure-intent component flagged as orphan (Ghost Module)" "grep -q 'Ghost Module' '$OUT_FILE'"
+chk "documented component NOT flagged as orphan"     "! awk '/no token match/ && /encryptedUpload/ { found=1 } END { exit found ? 0 : 1 }' '$OUT_FILE'"
+chk "honesty caveat present (not a verdict)"         "grep -qi 'heuristic' '$OUT_FILE'"
 rm -rf "$C"
 
 # --- partial docs: pair level has ONLY context.md (no containers/components tables).
