@@ -14,7 +14,7 @@ BIN="$HERE/target/debug/workbench-mesh"
 RC=0
 "$BIN" event append --target "$TMP" --home "$UNAUTH_HOME" --type presence.join --room repo:meshproto --from session:lead \
   --payload-json '{"role":"lead","purpose":"checkout"}' >"$TMP/unauth-append.out" 2>&1 || RC=$?
-chk "event append before bootstrap fails" "[ '$RC' -ne 0 ] && grep -q 'local project credential required' '$TMP/unauth-append.out'"
+chk "event append before bootstrap fails" "[ '$RC' -ne 0 ] && grep -q 'local mutating project credential required' '$TMP/unauth-append.out'"
 
 "$BIN" auth bootstrap --target "$TMP" --home "$HOME_TMP" > "$TMP/bootstrap.out"
 chk "bootstrap prints local credential ready" "grep -q 'local credential ready' '$TMP/bootstrap.out'"
