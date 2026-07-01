@@ -59,7 +59,10 @@ scaffold() { # <name> <level>
 
 # drive a headless claude session with the plugin loaded, scoped to <dir>
 drive() { # <dir> <prompt>  -> prints model output; returns claude's exit code
+  # Keep live plugin tests isolated from user-installed MCP plugins while still
+  # loading the explicit Workbench plugin under test.
   timeout "$TIMEOUT" claude -p "$2" \
+    --strict-mcp-config \
     --plugin-dir "$PLUGIN_ROOT" \
     --permission-mode bypassPermissions \
     --add-dir "$1" \
@@ -260,15 +263,15 @@ contains "$out" 'wb_invite_' \
 cleanup_mesh "$D12"
 rm -rf "$D12"
 
-# ---- scenario 13: /workbench:mesh maps natural collaboration intent ---------
-note "13) /workbench:mesh maps natural team intent to chat/status events"
-D13="$(scaffold "E2E Mesh Natural" crew)"
-out="$(cd "$D13" && drive "$D13" 'Use the Workbench mesh plugin slash-command surface for every mesh operation. First start local mesh in the background with local-only binding, port 0, and pid-file mesh.pid, redirecting output to mesh.log so the session returns; wait until .workbench/mesh/server.json exists. Then handle this team request in the natural Workbench mesh way: create a checkout lead room named lead:checkout, send that room the chat message "what are you touching?", and show who is connected. Choose the appropriate /workbench:mesh operations yourself from the plugin guidance and print the concrete results from the room setup, chat send, and team roster. Do not call scripts/mesh.sh directly. Do not run mesh start in the foreground. Do not expose LAN.')"
+# ---- scenario 13: /workbench:mesh executes room chat/status operations -------
+note "13) /workbench:mesh persists room chat and status events"
+D13="$(scaffold "E2E Mesh Chat" crew)"
+out="$(cd "$D13" && drive "$D13" 'Run these Workbench plugin slash commands in order. First run /workbench:mesh start --local --port 0 --pid-file mesh.pid > mesh.log 2>&1 & so mesh stays in the background. Wait until .workbench/mesh/server.json exists. Then run /workbench:mesh room lead:checkout. Then run /workbench:mesh message lead:checkout "what are you touching?". Then run /workbench:mesh who. Print the concrete output from the room creation, message send, and who commands. Do not call scripts/mesh.sh directly. Do not run mesh start in the foreground. Do not expose LAN.')"
 mesh_event_contains "$D13" 'room.created' 'lead:checkout' \
   && mesh_event_contains "$D13" 'message.sent' 'what are you touching' \
   && contains "$out" 'connected_actor_count:[[:space:]]*[0-9]+|session:lead' \
-  && ok "mesh natural intent produces collaboration output" \
-  || bad "mesh natural intent did not persist room and message events (model output: $(printf '%s' "$out" | tail -3 | tr '\n' ' '))"
+  && ok "mesh room chat produces collaboration output" \
+  || bad "mesh room chat did not persist room and message events (model output: $(printf '%s' "$out" | tail -3 | tr '\n' ' '))"
 cleanup_mesh "$D13"
 rm -rf "$D13"
 
