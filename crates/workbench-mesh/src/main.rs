@@ -148,7 +148,7 @@ struct AuthCheckArgs {
     target: PathBuf,
     #[arg(long)]
     home: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long, allow_hyphen_values = true)]
     token: String,
 }
 
@@ -515,7 +515,7 @@ mod tests {
 
     use clap::Parser;
 
-    use super::{Cli, Command, DeviceSubcommand, InviteSubcommand};
+    use super::{AuthSubcommand, Cli, Command, DeviceSubcommand, InviteSubcommand};
 
     #[test]
     fn parses_jobs_as_top_level_project_command() {
@@ -570,6 +570,30 @@ mod tests {
                 other => panic!("expected invite accept, got {other:?}"),
             },
             other => panic!("expected invite command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_auth_check_token_starting_with_hyphen() {
+        let cli = Cli::try_parse_from([
+            "workbench-mesh",
+            "auth",
+            "check",
+            "--target",
+            "/tmp/project",
+            "--home",
+            "/tmp/home",
+            "--token",
+            "-k_project_token",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Command::Auth(auth) => match auth.command {
+                AuthSubcommand::Check(args) => assert_eq!(args.token, "-k_project_token"),
+                other => panic!("expected auth check, got {other:?}"),
+            },
+            other => panic!("expected auth command, got {other:?}"),
         }
     }
 
