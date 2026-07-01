@@ -5,6 +5,7 @@
     token: "",
     events: [],
     actors: [],
+    devices: [],
     lastSeq: 0,
     socket: null
   };
@@ -30,9 +31,11 @@
     els.message = document.getElementById("message-input");
     els.availability = document.getElementById("availability-input");
     els.inviteRole = document.getElementById("invite-role");
+    els.device = document.getElementById("device-input");
     els.task = document.getElementById("task-input");
     els.assignee = document.getElementById("assignee-input");
     els.inviteOutput = document.getElementById("invite-output");
+    els.devicesBody = document.getElementById("devices-body");
     els.toast = document.getElementById("toast");
     els.eventList = document.getElementById("event-list");
     els.auditList = document.getElementById("audit-list");
@@ -94,6 +97,7 @@
       .then(function (data) {
         state.events = Array.isArray(data.events) ? data.events : [];
         state.actors = Array.isArray(data.actors) ? data.actors : [];
+        state.devices = Array.isArray(data.devices) ? data.devices : [];
         state.lastSeq = Number(data.last_seq || 0);
         setConnection("API online", "ok");
         render();
@@ -153,6 +157,9 @@
       event = makeEvent("message.help_request", base, target, { text: message, priority: "operator" });
     } else if (action === "revoke-invite") {
       revokeInvite(message);
+      return;
+    } else if (action === "revoke-device") {
+      revokeDevice(els.device.value.trim() || message);
       return;
     } else if (action === "approve-decision") {
       event = makeEvent("decision.answer", base, target, { decision: message, answer: "approved", approved: true });
@@ -234,7 +241,13 @@
     })
       .then(requireOk)
       .then(function (data) {
-        els.inviteOutput.textContent = "token=" + data.token + " role=" + data.role + " expires_at=" + data.expires_at;
+        var base = "http://" + window.location.host;
+        els.inviteOutput.textContent = [
+          "token=" + data.token,
+          "role=" + data.role,
+          "expires_at=" + data.expires_at,
+          "connect=/workbench:mesh connect " + base + " " + data.token + " <device>"
+        ].join("\n");
         showToast("Created invite for " + data.role + ".");
         return postEvent(makeEvent("invite.created", commandBase(), "", { role: data.role, expires_at: data.expires_at, source: "command-center" }));
       })
@@ -261,6 +274,30 @@
       .then(function () {
         showToast("Revoked invite.");
         return postEvent(makeEvent("invite.revoked", commandBase(), "", { token_hint: tokenHint(token), reason: "operator revoked" }));
+      })
+      .catch(function (error) {
+        showToast(error.message);
+      });
+  }
+
+  function revokeDevice(device) {
+    if (!state.token) {
+      showToast("Set a bearer token first.");
+      return;
+    }
+    if (!device) {
+      showToast("Enter a device to revoke.");
+      return;
+    }
+    fetch("/api/devices/revoke", {
+      method: "POST",
+      headers: headers(true),
+      body: JSON.stringify({ device: device })
+    })
+      .then(requireOk)
+      .then(function () {
+        showToast("Revoked device.");
+        return loadState();
       })
       .catch(function (error) {
         showToast(error.message);
@@ -311,6 +348,7 @@
     renderJobs();
     renderTasks();
     renderDecisions();
+    renderDevices();
     renderAudit();
   }
 
@@ -373,9 +411,17 @@
     }).join("") : row(4, "No decisions observed.");
   }
 
+  function renderDevices() {
+    var rows = state.devices.map(function (device) {
+      var revoked = device.revoked_at ? "revoked" : "active";
+      return "<tr><td>" + escapeHtml(device.device || "-") + "</td><td>" + escapeHtml(device.role || "-") + "</td><td>" + escapeHtml(shortTime(device.accepted_at)) + "</td><td>" + escapeHtml(shortTime(device.last_seen_at)) + "</td><td>" + chip(revoked) + "</td></tr>";
+    });
+    els.devicesBody.innerHTML = rows.length ? rows.join("") : row(5, "No devices connected.");
+  }
+
   function renderAudit() {
     var audit = state.events.filter(function (event) {
-      return /invite|decision|lead|task|job|status/.test(event.type || "");
+      return /invite|device|decision|lead|task|job|status/.test(event.type || "");
     }).slice(-12).reverse();
     els.auditList.innerHTML = audit.length ? audit.map(function (event) {
       return "<li><strong>" + escapeHtml(event.type) + "</strong><div class=\"event-meta\">" + escapeHtml(event.from) + " / " + escapeHtml(shortTime(event.ts)) + "</div></li>";

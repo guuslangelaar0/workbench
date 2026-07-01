@@ -45,6 +45,8 @@ chk "html includes tasks view" "printf '%s' \"\$HTML\" | grep -q 'Tasks'"
 chk "html includes decisions view" "printf '%s' \"\$HTML\" | grep -q 'Decisions'"
 chk "html includes invites view" "printf '%s' \"\$HTML\" | grep -q 'Invites'"
 chk "html includes audit view" "printf '%s' \"\$HTML\" | grep -q 'Audit'"
+chk "html includes devices view" "printf '%s' \"\$HTML\" | grep -q 'Devices'"
+chk "html uses observer backend role" "printf '%s' \"\$HTML\" | grep -q 'value=\"observer\"' && ! printf '%s' \"\$HTML\" | grep -q 'value=\"viewer\"'"
 chk "html response is no-store" "grep -qi '^cache-control: no-store' '$HTML_HEADERS'"
 chk "html response has no referrer policy" "grep -qi '^referrer-policy: no-referrer' '$HTML_HEADERS'"
 
@@ -64,6 +66,8 @@ JS="$(curl -fsS -D "$JS_HEADERS" "http://127.0.0.1:$PORT/assets/app.js" -H "Auth
 chk "app opens websocket" "printf '%s' \"\$JS\" | grep -q 'WebSocket'"
 chk "app posts events" "printf '%s' \"\$JS\" | grep -q '/api/events'"
 chk "app creates invites" "printf '%s' \"\$JS\" | grep -q '/api/invites'"
+chk "app lists devices" "printf '%s' \"\$JS\" | grep -q '/api/devices'"
+chk "app revokes devices" "printf '%s' \"\$JS\" | grep -q '/api/devices/revoke'"
 chk "app supports availability" "printf '%s' \"\$JS\" | grep -q 'availability.set'"
 chk "app response is no-store" "grep -qi '^cache-control: no-store' '$JS_HEADERS'"
 chk "app response has no referrer policy" "grep -qi '^referrer-policy: no-referrer' '$JS_HEADERS'"
@@ -106,6 +110,20 @@ chk "revoke invite calls real API" "printf '%s' \"\$REVOKE_JSON\" | grep -q '\"o
 REVOKED_ACCEPT_RC=0
 "$BIN" invite accept --target "$TMP" --home "$HOME_TMP" --token "$INVITE_TOKEN" --device revoked-ui >"$TMP/revoked-accept.out" 2>&1 || REVOKED_ACCEPT_RC=$?
 chk "revoked invite cannot be accepted" "[ '$REVOKED_ACCEPT_RC' -ne 0 ] && grep -qi 'invite revoked' '$TMP/revoked-accept.out'"
+REMOTE_INVITE="$(curl -fsS -X POST "http://127.0.0.1:$PORT/api/invites" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"role":"worker","ttl_seconds":900,"max_uses":1}')"
+REMOTE_TOKEN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$REMOTE_INVITE")"
+curl -fsS -X POST "http://127.0.0.1:$PORT/api/invites/accept" \
+  -H 'Content-Type: application/json' \
+  -d "{\"token\":\"$REMOTE_TOKEN\",\"device\":\"ui-laptop\"}" >/dev/null
+DEVICES_JSON="$(curl -fsS "http://127.0.0.1:$PORT/api/devices" -H "Authorization: Bearer $TOKEN")"
+chk "devices api lists accepted device" "printf '%s' \"\$DEVICES_JSON\" | grep -q 'ui-laptop'"
+chk "devices api does not leak bearer token" "! printf '%s' \"\$DEVICES_JSON\" | grep -q '\"token\"'"
+DEVICE_REVOKE_JSON="$(curl -fsS -X POST "http://127.0.0.1:$PORT/api/devices/revoke" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"device":"ui-laptop"}')"
+chk "revoke device calls real API" "printf '%s' \"\$DEVICE_REVOKE_JSON\" | grep -q '\"ok\":true'"
 post_ui_action "approve decision" "decision.answer" "decision-approve-6" \
   '{"type":"decision.answer","room":"repo:meshui","from":"ui:owner","to":"worker:alpha","payload":{"decision":"decision-approve-6","answer":"approved","approved":true}}'
 post_ui_action "deny decision" "decision.answer" "decision-deny-6" \

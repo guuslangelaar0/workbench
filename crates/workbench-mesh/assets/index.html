@@ -32,6 +32,7 @@
       <a href="#tasks">Tasks</a>
       <a href="#decisions">Decisions</a>
       <a href="#invites">Invites</a>
+      <a href="#devices">Devices</a>
       <a href="#audit">Audit</a>
     </nav>
 
@@ -164,13 +165,31 @@
               <select id="invite-role" aria-label="Invite role">
                 <option value="worker">Worker</option>
                 <option value="operator">Operator</option>
-                <option value="viewer">Viewer</option>
+                <option value="observer">Observer</option>
               </select>
               <button type="button" data-action="create-invite">Create invite</button>
               <button type="button" data-action="revoke-invite">Revoke invite</button>
             </div>
           </div>
           <div id="invite-output" class="invite-output mono">No invite created in this browser session.</div>
+        </section>
+
+        <section id="devices" class="band">
+          <div class="band-head">
+            <h2>Devices</h2>
+            <div class="toolbar">
+              <input id="device-input" aria-label="Device" />
+              <button type="button" data-action="revoke-device">Revoke device</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Device</th><th>Role</th><th>Accepted</th><th>Last seen</th><th>State</th></tr>
+              </thead>
+              <tbody id="devices-body"></tbody>
+            </table>
+          </div>
         </section>
 
         <section id="audit" class="band">

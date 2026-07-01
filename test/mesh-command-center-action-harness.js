@@ -15,6 +15,7 @@ const expectedActions = [
   "request-help",
   "create-invite",
   "revoke-invite",
+  "revoke-device",
   "approve-decision",
   "deny-decision",
   "reassign-task",
@@ -54,6 +55,7 @@ const defaultValues = {
   "message-input": "payload-marker",
   "availability-input": "busy",
   "invite-role": "operator",
+  "device-input": "macbook",
   "task-input": "task-marker",
   "assignee-input": "worker:beta"
 };
@@ -69,9 +71,11 @@ const defaultValues = {
   "message-input",
   "availability-input",
   "invite-role",
+  "device-input",
   "task-input",
   "assignee-input",
   "invite-output",
+  "devices-body",
   "toast",
   "event-list",
   "audit-list",
@@ -210,6 +214,12 @@ const expectedPayloads = {
       }
     }
   },
+  "revoke-device": {
+    url: "/api/devices/revoke",
+    body: {
+      device: "macbook"
+    }
+  },
   "approve-decision": {
     url: "/api/events",
     body: {
@@ -318,6 +328,7 @@ function configureInputs(action) {
   setValue("assignee-input", "worker:beta");
   setValue("availability-input", "busy");
   setValue("invite-role", "operator");
+  setValue("device-input", "macbook");
 
   if (action === "send-message") {
     setValue("message-input", "message-send");
@@ -427,6 +438,9 @@ function fetch(url, options = {}) {
     }));
   }
   if (url === "/api/invites/revoke") {
+    return Promise.resolve(jsonResponse({ ok: true }));
+  }
+  if (url === "/api/devices/revoke") {
     return Promise.resolve(jsonResponse({ ok: true }));
   }
   if (url === "/api/events") {
