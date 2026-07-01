@@ -16,6 +16,8 @@ chk "codex engineer command avoids direct companion shellout" "! grep -q 'codex-
 chk "codex engineer command preserves runtime flags" "grep -q -- '--background' '$HERE/commands/codex-engineer.md' && grep -q -- '--wait' '$HERE/commands/codex-engineer.md' && grep -q -- '--model' '$HERE/commands/codex-engineer.md' && grep -q -- '--effort' '$HERE/commands/codex-engineer.md'"
 chk "codex engineer command has setup fallback" "grep -q '/codex:setup' '$HERE/commands/codex-engineer.md'"
 chk "codex engineer keeps workbench verification owner" "grep -q '/workbench:verify' '$HERE/commands/codex-engineer.md' && grep -qi 'do not mark the task verified' '$HERE/commands/codex-engineer.md'"
+chk "codex bridge skill names native engineer command" "grep -q '/workbench:codex-engineer' '$HERE/skills/codex-bridge/SKILL.md'"
+chk "codex coordination template names native engineer command" "grep -q '/workbench:codex-engineer' '$HERE/templates/codex/CODEX_COORDINATION.md.tmpl'"
 
 # codex OFF (default) → no CODEX_COORDINATION rendered
 bash "$HERE/scripts/init.sh" --name "Acme" --mission "x" --target "$TMP" >/dev/null 2>&1

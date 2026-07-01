@@ -27,6 +27,8 @@ Codex should act as one of these, depending on the user's request:
 - second engineer for a clearly disjoint repo or feature area;
 - documentation/coordination maintainer for handoff files.
 
+Claude can dispatch a task to Codex through `/workbench:codex-engineer <task-id>`. That command claims the task, moves it to `in-development`, invokes the OpenAI Codex plugin's native `codex:codex-rescue` subagent, and leaves verification with Workbench. Codex should update the task notes and report evidence, but it should not move the task to `verified`.
+
 Codex does not have Claude's agent-teams tools (the Agent/SendMessage/TeamList family). If coordination with Claude is needed, write it to disk in this file, `.claude/SESSION_STATE.md`, `.claude/SESSION_LOG.md`, or the relevant task file.
 
 ## Ownership Protocol
