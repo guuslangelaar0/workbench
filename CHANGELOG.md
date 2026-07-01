@@ -6,6 +6,10 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-01
+
+The remote/LAN Mesh onboarding release. Workbench Mesh can now bring another Claude session into a trusted host session from a second machine, using short-lived invites exchanged for revocable device credentials while keeping public internet exposure, relays, WebRTC, and gRPC out of scope for this release.
+
 ### Added
 - Mesh remote/LAN onboarding: `/workbench:mesh connect http://HOST:PORT TOKEN [DEVICE]` redeems a trusted LAN invite through the host daemon, stores the joining device credential outside the repo, and lets the host list/revoke device credentials.
 
