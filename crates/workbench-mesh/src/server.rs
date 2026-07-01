@@ -236,8 +236,8 @@ async fn api_state(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, ApiError> {
-    require_bearer(&state, &headers)?;
-    Ok(Json(state_json(&state)?))
+    let role = bearer_role(&state, &headers)?;
+    Ok(Json(state_json(&state, &role)?))
 }
 
 async fn api_events(
@@ -328,7 +328,7 @@ async fn api_devices(
         return Err(ApiError::forbidden("owner/operator bearer required"));
     }
     Ok(Json(
-        json!({ "devices": auth::list_devices(&state.project_root)? }),
+        json!({ "devices": redacted_devices(&state.project_root)? }),
     ))
 }
 
@@ -513,9 +513,13 @@ fn static_headers(content_type: &'static str) -> [(HeaderName, &'static str); 3]
     ]
 }
 
-fn state_json(state: &AppState) -> Result<Value> {
+fn state_json(state: &AppState, role: &str) -> Result<Value> {
     let events = state.store.list_events_since(0)?;
-    let devices = auth::list_devices(&state.project_root)?;
+    let devices = if matches!(role, "owner" | "operator") {
+        redacted_devices(&state.project_root)?
+    } else {
+        Vec::new()
+    };
     let mut actors = BTreeSet::new();
     for event in &events {
         actors.insert(event.from.clone());
@@ -531,6 +535,22 @@ fn state_json(state: &AppState) -> Result<Value> {
         "events": events,
         "last_seq": events.last().map(|event| event.seq).unwrap_or(0),
     }))
+}
+
+fn redacted_devices(project_root: &Path) -> Result<Vec<Value>> {
+    Ok(auth::list_devices(project_root)?
+        .into_iter()
+        .map(|device| {
+            json!({
+                "device": device.device,
+                "project": device.project,
+                "role": device.role,
+                "accepted_at": device.accepted_at,
+                "last_seen_at": device.last_seen_at,
+                "revoked_at": device.revoked_at,
+            })
+        })
+        .collect())
 }
 
 fn require_token(state: &AppState, token: &str) -> Result<String, ApiError> {
@@ -1103,6 +1123,108 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(worker.status(), reqwest::StatusCode::FORBIDDEN);
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn state_devices_are_redacted_and_hidden_from_worker_observer() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let owner_token =
+            auth::local_project_token(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let operator_token = accept_role(project.path(), home.path(), "operator", "operator");
+        let worker_token = accept_role(project.path(), home.path(), "worker", "worker");
+        let observer_token = accept_role(project.path(), home.path(), "observer", "observer");
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+        let base = format!("http://{}:{}", metadata.host, metadata.port);
+        let client = Client::new();
+
+        for token in [&owner_token, &operator_token] {
+            let state: Value = client
+                .get(format!("{base}/api/state"))
+                .bearer_auth(token)
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            assert_eq!(state["devices"][0]["device"], "operator");
+            assert!(state.to_string().find("credential_hash").is_none());
+        }
+
+        for token in [&worker_token, &observer_token] {
+            let state: Value = client
+                .get(format!("{base}/api/state"))
+                .bearer_auth(token)
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            assert!(state
+                .get("devices")
+                .and_then(Value::as_array)
+                .map(Vec::is_empty)
+                .unwrap_or(true));
+            assert!(state.to_string().find("credential_hash").is_none());
+        }
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn device_api_redacts_credential_hash_for_privileged_callers() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let owner_token =
+            auth::local_project_token(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let operator_token = accept_role(project.path(), home.path(), "operator", "operator");
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+        let base = format!("http://{}:{}", metadata.host, metadata.port);
+        let client = Client::new();
+
+        for token in [&owner_token, &operator_token] {
+            let devices: Value = client
+                .get(format!("{base}/api/devices"))
+                .bearer_auth(token)
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            assert_eq!(devices["devices"][0]["device"], "operator");
+            assert!(devices.to_string().find("credential_hash").is_none());
+        }
 
         server.abort();
     }

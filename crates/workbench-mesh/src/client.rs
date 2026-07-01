@@ -120,13 +120,23 @@ pub(crate) fn remote_metadata_from_url(url: &str) -> Result<ServerMetadata> {
     if parsed.scheme() != "http" {
         anyhow::bail!("remote mesh URL must use http");
     }
+    if !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+        || parsed.path() != "/"
+    {
+        anyhow::bail!(
+            "remote mesh URL must be http://host:port without userinfo, path, query, or fragment"
+        );
+    }
     let host = parsed
         .host_str()
         .ok_or_else(|| anyhow::anyhow!("remote mesh URL requires a host"))?
         .to_string();
     let port = parsed
-        .port_or_known_default()
-        .ok_or_else(|| anyhow::anyhow!("remote mesh URL requires a port"))?;
+        .port()
+        .ok_or_else(|| anyhow::anyhow!("remote mesh URL must be http://host:port"))?;
     Ok(ServerMetadata {
         mode: "remote".to_string(),
         host: host.clone(),
@@ -468,6 +478,24 @@ mod tests {
     fn remote_metadata_url_rejects_non_http_scheme() {
         let err = super::remote_metadata_from_url("ssh://example.com:47321").unwrap_err();
         assert!(err.to_string().contains("remote mesh URL must use http"));
+    }
+
+    #[test]
+    fn remote_metadata_url_requires_explicit_port_and_root_url() {
+        for url in [
+            "http://example.com",
+            "http://user@example.com:47321",
+            "http://example.com:47321/path",
+            "http://example.com:47321?token=abc",
+            "http://example.com:47321#fragment",
+        ] {
+            let err = super::remote_metadata_from_url(url).unwrap_err();
+            assert!(
+                err.to_string()
+                    .contains("remote mesh URL must be http://host:port"),
+                "unexpected error for {url}: {err:#}"
+            );
+        }
     }
 
     #[test]
