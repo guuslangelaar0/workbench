@@ -465,6 +465,6 @@ Release target remains v0.7.0 unless scope changes.
 ## Self-Review
 
 - Spec coverage: Task 1 defines the command contract; Task 2 implements the native `codex:codex-rescue` command; Task 3 updates routing and generated Codex guidance; Task 4 updates user docs and `[Unreleased]`; Task 5 verifies offline and gates the live cross-plugin assumption.
-- Placeholder scan: no unfinished-marker placeholders remain. The only conditional branch is the explicit fallback if live Claude Code rejects cross-plugin subagent invocation.
+- Marker scan: no unfinished-work markers remain. The only conditional branch is the explicit fallback if live Claude Code rejects cross-plugin subagent invocation.
 - Type/name consistency: command name is `/workbench:codex-engineer`; command file is `commands/codex-engineer.md`; native Codex subagent string is `codex:codex-rescue`; setup fallback is `/codex:setup`.
 - Scope check: the plan does not rewrite Codex runtime internals, add direct `codex-companion.mjs` shellouts, or require live Codex credentials in offline CI.
