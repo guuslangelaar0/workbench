@@ -66,6 +66,13 @@ drive() { # <dir> <prompt>  -> prints model output; returns claude's exit code
     "${MODEL_ARG[@]}" 2>&1
 }
 
+cleanup_mesh() { # <dir>
+  local pid_file="$1/mesh.pid"
+  if [ -s "$pid_file" ]; then
+    kill "$(cat "$pid_file" 2>/dev/null)" >/dev/null 2>&1 || true
+  fi
+}
+
 # ---- scenario 1: the plugin loads and /workbench:task creates a task ---------
 note "1) /workbench:task creates a backlog task"
 D1="$(scaffold "E2E One" solo)"
@@ -181,6 +188,39 @@ printf '%s' "$out" | grep -qiE 'self-test|ok json|ok shell|ok plugin|passed' \
   && ok "self-test reports its check results" \
   || bad "self-test did not report (model output: $(printf '%s' "$out" | tail -3 | tr '\n' ' '))"
 rm -rf "$D10"
+
+# ---- scenario 11: /workbench:mesh starts the local command center ------------
+note "11) /workbench:mesh starts local command center and prints URL"
+D11="$(scaffold "E2E Mesh Start" crew)"
+out="$(cd "$D11" && drive "$D11" "Use Bash to start Workbench mesh in the background by running exactly this shell command:
+\"$PLUGIN_ROOT/scripts/mesh.sh\" start --local --port 0 --pid-file mesh.pid > mesh.log 2>&1 &
+After that, wait until .workbench/mesh/server.json exists, then run /workbench:mesh open and show me the command center URL. Do not expose LAN. Do not run mesh start in the foreground.")"
+printf '%s' "$out" | grep -qiE 'command center|127\.0\.0\.1|mesh' \
+  && ok "mesh start reports local command center" \
+  || bad "mesh start did not report command center"
+cleanup_mesh "$D11"
+rm -rf "$D11"
+
+# ---- scenario 12: /workbench:mesh creates a worker invite -------------------
+note "12) /workbench:mesh invite creates a worker invite"
+D12="$(scaffold "E2E Mesh Invite" crew)"
+out="$(cd "$D12" && drive "$D12" "Use Bash to start Workbench mesh in the background by running exactly this shell command:
+\"$PLUGIN_ROOT/scripts/mesh.sh\" start --local --port 0 --pid-file mesh.pid > mesh.log 2>&1 &
+After that, wait until .workbench/mesh/server.json exists, then run /workbench:mesh invite --role worker --ttl-seconds 900 and /workbench:mesh open. Show the token, role, expiry, host, IP and port. Do not run mesh start in the foreground.")"
+printf '%s' "$out" | grep -qiE 'wb_invite_|role: worker|127\.0\.0\.1|port|host' \
+  && ok "mesh invite reports secure connection details" \
+  || bad "mesh invite missing connection details"
+cleanup_mesh "$D12"
+rm -rf "$D12"
+
+# ---- scenario 13: /workbench:mesh maps natural collaboration intent ---------
+note "13) /workbench:mesh maps natural team intent to chat/status events"
+D13="$(scaffold "E2E Mesh Natural" crew)"
+out="$(cd "$D13" && drive "$D13" 'Use workbench mesh to open a checkout lead room, send a message asking what files are being touched, and show who is connected. Do it directly.')"
+printf '%s' "$out" | grep -qiE 'checkout|message|who|lead|mesh' \
+  && ok "mesh natural intent produces collaboration output" \
+  || bad "mesh natural intent failed"
+rm -rf "$D13"
 
 # NOTE — known coverage gap: SessionStart / PreCompact hooks do NOT fire (or their
 # injected context is not surfaced) under `claude -p`, so this harness cannot assert
