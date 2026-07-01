@@ -51,6 +51,8 @@ unset WB_WORKSPACE_ROOT
 chk "coordination skill exists"          "[ -f '$S/coordination/SKILL.md' ]"
 chk "coordination covers wb-coord"       "grep -q 'wb-coord' '$S/coordination/SKILL.md'"
 chk "coordination covers worktrees"      "grep -qi 'worktree' '$S/coordination/SKILL.md'"
+chk "coordination prefers native claude worktrees" "grep -q -- '--worktree' '$S/coordination/SKILL.md' && grep -q 'isolation: worktree' '$S/coordination/SKILL.md' && grep -q 'claude agents' '$S/coordination/SKILL.md' && grep -q 'worktree.baseRef' '$S/coordination/SKILL.md'"
+chk "coordination keeps legacy worktree fallback" "grep -q 'bb-worktree.sh' '$S/coordination/SKILL.md'"
 chk "coordination covers with-lock"      "grep -q 'with-lock' '$S/coordination/SKILL.md'"
 chk "coordination covers claims/locking" "grep -q 'claim' '$S/coordination/SKILL.md'"
 chk "coordination covers overlap/pathspec" "grep -qiE 'overlap|pathspec' '$S/coordination/SKILL.md'"

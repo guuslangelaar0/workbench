@@ -50,8 +50,8 @@ Park unrelated work as a real backlog task with origin metadata: session, active
 ### `/workbench:epic "<title>" [--theme <t>]` / `/workbench:epic list`
 Create or list **epics** — groups of related tasks under one user-facing outcome (`.claude/epics/NNNN-title.md`). Available at levels whose `decomposition` dial is grouped (pair = light-epics, crew = epics, fleet = themes-epics); `solo` uses flat tasks and has no epics. Epics draw from the shared `.claude/tasks/_next-id` counter, so epic and task IDs never collide. Link a task with `/workbench:task "<t>" --epic <id>`; the epic's `done/total` rollup shows in `/workbench:mc`. See [concepts.md](concepts.md#task-lifecycle).
 
-### `/workbench:dispatch <id> [lane]`
-Move a task to `in-development/` and dispatch it to an engineer subagent in the given lane.
+### `/workbench:dispatch <id> [--worktree [name]|--shared] [--background|--wait] [lane]`
+Move a task to `in-development/` and dispatch it to an engineer subagent in the given lane. Engineer/verifier agents use Claude Code native `isolation: worktree`; for multiple same-repo lanes, use `--worktree --background` to launch a native `claude --worktree <name> --bg --agent engineer` lane and monitor it with `claude agents`. `--shared` avoids a persistent/background worktree and uses the normal foreground Task-tool lane; that lane can still use Claude's temporary worktree isolation. When a lane needs current-branch state, commit/push that state or set Claude Code `worktree.baseRef` to `"head"` before launch.
 
 ### `/workbench:codex-engineer <id> [--background|--wait] [--fresh|--resume] [--model <model>] [--effort <level>]`
 Move a task to `in-development/` and dispatch it to Codex through the OpenAI Codex plugin's native `codex:codex-rescue` subagent. Workbench still owns task claiming, lifecycle, review, and `/workbench:verify`; Codex acts as the engineer lane. If Codex is not set up, run `/codex:setup`.

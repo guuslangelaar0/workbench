@@ -32,7 +32,15 @@ A scoped commit can't sweep foreign staged files, so it always passes the guard.
 `scripts/coord/with-lock.sh <name> -- <command>` globally serializes an action (deploy, migration, anything that must not run twice at once) across all sessions; the lock carries a heartbeat and auto-expires if the holder dies. Example: `scripts/coord/with-lock.sh deploy-prod -- <your deploy command>`.
 
 ## Worktrees (A) — true isolation for parallel code in ONE repo
-When two sessions must both write code in the **same** repo, give each its own worktree+branch so their indexes never collide: `scripts/coord/bb-worktree.sh new <name> [repo]` (then `cd` into it), `list`, and `rm <name>`. This is the cleanest collision fix — prefer it over fighting the commit guard when work genuinely overlaps a repo.
+When two sessions must both write code in the **same** repo, give each lane its own worktree+branch so indexes never collide.
+
+Prefer Claude Code's native worktree model on current releases:
+- Custom workbench agents declare `isolation: worktree`, so Task/Agent-spawned engineers and verifiers run in temporary Claude-managed worktrees.
+- For a full background lane, use `/workbench:dispatch <id> --worktree --background` or launch Claude directly with `claude --worktree <name> --bg --agent engineer "<prompt>"`.
+- Monitor native background lanes with `claude agents --cwd <project> --json` or the interactive `claude agents` view.
+- Native Claude worktrees use Claude's configured worktree base. If a lane needs current-branch or just-moved task context, commit/push that context or set Claude Code `worktree.baseRef` to `"head"` before launch. If the first worktree launch reports workspace trust, run `claude` once in the repo and retry.
+
+Fallback when native worktrees/background sessions are unavailable: `scripts/coord/bb-worktree.sh new <name> [repo]` (then `cd` into it), `list`, and `rm <name>`. This is still the cleanest collision fix for older Claude Code builds or non-Claude shells — prefer it over fighting the commit guard when work genuinely overlaps a repo.
 
 ## When to use which
 - Different repos, different tracks → just `ping` + scoped-pathspec commits.

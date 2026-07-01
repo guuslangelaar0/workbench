@@ -83,7 +83,7 @@ The contract: **the next session should be able to resume from `SESSION_STATE.md
 When more than one Claude session is open on the same repo, they are separate processes that can clobber each other. Workbench's `scripts/coord/` tooling gives them presence and locks.
 
 - Sessions **register** themselves and **claim** tasks; a second session sees the claim and steers clear.
-- A **pre-commit guard** warns (or, at `strict` enforcement, blocks) a bulk commit when another live session has changes in the same repo — the fix is to commit with an explicit pathspec or isolate in a **worktree**.
+- A **pre-commit guard** warns (or, at `strict` enforcement, blocks) a bulk commit when another live session has changes in the same repo — the fix is to commit with an explicit pathspec or isolate in a **worktree**. Workbench uses Claude Code's native `isolation: worktree` for engineer/verifier subagents and can launch full background lanes with `claude --worktree <name> --bg --agent engineer`; set Claude Code `worktree.baseRef` to `"head"` when lanes must inherit current-branch context. `scripts/coord/bb-worktree.sh` remains the fallback for older Claude Code builds or non-Claude shells.
 - `/workbench:teamlead <topic>` scopes a session to a single track and locks its tasks, so multiple leads can run in parallel without collision.
 
 The `enforcement` axis (`remind` / `warn-default` / `strict`) controls how forcefully the guards act.

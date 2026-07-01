@@ -8,6 +8,7 @@ All notable changes to workbench are documented here. The format follows
 
 ### Added
 - Native Codex engineer lane: `/workbench:codex-engineer` dispatches a Workbench task through the OpenAI Codex plugin's `codex:codex-rescue` subagent while keeping Workbench responsible for task lifecycle, review, and verification.
+- Native Claude Code worktree lanes: Workbench engineer/verifier agents now declare `isolation: worktree`, `/workbench:dispatch` documents `--worktree --background` for same-repo parallel lanes, and coordination guidance prefers Claude Code's `--worktree`, `--bg`, `claude agents`, and `worktree.baseRef` surfaces with the existing Workbench worktree helper as fallback.
 
 ## [0.6.0] - 2026-07-01
 

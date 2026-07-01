@@ -13,6 +13,7 @@ Launch target: {{LAUNCH}}
 1. **Reality check first.** Read `.claude/SESSION_STATE.md` + `.claude/tasks/README.md`; list the task dirs; `git status`. Note the in-review count.
 2. **Pick** the highest-impact UNBLOCKED task from `.claude/tasks/backlog/`.
 3. **Dispatch** to an engineer (the lead coordinates and never writes code directly).
+   Engineer and verifier lanes use Claude Code native worktree isolation when available; for parallel same-repo work, prefer `/workbench:dispatch <id> --worktree --background` and monitor with `claude agents`. Set Claude Code `worktree.baseRef` to `"head"` if the lane must inherit current-branch context.
 4. **Gate**: review the diff, build, run the task's declared `**Verification:**` before anything advances.
 5. **Lifecycle** transitions are `git mv` (backlog → in-development → in-review → verified). A task is NOT done until `verified/` with evidence captured.
 6. **Never stop for decisions.** Needs the human → `.claude/tasks/decisions/`, move on.

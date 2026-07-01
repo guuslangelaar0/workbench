@@ -85,7 +85,7 @@ That's the whole rhythm: pick a level, capture work as tasks, let the loop drive
 | `/workbench:lead` | Show, set, adopt, or clear this session's durable lead purpose |
 | `/workbench:park "<title>"` | Park an unrelated bug/feature/follow-up as a real backlog task with origin metadata |
 | `/workbench:epic "<title>"` | Create or list epics — groups of related tasks with a live task rollup (pair level and up) |
-| `/workbench:dispatch <id>` | Move a task to in-development and dispatch it to an engineer |
+| `/workbench:dispatch <id>` | Move a task to in-development and dispatch it to an engineer, using native worktree isolation for parallel lanes |
 | `/workbench:codex-engineer <id>` | Dispatch a task to Codex through the OpenAI Codex plugin while Workbench keeps lifecycle and verification ownership |
 | `/workbench:verify <id>` | Run a task's verification and gate it to `verified/` (or back) |
 | `/workbench:mc` | Mission Control: a text dashboard of tasks, cap, build, and prod |
@@ -164,7 +164,7 @@ Five capabilities, all configured from the level you pick:
 - **The orchestration loop** — a long-running teamlead loop that picks the highest-impact unblocked task, dispatches it, and gates it. The lead coordinates; engineers implement; nothing reaches *verified* without evidence. Universal rule: **bugs auto-file as tasks; new features are *suggested*, never auto-built.**
 - **Lead purpose + parking** — a lead session has a durable purpose (one task, one track, or a backlog-scouting pass). When unrelated work appears mid-feature, `/workbench:park` captures it as a backlog task with origin metadata instead of widening the active branch silently.
 - **Continuity** — `SessionStart` re-grounds each new session from disk, `PreCompact` checkpoints before context is compacted, and a `SESSION_STATE.md` handoff means the next session resumes from the file alone.
-- **Coordination** — multiple concurrent sessions register presence, claim tasks, and get warned before they collide; worktrees isolate parallel work.
+- **Coordination** — multiple concurrent sessions register presence, claim tasks, and get warned before they collide; Claude Code native worktrees isolate parallel engineer/verifier lanes, with Workbench's legacy worktree helper as a fallback.
 - **Workbench Mesh** — a Rust control-plane binary behind `/workbench:mesh` opens a local/LAN command center for natural requests like "talk to my MacBook Claude session", "open a lead channel", or "ask worker status." Remote/LAN joins use short-lived invite tokens exchanged for device credentials stored outside the repo. The host keeps only hashed device credentials and can list/revoke devices through `/workbench:mesh devices` and `/workbench:mesh revoke-device`.
 - **Discipline built in** — brainstorm → spec → plan before building; "done" means *verified with evidence*, never "should work."
 

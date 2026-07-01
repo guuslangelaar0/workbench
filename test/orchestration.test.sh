@@ -34,6 +34,8 @@ chk "engineer frontmatter name"     "grep -q '^name: engineer' '$A/engineer.md'"
 chk "verifier frontmatter name"     "grep -q '^name: verifier' '$A/verifier.md'"
 chk "engineer inherits model"       "grep -q '^model: inherit' '$A/engineer.md'"
 chk "verifier inherits model"       "grep -q '^model: inherit' '$A/verifier.md'"
+chk "engineer uses native worktree isolation" "grep -q '^isolation: worktree' '$A/engineer.md'"
+chk "verifier uses native worktree isolation" "grep -q '^isolation: worktree' '$A/verifier.md'"
 chk "engineer: no Co-Authored-By"   "grep -qi 'Co-Authored-By' '$A/engineer.md'"   # must MENTION the rule (forbid it)
 chk "verifier: does not fix"        "grep -qi 'do not fix\|does not fix\|not fix' '$A/verifier.md'"
 
@@ -46,6 +48,9 @@ chk "mc command runs mc.sh"         "grep -q 'scripts/mc.sh' '$C/mc.md'"
 chk "task command runs task-new.sh" "grep -q 'scripts/task-new.sh' '$C/task.md'"
 chk "dispatch moves to in-development" "grep -qE 'task-move.sh|in-development' '$C/dispatch.md'"
 chk "dispatch spawns engineer"      "grep -q 'engineer' '$C/dispatch.md'"
+chk "dispatch supports native worktree lanes" "grep -q -- '--worktree' '$C/dispatch.md' && grep -q -- '--bg' '$C/dispatch.md' && grep -q 'claude agents' '$C/dispatch.md'"
+chk "dispatch shared avoids false current-checkout promise" "grep -q -- '--shared' '$C/dispatch.md' && grep -q 'normal foreground Task-tool path' '$C/dispatch.md' && ! grep -q 'force the current checkout' '$C/dispatch.md'"
+chk "dispatch covers native worktree base and trust" "grep -q 'worktree.baseRef' '$C/dispatch.md' && grep -q 'workspace trust' '$C/dispatch.md'"
 chk "verify gates to verified"      "grep -qE 'task-move.sh|verified' '$C/verify.md'"
 chk "loop invokes orchestration"    "grep -qi 'orchestration' '$C/loop.md'"
 
@@ -59,5 +64,6 @@ chk "loop rule: bugs auto-file"        "grep -qi 'bug' '$OS' && grep -qi 'auto.?
 chk "loop rule: features suggested"    "grep -qi 'suggest' '$OS' && grep -qi 'never auto-built\|not auto-built\|never automatically build' '$OS'"
 chk "loop reads autonomy policy"       "grep -q 'loop-policy.sh' '$OS' || grep -q 'loop-policy.sh' '$LC'"
 chk "loop: autonomy modes named"       "grep -qi 'auto-continue' '$OS' && grep -qi 'suggest-wait' '$OS'"
+chk "loop: native worktree lanes"      "grep -q 'isolation: worktree' '$OS' && grep -q -- '--worktree' '$OS' && grep -q 'claude agents' '$OS' && grep -q 'worktree.baseRef' '$OS'"
 
 [ "$fail" = 0 ] && echo "PASS: orchestration" || { echo "orchestration test failed"; exit 1; }

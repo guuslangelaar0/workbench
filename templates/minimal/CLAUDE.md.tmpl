@@ -13,6 +13,7 @@ Launch target: {{LAUNCH}}
 All task tracking is local and file-based, under `.claude/tasks/`. Status is the subdirectory a task file lives in. See `.claude/tasks/README.md` for the lifecycle and file format.
 
 - The **lead** coordinates and never writes code directly; implementation goes through engineer subagents.
+- Engineer and verifier lanes use Claude Code native worktree isolation when available; for parallel same-repo work, prefer `/workbench:dispatch <id> --worktree --background` and monitor with `claude agents`. Set Claude Code `worktree.baseRef` to `"head"` if the lane must inherit current-branch context.
 - A task is **not done** until it reaches `verified/` (locally verified, evidence captured). "In review" is not done.
 - Honesty over comfort: claim only what you have checked against the source of truth (git, disk, a passing command, a real browser).
 
