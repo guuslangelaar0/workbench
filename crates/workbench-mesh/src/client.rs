@@ -260,7 +260,7 @@ fn append_local_event(
     to: Option<&str>,
     payload: Value,
 ) -> Result<crate::protocol::EventEnvelope> {
-    auth::require_local_project_credential(project_root, home)?;
+    auth::require_local_mutating_project_credential(project_root, home)?;
     MeshStore::open(project_root)?.append_event(event_type, room, from, to, payload)
 }
 
@@ -313,7 +313,7 @@ mod tests {
     use crate::auth;
     use crate::store::MeshStore;
 
-    use super::job_events;
+    use super::{job_events, send_message};
 
     #[test]
     fn job_events_require_local_project_credential() {
@@ -378,5 +378,75 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].event_type, "job.done");
         assert_eq!(events[0].payload["task_id"], "two");
+    }
+
+    #[test]
+    fn append_local_event_rejects_observer_project_credential() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "observer.cred", "mesh-client", "observer");
+
+        let err = send_message(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "session:worker".to_string(),
+            "status?".to_string(),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "local mutating project credential required"
+        );
+        assert!(!project.path().join(".workbench/mesh/events.jsonl").exists());
+    }
+
+    #[test]
+    fn append_local_event_allows_worker_project_credential() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "worker.cred", "mesh-client", "worker");
+
+        send_message(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "session:worker".to_string(),
+            "status?".to_string(),
+        )
+        .unwrap();
+
+        let events = MeshStore::open(project.path())
+            .unwrap()
+            .list_events_since(0)
+            .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "message.sent");
+    }
+
+    fn write_project_config(project: &std::path::Path, name: &str) {
+        std::fs::create_dir_all(project.join(".workbench")).unwrap();
+        std::fs::write(
+            project.join(".workbench/config.json"),
+            format!(r#"{{"project":{{"name":"{name}"}}}}"#),
+        )
+        .unwrap();
+    }
+
+    fn write_project_credential(home: &std::path::Path, filename: &str, project: &str, role: &str) {
+        let project_dir = home.join("mesh/projects");
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::write(
+            project_dir.join(filename),
+            format!(
+                r#"{{
+  "project": "{project}",
+  "role": "{role}",
+  "token": "test-token"
+}}"#
+            ),
+        )
+        .unwrap();
     }
 }

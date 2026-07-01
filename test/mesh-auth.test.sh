@@ -3,7 +3,8 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d)"
 HOME_TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP" "$HOME_TMP"' EXIT
+OBSERVER_HOME="$(mktemp -d)"
+trap 'rm -rf "$TMP" "$HOME_TMP" "$OBSERVER_HOME"' EXIT
 fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
 
@@ -45,6 +46,15 @@ chk "accept audit written" "grep -q 'invite.accepted' '$TMP/.workbench/mesh/audi
 ACCEPTED_TOKEN="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["token"])' "$HOME_TMP/mesh/projects/macbook.cred")"
 "$BIN" auth check --target "$TMP" --home "$HOME_TMP" --token "$ACCEPTED_TOKEN" > "$TMP/accepted-check.out"
 chk "accepted device credential validates through auth check" "grep -q 'token valid' '$TMP/accepted-check.out' && grep -q 'role: worker' '$TMP/accepted-check.out'"
+
+OBSERVER_INVITE="$("$BIN" invite create --target "$TMP" --home "$HOME_TMP" --role observer --ttl-seconds 900 --max-uses 1)"
+OBSERVER_TOKEN="$(printf '%s\n' "$OBSERVER_INVITE" | sed -n 's/^token: //p' | head -1)"
+"$BIN" invite accept --target "$TMP" --home "$OBSERVER_HOME" --token "$OBSERVER_TOKEN" --device observer >/dev/null
+RC=0
+"$BIN" event append --target "$TMP" --home "$OBSERVER_HOME" --type message.sent --room repo:meshauth --from session:observer \
+  --payload-json '{"text":"observer local write"}' >"$TMP/observer-append.out" 2>&1 || RC=$?
+chk "observer local event append is rejected" "[ '$RC' -ne 0 ] && grep -q 'local mutating project credential required' '$TMP/observer-append.out'"
+chk "observer local event append writes no event" "! grep -q 'observer local write' '$TMP/.workbench/mesh/events.jsonl' 2>/dev/null"
 
 RC=0
 "$BIN" auth check --target "$TMP" --home "$HOME_TMP" --token wrong-token >"$TMP/wrong-check.out" 2>&1 || RC=$?

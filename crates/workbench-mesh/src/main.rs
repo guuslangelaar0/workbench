@@ -398,7 +398,7 @@ fn run_snapshot(snapshot_command: SnapshotCommand) -> Result<()> {
 }
 
 fn append_event(args: AppendArgs) -> Result<()> {
-    auth::require_local_project_credential(&args.target, args.home)?;
+    auth::require_local_mutating_project_credential(&args.target, args.home)?;
     let store = MeshStore::open(args.target)?;
     let payload = serde_json::from_str(&args.payload_json).context("parse --payload-json")?;
     let event = store.append_event(

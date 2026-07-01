@@ -340,6 +340,19 @@ pub fn require_local_project_credential(project_root: &Path, home: Option<PathBu
     )
 }
 
+pub fn require_local_mutating_project_credential(
+    project_root: &Path,
+    home: Option<PathBuf>,
+) -> Result<()> {
+    let auth_paths = paths(home)?;
+    require_project_credential_with_roles(
+        project_root,
+        &auth_paths,
+        &["owner", "operator", "worker"],
+        "local mutating project credential required",
+    )
+}
+
 pub fn validate_role(role: &str) -> Result<()> {
     match role {
         "owner" | "operator" | "worker" | "observer" => Ok(()),
@@ -758,6 +771,42 @@ mod tests {
 
             require_local_project_credential(project.path(), Some(home.path().to_path_buf()))
                 .unwrap_or_else(|err| panic!("{role} should be accepted: {err}"));
+        }
+    }
+
+    #[test]
+    fn require_local_mutating_project_credential_rejects_observer_project_credential() {
+        let project = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Auth");
+        write_project_credential(home.path(), "observer.cred", "mesh-auth", "observer");
+
+        let err = super::require_local_mutating_project_credential(
+            project.path(),
+            Some(home.path().to_path_buf()),
+        )
+        .err()
+        .unwrap();
+
+        assert_eq!(
+            err.to_string(),
+            "local mutating project credential required"
+        );
+    }
+
+    #[test]
+    fn require_local_mutating_project_credential_allows_owner_operator_and_worker() {
+        for role in ["owner", "operator", "worker"] {
+            let project = tempfile::tempdir().unwrap();
+            let home = tempfile::tempdir().unwrap();
+            write_project_config(project.path(), "Mesh Auth");
+            write_project_credential(home.path(), "device.cred", "mesh-auth", role);
+
+            super::require_local_mutating_project_credential(
+                project.path(),
+                Some(home.path().to_path_buf()),
+            )
+            .unwrap_or_else(|err| panic!("{role} should be accepted: {err}"));
         }
     }
 
