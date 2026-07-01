@@ -565,6 +565,7 @@ git commit -m "feat: add mesh device credential registry"
 - Produces CLI: `workbench-mesh device list --target PATH --home PATH`.
 - Produces CLI: `workbench-mesh device revoke --target PATH --home PATH --device DEVICE`.
 - Produces client helper: `pub async fn accept_remote_invite(project_root: PathBuf, home: Option<PathBuf>, url: String, token: String, device: String) -> Result<()>`.
+- Produces remote-aware event publishing: room/message/ask/handoff/availability/doing/watch commands post to the cached remote daemon when `.workbench/mesh/server.json` has `mode: "remote"`; local and LAN host sessions keep using the local append path.
 
 - [ ] **Step 1: Add failing Rust tests**
 
@@ -693,6 +694,68 @@ In `crates/workbench-mesh/src/server.rs` tests, add:
 
         server.abort();
     }
+
+    #[tokio::test]
+    async fn remote_client_message_posts_to_cached_daemon() {
+        let project = TempDir::new().unwrap();
+        let host_home = TempDir::new().unwrap();
+        let join_home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        auth::bootstrap(project.path(), Some(host_home.path().to_path_buf())).unwrap();
+        let owner_token =
+            auth::local_project_token(project.path(), Some(host_home.path().to_path_buf())).unwrap();
+        let invite = auth::create_invite(
+            project.path(),
+            Some(host_home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(host_home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+        let base = format!("http://{}:{}", metadata.host, metadata.port);
+
+        client::accept_remote_invite(
+            project.path().to_path_buf(),
+            Some(join_home.path().to_path_buf()),
+            base.clone(),
+            invite.token,
+            "laptop".to_string(),
+        )
+        .await
+        .unwrap();
+        client::send_message(
+            project.path().to_path_buf(),
+            Some(join_home.path().to_path_buf()),
+            "repo:mesh-remote".to_string(),
+            "hello from laptop".to_string(),
+        )
+        .await
+        .unwrap();
+
+        let state: Value = Client::new()
+            .get(format!("{base}/api/state"))
+            .bearer_auth(&owner_token)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(state.to_string().contains("hello from laptop"));
+
+        server.abort();
+    }
 ```
 
 In `crates/workbench-mesh/src/client.rs` tests, add:
@@ -770,10 +833,10 @@ In `crates/workbench-mesh/src/main.rs` tests, add:
 Run:
 
 ```bash
-cargo test -p workbench-mesh remote_invite_accept_returns_credential_and_revoke_blocks_it device_api_requires_owner_or_operator_for_inventory remote_metadata_url_rejects_non_http_scheme parses_remote_invite_accept_url parses_device_revoke
+cargo test -p workbench-mesh remote_invite_accept_returns_credential_and_revoke_blocks_it device_api_requires_owner_or_operator_for_inventory remote_client_message_posts_to_cached_daemon remote_metadata_url_rejects_non_http_scheme parses_remote_invite_accept_url parses_device_revoke
 ```
 
-Expected: FAIL with missing routes, missing CLI fields, missing `Command::Device`, and missing `remote_metadata_from_url`.
+Expected: FAIL with missing routes, missing CLI fields, missing `Command::Device`, missing `remote_metadata_from_url`, and `send_message` not yet being async/remote-aware.
 
 - [ ] **Step 3: Implement server API**
 
@@ -1002,6 +1065,59 @@ pub async fn revoke_device(
 }
 ```
 
+Replace the local-only event helper with a remote-aware async helper:
+
+```rust
+async fn append_or_post_event(
+    project_root: &std::path::Path,
+    home: Option<PathBuf>,
+    event_type: &str,
+    room: &str,
+    from: &str,
+    to: Option<&str>,
+    payload: Value,
+) -> Result<crate::protocol::EventEnvelope> {
+    auth::require_local_mutating_project_credential(project_root, home.clone())?;
+    if let Ok(metadata) = read_server_metadata(project_root) {
+        if metadata.mode == "remote" {
+            let token = auth::local_project_token(project_root, home)?;
+            let response = Client::new()
+                .post(format!("{}/api/events", base_url(&metadata)))
+                .bearer_auth(&token)
+                .json(&json!({
+                    "type": event_type,
+                    "room": room,
+                    "from": from,
+                    "to": to,
+                    "payload": payload,
+                }))
+                .send()
+                .await
+                .context("post remote daemon event")?
+                .error_for_status()
+                .context("remote daemon event rejected")?;
+            return response.json().await.context("parse remote daemon event");
+        }
+    }
+    MeshStore::open(project_root)?.append_event(event_type, room, from, to, payload)
+}
+```
+
+Change these public client functions to `async fn` and replace `append_local_event(...)` with `append_or_post_event(...).await`:
+
+```rust
+pub async fn create_room(project_root: PathBuf, home: Option<PathBuf>, name: String) -> Result<()>
+pub async fn send_message(project_root: PathBuf, home: Option<PathBuf>, to: String, text: String) -> Result<()>
+pub async fn ask_status(project_root: PathBuf, home: Option<PathBuf>, to: String, question: String) -> Result<()>
+pub async fn handoff_task(project_root: PathBuf, home: Option<PathBuf>, task_id: String, to: String) -> Result<()>
+pub async fn set_availability(project_root: PathBuf, home: Option<PathBuf>, state: String, reason: Option<String>) -> Result<()>
+pub async fn set_doing(project_root: PathBuf, home: Option<PathBuf>, text: String) -> Result<()>
+pub async fn watch_actor(project_root: PathBuf, home: Option<PathBuf>, actor: String) -> Result<()>
+pub async fn spawn_actor(project_root: PathBuf, home: Option<PathBuf>, kind: String, parent: String, purpose: String, task_id: Option<String>) -> Result<()>
+```
+
+Update existing tests that call these functions to `.await.unwrap()` inside async tests where needed. Keep `job_events()` synchronous.
+
 In `crates/workbench-mesh/src/main.rs`, update `InviteAcceptArgs`:
 
 ```rust
@@ -1062,10 +1178,26 @@ Change the main match:
 
 ```rust
         Command::Invite(invite) => run_invite(invite).await,
+        Command::Room(room) => run_room(room).await,
+        Command::Message(args) => {
+            client::send_message(args.target, args.home, args.to_actor, args.text).await
+        }
+        Command::Ask(args) => {
+            client::ask_status(args.target, args.home, args.to_actor, args.question).await
+        }
+        Command::Handoff(args) => {
+            client::handoff_task(args.target, args.home, args.task_id, args.to_actor).await
+        }
+        Command::Availability(args) => {
+            client::set_availability(args.target, args.home, args.state, args.reason).await
+        }
+        Command::Doing(args) => client::set_doing(args.target, args.home, args.text).await,
+        Command::Watch(args) => client::watch_actor(args.target, args.home, args.actor).await,
+        Command::Actor(actor) => run_actor(actor).await,
         Command::Device(device) => run_device(device).await,
 ```
 
-Replace `run_invite` and `invite_accept`:
+Replace `run_invite`, `invite_accept`, `run_room`, `run_actor`, and add `run_device`:
 
 ```rust
 async fn run_invite(invite_command: InviteCommand) -> Result<()> {
@@ -1095,6 +1227,28 @@ async fn run_device(device_command: DeviceCommand) -> Result<()> {
         }
     }
 }
+
+async fn run_room(room_command: RoomCommand) -> Result<()> {
+    match room_command.command {
+        RoomSubcommand::Create(args) => {
+            client::create_room(args.target, args.home, args.name).await
+        }
+    }
+}
+
+async fn run_actor(actor_command: ActorCommand) -> Result<()> {
+    match actor_command.command {
+        ActorSubcommand::Spawn(args) => client::spawn_actor(
+            args.target,
+            args.home,
+            args.kind,
+            args.parent,
+            args.purpose,
+            args.task_id,
+        )
+        .await,
+    }
+}
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -1103,7 +1257,7 @@ Run:
 
 ```bash
 cargo fmt --check
-cargo test -p workbench-mesh remote_invite_accept_returns_credential_and_revoke_blocks_it device_api_requires_owner_or_operator_for_inventory remote_metadata_url_rejects_non_http_scheme parses_remote_invite_accept_url parses_device_revoke
+cargo test -p workbench-mesh remote_invite_accept_returns_credential_and_revoke_blocks_it device_api_requires_owner_or_operator_for_inventory remote_client_message_posts_to_cached_daemon remote_metadata_url_rejects_non_http_scheme parses_remote_invite_accept_url parses_device_revoke
 ```
 
 Expected: PASS.
@@ -1201,10 +1355,10 @@ PY
 chk "repo contains no clear remote bearer token" "! grep -R \"$JOIN_TOKEN\" '$TMP/.workbench/mesh' >/dev/null 2>&1"
 STATE="$(curl -fsS "http://127.0.0.1:$PORT/api/state" -H "Authorization: Bearer $JOIN_TOKEN")"
 chk "remote credential reads daemon state" "printf '%s' \"\$STATE\" | grep -q 'devices'"
-POST="$(curl -fsS -X POST "http://127.0.0.1:$PORT/api/events" \
-  -H "Authorization: Bearer $JOIN_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"type":"message.sent","room":"repo:meshremote","from":"session:laptop","payload":{"text":"remote hello"}}')"
-chk "remote worker can post message" "printf '%s' \"\$POST\" | grep -q 'remote hello'"
+MSG="$(CLAUDE_PLUGIN_ROOT="$HERE" CLAUDE_PROJECT_DIR="$TMP" WORKBENCH_HOME="$JOIN_HOME" bash "$HERE/scripts/mesh.sh" message repo:meshremote remote hello)"
+chk "remote worker message command succeeds" "printf '%s' \"\$MSG\" | grep -q 'message: sent'"
+STATE_AFTER_MESSAGE="$(curl -fsS "http://127.0.0.1:$PORT/api/state" -H "Authorization: Bearer $OWNER_TOKEN")"
+chk "remote worker message reaches host daemon" "printf '%s' \"\$STATE_AFTER_MESSAGE\" | grep -q 'remote hello'"
 
 DEVICES="$(CLAUDE_PLUGIN_ROOT="$HERE" CLAUDE_PROJECT_DIR="$TMP" WORKBENCH_HOME="$HOST_HOME" bash "$HERE/scripts/mesh.sh" devices)"
 chk "devices lists remote laptop" "printf '%s' \"\$DEVICES\" | grep -q 'laptop role=worker'"
@@ -1889,7 +2043,7 @@ Expected: clean worktree, feature commits present, and no version tag yet. v0.6.
 
 ## Self-Review
 
-- Spec coverage: Task 1 covers hashed daemon-side device registry, invite redemption split, secret persistence outside the repo, revocation, and device events. Task 2 covers URL remote accept, daemon APIs, device list/revoke, project mismatch protection, and remote metadata caching. Task 3 covers slash-command wrapper behavior, copyable connect commands, and a two-home loopback outcome test. Task 4 covers command-center Devices UI, observer role, and no raw bearer token inventory leak. Task 5 covers statusline visibility, natural intent routing, docs, and changelog. Task 6 covers full verification and release-readiness gates.
+- Spec coverage: Task 1 covers hashed daemon-side device registry, invite redemption split, secret persistence outside the repo, revocation, and device events. Task 2 covers URL remote accept, daemon APIs, device list/revoke, project mismatch protection, remote metadata caching, and remote-aware event publishing for chat/status/handoff commands. Task 3 covers slash-command wrapper behavior, copyable connect commands, and a two-home loopback outcome test. Task 4 covers command-center Devices UI, observer role, and no raw bearer token inventory leak. Task 5 covers statusline visibility, natural intent routing, docs, and changelog. Task 6 covers full verification and release-readiness gates.
 - Open-marker scan: no unfinished markers, no unspecified file paths, and no instruction that says to invent tests without concrete content.
 - Type consistency: `ProjectCredential`, `DeviceRecord`, `issue_invite_credential`, `persist_project_credential`, `list_devices`, `revoke_device`, `accept_remote_invite`, `remote_metadata_from_url`, and `DeviceSubcommand` names are consistent across tasks.
 - Scope check: public internet exposure, WebRTC, gRPC/protobuf, MCP/channel bridge, relay service, NAT traversal, and release tagging remain outside this implementation plan.
