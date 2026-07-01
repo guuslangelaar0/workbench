@@ -116,7 +116,7 @@ REMOTE_INVITE="$(curl -fsS -X POST "http://127.0.0.1:$PORT/api/invites" \
 REMOTE_TOKEN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$REMOTE_INVITE")"
 curl -fsS -X POST "http://127.0.0.1:$PORT/api/invites/accept" \
   -H 'Content-Type: application/json' \
-  -d "{\"token\":\"$REMOTE_TOKEN\",\"device\":\"ui-laptop\"}" >/dev/null
+  -d "{\"token\":\"$REMOTE_TOKEN\",\"device\":\"ui-laptop\",\"expected_project\":\"meshui\"}" >/dev/null
 DEVICES_JSON="$(curl -fsS "http://127.0.0.1:$PORT/api/devices" -H "Authorization: Bearer $TOKEN")"
 chk "devices api lists accepted device" "printf '%s' \"\$DEVICES_JSON\" | grep -q 'ui-laptop'"
 chk "devices api does not leak bearer token" "! printf '%s' \"\$DEVICES_JSON\" | grep -q '\"token\"'"

@@ -118,7 +118,7 @@ struct RevokeInviteRequest {
 struct AcceptInviteRequest {
     token: String,
     device: String,
-    expected_project: Option<String>,
+    expected_project: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -318,14 +318,13 @@ async fn post_accept_invite(
     State(state): State<AppState>,
     Json(request): Json<AcceptInviteRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    if let Some(expected_project) = request.expected_project.as_deref() {
-        let project = auth::project_id_for(&state.project_root)?;
-        if expected_project != project {
-            return Err(anyhow::anyhow!(
-                "remote project mismatch: expected {expected_project}, got {project}"
-            )
-            .into());
-        }
+    let project = auth::project_id_for(&state.project_root)?;
+    if request.expected_project != project {
+        return Err(anyhow::anyhow!(
+            "remote project mismatch: expected {}, got {project}",
+            request.expected_project
+        )
+        .into());
     }
     let credential =
         auth::issue_invite_credential(&state.project_root, &request.token, &request.device)?;
@@ -1094,7 +1093,11 @@ mod tests {
 
         let accepted: Value = client
             .post(format!("{base}/api/invites/accept"))
-            .json(&json!({ "token": invite.token, "device": "macbook" }))
+            .json(&json!({
+                "token": invite.token,
+                "device": "macbook",
+                "expected_project": "mesh-remote"
+            }))
             .send()
             .await
             .unwrap()
@@ -1292,6 +1295,43 @@ mod tests {
             .unwrap();
         assert_eq!(accepted["project"], "mesh-remote");
         assert_eq!(auth::list_devices(project.path()).unwrap().len(), 1);
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn remote_invite_accept_requires_expected_project() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let invite = auth::create_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+        let base = format!("http://{}:{}", metadata.host, metadata.port);
+
+        let response = Client::new()
+            .post(format!("{base}/api/invites/accept"))
+            .json(&json!({ "token": invite.token, "device": "missing-project" }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
+        assert!(auth::list_devices(project.path()).unwrap().is_empty());
 
         server.abort();
     }

@@ -49,8 +49,7 @@ pub async fn who(project_root: PathBuf, home: Option<PathBuf>) -> Result<()> {
 }
 
 pub async fn bench(project_root: PathBuf, home: Option<PathBuf>, messages: u64) -> Result<()> {
-    auth::require_local_project_credential(&project_root, home.clone())?;
-    let token = auth::local_project_token(&project_root, home)?;
+    let token = auth::local_mutating_project_token(&project_root, home)?;
     let metadata = read_server_metadata(&project_root)?;
     let client = Client::new();
     let mut latencies = Vec::with_capacity(messages as usize);
@@ -157,8 +156,7 @@ pub(crate) fn remote_metadata_from_url(url: &str) -> Result<ServerMetadata> {
 }
 
 pub async fn list_devices(project_root: PathBuf, home: Option<PathBuf>) -> Result<()> {
-    auth::require_local_project_credential(&project_root, home.clone())?;
-    let token = auth::local_project_token(&project_root, home)?;
+    let token = auth::local_operator_project_token(&project_root, home)?;
     let metadata = read_server_metadata(&project_root)?;
     let body: Value = Client::new()
         .get(format!("{}/api/devices", base_url(&metadata)))
@@ -192,8 +190,7 @@ pub async fn revoke_device(
     home: Option<PathBuf>,
     device: String,
 ) -> Result<()> {
-    auth::require_local_project_credential(&project_root, home.clone())?;
-    let token = auth::local_project_token(&project_root, home)?;
+    let token = auth::local_operator_project_token(&project_root, home)?;
     let metadata = read_server_metadata(&project_root)?;
     Client::new()
         .post(format!("{}/api/devices/revoke", base_url(&metadata)))
@@ -405,7 +402,7 @@ async fn append_or_post_event(
     auth::require_local_mutating_project_credential(project_root, home.clone())?;
     if let Ok(metadata) = read_server_metadata(project_root) {
         if metadata.mode == "remote" {
-            let token = auth::local_project_token(project_root, home)?;
+            let token = auth::local_mutating_project_token(project_root, home)?;
             let response = Client::new()
                 .post(format!("{}/api/events", base_url(&metadata)))
                 .bearer_auth(&token)

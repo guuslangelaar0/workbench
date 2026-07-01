@@ -350,12 +350,35 @@ pub fn project_token_role(
 
 pub fn local_project_token(project_root: &Path, home: Option<PathBuf>) -> Result<String> {
     let auth_paths = paths(home)?;
-    let project_id = project_id(project_root)?;
-    project_credentials_for(&auth_paths, &project_id)?
-        .into_iter()
-        .find(|credential| credential.project == project_id)
-        .map(|credential| credential.token)
-        .ok_or_else(|| anyhow::anyhow!("local project credential required"))
+    select_project_credential_with_roles(
+        project_root,
+        &auth_paths,
+        &["owner", "operator", "worker", "observer"],
+        "local project credential required",
+    )
+    .map(|credential| credential.token)
+}
+
+pub fn local_mutating_project_token(project_root: &Path, home: Option<PathBuf>) -> Result<String> {
+    let auth_paths = paths(home)?;
+    select_project_credential_with_roles(
+        project_root,
+        &auth_paths,
+        &["owner", "operator", "worker"],
+        "local mutating project credential required",
+    )
+    .map(|credential| credential.token)
+}
+
+pub fn local_operator_project_token(project_root: &Path, home: Option<PathBuf>) -> Result<String> {
+    let auth_paths = paths(home)?;
+    select_project_credential_with_roles(
+        project_root,
+        &auth_paths,
+        &["owner", "operator"],
+        "local owner/operator project credential required",
+    )
+    .map(|credential| credential.token)
 }
 
 pub fn require_local_project_credential(project_root: &Path, home: Option<PathBuf>) -> Result<()> {
@@ -451,17 +474,51 @@ fn require_project_credential_with_roles(
     roles: &[&str],
     error_message: &str,
 ) -> Result<()> {
+    select_project_credential_with_roles(project_root, auth_paths, roles, error_message).map(|_| ())
+}
+
+fn select_project_credential_with_roles(
+    project_root: &Path,
+    auth_paths: &AuthPaths,
+    roles: &[&str],
+    error_message: &str,
+) -> Result<ProjectCredential> {
     let project_id = project_id(project_root)?;
     let devices = device_records(project_root)?;
-    for credential in project_credentials_for(auth_paths, &project_id)? {
+    let mut credentials = project_credentials_for(auth_paths, &project_id)?
+        .into_iter()
+        .filter(|credential| {
+            credential.project == project_id
+                && roles.contains(&credential.role.as_str())
+                && !credential_token_revoked(&devices, &project_id, &credential.token)
+        })
+        .collect::<Vec<_>>();
+    credentials.sort_by(|left, right| {
+        role_rank(&left.role)
+            .cmp(&role_rank(&right.role))
+            .then_with(|| left.role.cmp(&right.role))
+            .then_with(|| left.token.cmp(&right.token))
+    });
+
+    for credential in credentials {
         if roles.contains(&credential.role.as_str())
             && !credential_token_revoked(&devices, &project_id, &credential.token)
         {
-            return Ok(());
+            return Ok(credential);
         }
     }
 
     bail!("{error_message}")
+}
+
+fn role_rank(role: &str) -> u8 {
+    match role {
+        "owner" => 0,
+        "operator" => 1,
+        "worker" => 2,
+        "observer" => 3,
+        _ => 4,
+    }
 }
 
 fn device_role_for_token(
@@ -812,6 +869,7 @@ fn write_secret_file(path: &Path, content: &str) -> Result<()> {
 mod tests {
     use super::{
         accept_invite, bootstrap, check, create_invite, issue_invite_credential, list_devices,
+        local_mutating_project_token, local_operator_project_token, local_project_token,
         persist_project_credential, project_token_role, require_local_mutating_project_credential,
         require_local_project_credential, revoke_device, revoke_invite, sanitize_name,
         validate_role, ProjectCredential,
@@ -1249,6 +1307,86 @@ mod tests {
         );
     }
 
+    #[test]
+    fn local_project_token_selection_prefers_valid_requested_roles() {
+        let project = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        write_project_credential_with_token(
+            home.path(),
+            "aaa-observer.cred",
+            "mesh-remote",
+            "observer",
+            "observer-token",
+        );
+        write_project_credential_with_token(
+            home.path(),
+            "bbb-worker.cred",
+            "mesh-remote",
+            "worker",
+            "worker-token",
+        );
+        write_project_credential_with_token(
+            home.path(),
+            "ccc-owner.cred",
+            "mesh-remote",
+            "owner",
+            "owner-token",
+        );
+
+        assert_eq!(
+            local_project_token(project.path(), Some(home.path().to_path_buf())).unwrap(),
+            "owner-token"
+        );
+        assert_eq!(
+            local_mutating_project_token(project.path(), Some(home.path().to_path_buf())).unwrap(),
+            "owner-token"
+        );
+        assert_eq!(
+            local_operator_project_token(project.path(), Some(home.path().to_path_buf())).unwrap(),
+            "owner-token"
+        );
+    }
+
+    #[test]
+    fn local_project_token_selection_skips_revoked_device_credentials() {
+        let project = tempfile::tempdir().unwrap();
+        let owner_home = tempfile::tempdir().unwrap();
+        let mixed_home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        bootstrap(project.path(), Some(owner_home.path().to_path_buf())).unwrap();
+        let invite = create_invite(
+            project.path(),
+            Some(owner_home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+        accept_invite(
+            project.path(),
+            Some(mixed_home.path().to_path_buf()),
+            &invite.token,
+            "aaa-revoked",
+        )
+        .unwrap();
+        write_project_credential_with_token(
+            mixed_home.path(),
+            "zzz-worker.cred",
+            "mesh-remote",
+            "worker",
+            "valid-worker-token",
+        );
+
+        revoke_device(project.path(), "aaa-revoked", "auth:owner").unwrap();
+
+        assert_eq!(
+            local_mutating_project_token(project.path(), Some(mixed_home.path().to_path_buf()))
+                .unwrap(),
+            "valid-worker-token"
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn secret_rewrite_narrows_existing_file_permissions_to_600() {
@@ -1283,12 +1421,22 @@ mod tests {
     }
 
     fn write_project_credential(home: &Path, filename: &str, project: &str, role: &str) {
+        write_project_credential_with_token(home, filename, project, role, "test-token");
+    }
+
+    fn write_project_credential_with_token(
+        home: &Path,
+        filename: &str,
+        project: &str,
+        role: &str,
+        token: &str,
+    ) {
         let project_dir = home.join("mesh/projects");
         fs::create_dir_all(&project_dir).unwrap();
         let credential = ProjectCredential {
             project: project.to_string(),
             role: role.to_string(),
-            token: "test-token".to_string(),
+            token: token.to_string(),
         };
         fs::write(
             project_dir.join(filename),
