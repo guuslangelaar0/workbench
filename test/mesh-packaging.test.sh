@@ -63,17 +63,15 @@ run_wrapper connect local-token laptop > "$WRAP_TMP/connect-local.out" 2>&1
 chk "wrapper connect local token accepts invite" "contains '$LOG' 'cmd|invite|accept|--target|$PROJECT_DIR|--home|$MESH_HOME|--token|local-token|--device|laptop'"
 
 : > "$LOG"
-rc=0
-run_wrapper connect http://192.0.2.10:47321 remote-token tablet > "$WRAP_TMP/connect-url.out" 2>&1 || rc=$?
-chk "wrapper connect URL fails until Rust supports remote accept" "[ '$rc' -ne 0 ]"
-chk "wrapper connect URL explains unsupported remote connect" "contains '$WRAP_TMP/connect-url.out' 'remote URL connect is not supported'"
-chk "wrapper connect URL does not discard URL into local accept" "[ ! -s '$LOG' ]"
+run_wrapper connect http://192.0.2.10:47321 remote-token tablet > "$WRAP_TMP/connect-url.out" 2>&1
+chk "wrapper connect URL accepts remote invite" "contains '$LOG' 'cmd|invite|accept|--target|$PROJECT_DIR|--home|$MESH_HOME|--url|http://192.0.2.10:47321|--token|remote-token|--device|tablet'"
+chk "wrapper connect URL no longer fails unsupported" "! contains '$WRAP_TMP/connect-url.out' 'remote URL connect is not supported'"
 
 : > "$LOG"
 run_wrapper help > "$WRAP_TMP/help.out" 2>&1
-chk "wrapper help does not advertise URL connect syntax" "! contains '$WRAP_TMP/help.out' 'connect [URL]'"
-chk "wrapper help documents local connect token syntax" "contains '$WRAP_TMP/help.out' 'connect TOKEN [DEVICE]'"
-chk "wrapper help says remote URL connect unavailable" "contains '$WRAP_TMP/help.out' 'Remote URL connect is unavailable'"
+chk "wrapper help advertises URL connect syntax" "contains '$WRAP_TMP/help.out' 'connect [URL] TOKEN [DEVICE]'"
+chk "wrapper help documents devices operation" "contains '$WRAP_TMP/help.out' 'devices'"
+chk "wrapper help documents revoke-device operation" "contains '$WRAP_TMP/help.out' 'revoke-device DEVICE'"
 
 : > "$LOG"
 run_wrapper status > "$WRAP_TMP/status.out" 2>&1
@@ -86,6 +84,8 @@ run_wrapper jobs --since 4 > "$WRAP_TMP/jobs.out" 2>&1
 run_wrapper availability busy --reason reviewing > "$WRAP_TMP/availability.out" 2>&1
 run_wrapper doing reviewing task five > "$WRAP_TMP/doing.out" 2>&1
 run_wrapper watch session:worker > "$WRAP_TMP/watch.out" 2>&1
+run_wrapper devices > "$WRAP_TMP/devices.out" 2>&1
+run_wrapper revoke-device laptop > "$WRAP_TMP/revoke-device.out" 2>&1
 chk "wrapper status passes target and home" "contains '$LOG' 'cmd|status|--target|$PROJECT_DIR|--home|$MESH_HOME'"
 chk "wrapper who passes target and home" "contains '$LOG' 'cmd|who|--target|$PROJECT_DIR|--home|$MESH_HOME'"
 chk "wrapper room emits create argv" "contains '$LOG' 'cmd|room|create|--target|$PROJECT_DIR|--home|$MESH_HOME|--name|lead:checkout'"
@@ -97,6 +97,8 @@ chk "wrapper jobs does not own event list filtering" "! contains '$LOG' 'cmd|eve
 chk "wrapper availability passes state and reason" "contains '$LOG' 'cmd|availability|--target|$PROJECT_DIR|--home|$MESH_HOME|busy|--reason|reviewing'"
 chk "wrapper doing emits text as one argv" "contains '$LOG' 'cmd|doing|--target|$PROJECT_DIR|--home|$MESH_HOME|reviewing task five'"
 chk "wrapper watch passes actor" "contains '$LOG' 'cmd|watch|--target|$PROJECT_DIR|--home|$MESH_HOME|session:worker'"
+chk "wrapper devices delegates to rust device list" "contains '$LOG' 'cmd|device|list|--target|$PROJECT_DIR|--home|$MESH_HOME'"
+chk "wrapper revoke-device delegates to rust device revoke" "contains '$LOG' 'cmd|device|revoke|--target|$PROJECT_DIR|--home|$MESH_HOME|--device|laptop'"
 
 : > "$LOG"
 run_wrapper open > "$WRAP_TMP/open.out" 2>&1

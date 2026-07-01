@@ -24,7 +24,9 @@ operations:
   start [--local|--lan] [--port N] [--pid-file PATH]
   status | who | jobs | open
   invite [--role ROLE] [--ttl-seconds N] [--max-uses N]
-  connect TOKEN [DEVICE]
+  connect [URL] TOKEN [DEVICE]
+  devices
+  revoke-device DEVICE
   room NAME
   message TARGET TEXT...
   ask TARGET QUESTION...
@@ -32,9 +34,6 @@ operations:
   availability STATE [--reason TEXT]
   doing TEXT...
   watch ACTOR
-
-Remote URL connect is unavailable until workbench-mesh supports remote invite
-acceptance. connect TOKEN [DEVICE] accepts a local project invite token.
 EOF
 }
 
@@ -73,6 +72,40 @@ metadata_url() {
   port="$(sed -n 's/.*"port"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$meta" | head -1)"
   [ -n "$host" ] && [ -n "$port" ] || return 1
   printf 'http://%s:%s\n' "$host" "$port"
+}
+
+metadata_field() {
+  local key="$1" meta="$TARGET/.workbench/mesh/server.json"
+  [ -f "$meta" ] || return 1
+  sed -n "s/.*\"$key\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$meta" | head -1
+}
+
+metadata_port() {
+  local meta="$TARGET/.workbench/mesh/server.json"
+  [ -f "$meta" ] || return 1
+  sed -n 's/.*"port"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$meta" | head -1
+}
+
+metadata_lan_ips() {
+  local meta="$TARGET/.workbench/mesh/server.json"
+  [ -f "$meta" ] || return 1
+  tr ',' '\n' < "$meta" | sed -n 's/.*"\([0-9][0-9.]*\)".*/\1/p'
+}
+
+print_connect_commands() {
+  local token="$1" port host mdns ip url
+  port="$(metadata_port || true)"
+  [ -n "$port" ] || return 0
+  host="$(metadata_field hostname || true)"
+  mdns="$(metadata_field mdns || true)"
+  [ -n "$mdns" ] && printf 'connect: /workbench:mesh connect http://%s:%s %s <device>\n' "$mdns" "$port" "$token"
+  [ -n "$host" ] && [ "$host" != "$mdns" ] && printf 'connect-host: /workbench:mesh connect http://%s:%s %s <device>\n' "$host" "$port" "$token"
+  for ip in $(metadata_lan_ips || true); do
+    [ -n "$ip" ] && printf 'connect-ip: /workbench:mesh connect http://%s:%s %s <device>\n' "$ip" "$port" "$token"
+  done
+  if url="$(metadata_url)"; then
+    printf 'connect-url: /workbench:mesh connect %s %s <device>\n' "$url" "$token"
+  fi
 }
 
 print_start_info() {
@@ -171,12 +204,15 @@ case "$cmd" in
       [ "$arg" = "--role" ] && has_role=1
     done
     if [ "$has_role" = 1 ]; then
-      "$BIN" invite create "${PROJECT_ARGS[@]}" "$@"
+      invite_out="$("$BIN" invite create "${PROJECT_ARGS[@]}" "$@")"
     else
-      "$BIN" invite create "${PROJECT_ARGS[@]}" --role worker "$@"
+      invite_out="$("$BIN" invite create "${PROJECT_ARGS[@]}" --role worker "$@")"
     fi
+    printf '%s\n' "$invite_out"
+    token="$(printf '%s\n' "$invite_out" | sed -n 's/^token: //p' | head -1)"
     if url="$(metadata_url)"; then
       printf 'url: %s\n' "$url"
+      [ -n "$token" ] && print_connect_commands "$token"
     else
       echo "url: start mesh first with /workbench:mesh start --lan to invite another machine"
     fi
@@ -187,15 +223,20 @@ case "$cmd" in
       url="$1"
       shift
     fi
-    if [ -n "$url" ]; then
-      echo "mesh: remote URL connect is not supported by the current workbench-mesh binary" >&2
-      echo "mesh: use connect TOKEN [DEVICE] only for local project invite acceptance" >&2
-      exit 2
-    fi
     token="${1:-}"
     device="${2:-$(host_name)}"
     require_arg "invite token" "$token"
+    if [ -n "$url" ]; then
+      exec "$BIN" invite accept "${PROJECT_ARGS[@]}" --url "$url" --token "$token" --device "$device"
+    fi
     exec "$BIN" invite accept "${PROJECT_ARGS[@]}" --token "$token" --device "$device"
+    ;;
+  devices)
+    exec "$BIN" device list "${PROJECT_ARGS[@]}" "$@"
+    ;;
+  revoke-device)
+    require_arg "device" "${1:-}"
+    exec "$BIN" device revoke "${PROJECT_ARGS[@]}" --device "$1"
     ;;
   room)
     require_arg "room name" "${1:-}"
