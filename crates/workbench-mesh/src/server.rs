@@ -771,7 +771,7 @@ mod tests {
             .json()
             .await
             .unwrap();
-        assert_eq!(api_state["event_count"], 1);
+        assert_eq!(api_state["event_count"], 2);
 
         let (mut socket, _) = connect_async(format!(
             "ws://{}:{}/ws?token={}&last_seq=0",
@@ -780,7 +780,7 @@ mod tests {
         .await
         .unwrap();
         let replay = read_ws_json(&mut socket).await;
-        assert_eq!(replay["type"], "presence.join");
+        assert_eq!(replay["type"], "device.connected");
 
         server.abort();
     }
