@@ -21,6 +21,9 @@ pub const ALLOWED_EVENT_TYPES: &[&str] = &[
     "presence.heartbeat",
     "presence.stale",
     "device.capabilities",
+    "device.connected",
+    "device.revoked",
+    "device.auth_rejected",
     "room.created",
     "room.member_added",
     "message.sent",
@@ -81,6 +84,9 @@ mod tests {
         for event_type in ALLOWED_EVENT_TYPES {
             validate_event_type(event_type).unwrap();
         }
+        validate_event_type("device.connected").unwrap();
+        validate_event_type("device.revoked").unwrap();
+        validate_event_type("device.auth_rejected").unwrap();
     }
 
     #[test]

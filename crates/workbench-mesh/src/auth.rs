@@ -42,11 +42,22 @@ struct StoredInvite {
     revoked_at: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct ProjectCredential {
-    project: String,
-    role: String,
-    token: String,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectCredential {
+    pub project: String,
+    pub role: String,
+    pub token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceRecord {
+    pub device: String,
+    pub project: String,
+    pub role: String,
+    pub credential_hash: String,
+    pub accepted_at: String,
+    pub last_seen_at: Option<String>,
+    pub revoked_at: Option<String>,
 }
 
 pub fn paths(home: Option<PathBuf>) -> Result<AuthPaths> {
@@ -63,6 +74,10 @@ pub fn paths(home: Option<PathBuf>) -> Result<AuthPaths> {
         device_dir,
         project_dir,
     })
+}
+
+pub fn project_id_for(project_root: &Path) -> Result<String> {
+    project_id(project_root)
 }
 
 pub fn bootstrap(project_root: &Path, home: Option<PathBuf>) -> Result<String> {
@@ -149,102 +164,65 @@ pub fn create_invite(
     })
 }
 
-pub fn accept_invite(
+pub fn issue_invite_credential(
     project_root: &Path,
-    home: Option<PathBuf>,
     token: &str,
     device: &str,
-) -> Result<String> {
+) -> Result<ProjectCredential> {
     if device.trim().is_empty() {
         bail!("device name is required");
     }
 
-    let auth_paths = paths(home)?;
     let store = MeshStore::open(project_root)?;
     let invite_path = store.root().join("invites.json");
     let token_hash = hash_token(token);
     let now = OffsetDateTime::now_utc();
     let project_id = project_id(project_root)?;
+    let sanitized_device = sanitize_name(device);
 
-    let (role, revoked_at) = match mutate_invites(&invite_path, |invites| {
-        let invite = invites
-            .iter_mut()
-            .find(|invite| invite.token_hash == token_hash)
-            .ok_or_else(|| anyhow::anyhow!("invite not found"))?;
+    let (role, revoked_at) = redeem_invite(&invite_path, &token_hash, now).map_err(|err| {
+        let _ = append_invite_rejection_audit(&store, &err, &sanitized_device, &token_hash);
+        err
+    })?;
 
-        let expires_at = OffsetDateTime::parse(&invite.expires_at, &Rfc3339)
-            .context("parse stored invite expiry")?;
-        if now >= expires_at {
-            bail!("invite expired");
-        }
-
-        if invite.uses >= invite.max_uses {
-            bail!("invite exhausted");
-        }
-
-        if invite.revoked_at.is_some() {
-            bail!("invite revoked");
-        }
-
-        invite.uses += 1;
-        let revoked_at = if invite.uses >= invite.max_uses {
-            let revoked_at = now.format(&Rfc3339).context("format revoke timestamp")?;
-            invite.revoked_at = Some(revoked_at.clone());
-            Some(revoked_at)
-        } else {
-            invite.revoked_at.clone()
-        };
-
-        Ok((invite.role.clone(), revoked_at))
-    }) {
-        Ok(values) => values,
-        Err(err) => {
-            let message = err.to_string();
-            let event_type = match message.as_str() {
-                "invite expired" => Some("invite.expired"),
-                "invite exhausted" => Some("invite.exhausted"),
-                "invite revoked" => Some("invite.revoked"),
-                _ => None,
-            };
-            if let Some(event_type) = event_type {
-                store.append_audit(
-                    event_type,
-                    "auth:invite",
-                    json!({ "device": device, "token_hash": token_hash }),
-                )?;
-            }
-            return Err(err);
-        }
-    };
-
-    write_secret_file(
-        &auth_paths
-            .device_dir
-            .join(format!("{}.key", sanitize_name(device))),
-        &random_secret(),
-    )?;
-    let project_cred = ProjectCredential {
-        project: project_id,
+    let credential = ProjectCredential {
+        project: project_id.clone(),
         role: role.clone(),
         token: random_secret(),
     };
-    write_secret_file(
-        &auth_paths
-            .project_dir
-            .join(format!("{}.cred", sanitize_name(device))),
-        &serde_json::to_string_pretty(&project_cred)?,
+    let accepted_at = now
+        .format(&Rfc3339)
+        .context("format device accepted timestamp")?;
+    register_device_record(
+        store.root(),
+        DeviceRecord {
+            device: sanitized_device.clone(),
+            project: project_id,
+            role: role.clone(),
+            credential_hash: hash_token(&credential.token),
+            accepted_at: accepted_at.clone(),
+            last_seen_at: None,
+            revoked_at: None,
+        },
     )?;
     store.append_audit(
         "invite.accepted",
         "auth:invite",
-        json!({ "device": device, "role": role, "token_hash": token_hash }),
+        json!({ "device": sanitized_device, "role": role, "token_hash": token_hash }),
+    )?;
+    store.append_event(
+        "device.connected",
+        "devices",
+        "auth:invite",
+        Some(&format!("device:{sanitized_device}")),
+        json!({ "device": sanitized_device, "role": role, "accepted_at": accepted_at }),
     )?;
     if let Some(revoked_at) = revoked_at {
         store.append_audit(
             "invite.revoked",
             "auth:invite",
             json!({
-                "device": device,
+                "device": sanitized_device,
                 "role": role,
                 "reason": "max_uses_reached",
                 "revoked_at": revoked_at,
@@ -253,7 +231,44 @@ pub fn accept_invite(
         )?;
     }
 
-    Ok(format!("device {device} connected\nrole: {role}"))
+    Ok(credential)
+}
+
+pub fn persist_project_credential(
+    home: Option<PathBuf>,
+    device: &str,
+    credential: &ProjectCredential,
+) -> Result<PathBuf> {
+    validate_role(&credential.role)?;
+    let auth_paths = paths(home)?;
+    let sanitized_device = sanitize_name(device);
+    write_secret_file(
+        &auth_paths
+            .device_dir
+            .join(format!("{sanitized_device}.key")),
+        &random_secret(),
+    )?;
+    let path = auth_paths
+        .project_dir
+        .join(format!("{sanitized_device}.cred"));
+    write_secret_file(&path, &serde_json::to_string_pretty(credential)?)?;
+    Ok(path)
+}
+
+pub fn accept_invite(
+    project_root: &Path,
+    home: Option<PathBuf>,
+    token: &str,
+    device: &str,
+) -> Result<String> {
+    let credential = issue_invite_credential(project_root, token, device)?;
+    let credential_path = persist_project_credential(home, device, &credential)?;
+    Ok(format!(
+        "device {} connected\nrole: {}\ncredential: {}",
+        sanitize_name(device),
+        credential.role,
+        credential_path.display()
+    ))
 }
 
 pub fn revoke_invite(
@@ -317,6 +332,24 @@ pub fn project_token_role(
         }
     }
 
+    let token_hash = hash_token(token);
+    for device in list_devices(project_root)? {
+        if device.project == project_id && device.credential_hash == token_hash {
+            if device.revoked_at.is_some() {
+                let store = MeshStore::open(project_root)?;
+                store.append_audit(
+                    "device.auth_rejected",
+                    "auth:device",
+                    json!({ "device": device.device, "reason": "revoked" }),
+                )?;
+                bail!("token rejected");
+            }
+            validate_role(&device.role)?;
+            touch_device_seen(project_root, &device.device)?;
+            return Ok(device.role);
+        }
+    }
+
     bail!("token rejected")
 }
 
@@ -351,6 +384,43 @@ pub fn require_local_mutating_project_credential(
         &["owner", "operator", "worker"],
         "local mutating project credential required",
     )
+}
+
+pub fn list_devices(project_root: &Path) -> Result<Vec<DeviceRecord>> {
+    let store = MeshStore::open(project_root)?;
+    read_devices(&store.root().join("devices.json"))
+}
+
+pub fn revoke_device(project_root: &Path, device: &str, actor: &str) -> Result<String> {
+    let store = MeshStore::open(project_root)?;
+    let path = store.root().join("devices.json");
+    let sanitized_device = sanitize_name(device);
+    let revoked_at = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .context("format device revoke timestamp")?;
+    mutate_devices(&path, |devices| {
+        let record = devices
+            .iter_mut()
+            .find(|record| record.device == sanitized_device)
+            .ok_or_else(|| anyhow::anyhow!("device not found"))?;
+        if record.revoked_at.is_none() {
+            record.revoked_at = Some(revoked_at.clone());
+        }
+        Ok(())
+    })?;
+    store.append_audit(
+        "device.revoked",
+        actor,
+        json!({ "device": sanitized_device, "revoked_at": revoked_at }),
+    )?;
+    store.append_event(
+        "device.revoked",
+        "devices",
+        actor,
+        Some(&format!("device:{sanitized_device}")),
+        json!({ "device": sanitized_device, "revoked_at": revoked_at }),
+    )?;
+    Ok(format!("device revoked\nrevoked_at: {revoked_at}"))
 }
 
 pub fn validate_role(role: &str) -> Result<()> {
@@ -492,6 +562,132 @@ fn sanitize_name(value: &str) -> String {
     }
 }
 
+fn redeem_invite(
+    invite_path: &Path,
+    token_hash: &str,
+    now: OffsetDateTime,
+) -> Result<(String, Option<String>)> {
+    mutate_invites(invite_path, |invites| {
+        let invite = invites
+            .iter_mut()
+            .find(|invite| invite.token_hash == token_hash)
+            .ok_or_else(|| anyhow::anyhow!("invite not found"))?;
+        let expires_at = OffsetDateTime::parse(&invite.expires_at, &Rfc3339)
+            .context("parse stored invite expiry")?;
+        if now >= expires_at {
+            bail!("invite expired");
+        }
+        if invite.uses >= invite.max_uses {
+            bail!("invite exhausted");
+        }
+        if invite.revoked_at.is_some() {
+            bail!("invite revoked");
+        }
+        invite.uses += 1;
+        let revoked_at = if invite.uses >= invite.max_uses {
+            let revoked_at = now.format(&Rfc3339).context("format revoke timestamp")?;
+            invite.revoked_at = Some(revoked_at.clone());
+            Some(revoked_at)
+        } else {
+            invite.revoked_at.clone()
+        };
+        Ok((invite.role.clone(), revoked_at))
+    })
+}
+
+fn append_invite_rejection_audit(
+    store: &MeshStore,
+    err: &anyhow::Error,
+    device: &str,
+    token_hash: &str,
+) -> Result<()> {
+    let event_type = match err.to_string().as_str() {
+        "invite expired" => Some("invite.expired"),
+        "invite exhausted" => Some("invite.exhausted"),
+        "invite revoked" => Some("invite.revoked"),
+        _ => None,
+    };
+    if let Some(event_type) = event_type {
+        store.append_audit(
+            event_type,
+            "auth:invite",
+            json!({ "device": device, "token_hash": token_hash }),
+        )?;
+    }
+    Ok(())
+}
+
+fn register_device_record(root: &Path, record: DeviceRecord) -> Result<()> {
+    mutate_devices(&root.join("devices.json"), |devices| {
+        devices.retain(|existing| existing.device != record.device);
+        devices.push(record);
+        Ok(())
+    })
+}
+
+fn read_devices(path: &Path) -> Result<Vec<DeviceRecord>> {
+    if !path.is_file() {
+        return Ok(Vec::new());
+    }
+    let content = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+    if content.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    serde_json::from_str(&content).with_context(|| format!("parse {}", path.display()))
+}
+
+fn mutate_devices<T>(
+    path: &Path,
+    mutate: impl FnOnce(&mut Vec<DeviceRecord>) -> Result<T>,
+) -> Result<T> {
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(path)
+        .with_context(|| format!("open {}", path.display()))?;
+    file.lock_exclusive()
+        .with_context(|| format!("lock {}", path.display()))?;
+    let result = (|| {
+        let mut content = String::new();
+        file.read_to_string(&mut content)
+            .with_context(|| format!("read {}", path.display()))?;
+        let mut devices = if content.trim().is_empty() {
+            Vec::new()
+        } else {
+            serde_json::from_str(&content).with_context(|| format!("parse {}", path.display()))?
+        };
+        let output = mutate(&mut devices)?;
+        file.seek(SeekFrom::Start(0))
+            .with_context(|| format!("rewind {}", path.display()))?;
+        file.set_len(0)
+            .with_context(|| format!("truncate {}", path.display()))?;
+        serde_json::to_writer_pretty(&mut file, &devices).context("serialize devices")?;
+        file.write_all(b"\n")
+            .with_context(|| format!("write newline to {}", path.display()))?;
+        file.flush()
+            .with_context(|| format!("flush {}", path.display()))?;
+        Ok(output)
+    })();
+    file.unlock()
+        .with_context(|| format!("unlock {}", path.display()))?;
+    result
+}
+
+fn touch_device_seen(project_root: &Path, device: &str) -> Result<()> {
+    let store = MeshStore::open(project_root)?;
+    let path = store.root().join("devices.json");
+    let seen_at = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .context("format device seen timestamp")?;
+    mutate_devices(&path, |devices| {
+        if let Some(record) = devices.iter_mut().find(|record| record.device == device) {
+            record.last_seen_at = Some(seen_at);
+        }
+        Ok(())
+    })
+}
+
 fn mutate_invites<T>(
     path: &Path,
     mutate: impl FnOnce(&mut Vec<StoredInvite>) -> Result<T>,
@@ -578,8 +774,9 @@ fn write_secret_file(path: &Path, content: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        accept_invite, bootstrap, check, create_invite, require_local_project_credential,
-        revoke_invite, sanitize_name, validate_role, ProjectCredential,
+        accept_invite, bootstrap, check, create_invite, issue_invite_credential, list_devices,
+        persist_project_credential, project_token_role, require_local_project_credential,
+        revoke_device, revoke_invite, sanitize_name, validate_role, ProjectCredential,
     };
     use std::fs;
     use std::path::Path;
@@ -859,6 +1056,112 @@ mod tests {
         .unwrap();
 
         assert_eq!(err.to_string(), "token rejected");
+    }
+
+    #[test]
+    fn issue_invite_credential_registers_hash_without_local_secret_file() {
+        let project = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let invite = create_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+
+        let credential =
+            issue_invite_credential(project.path(), &invite.token, "Guus MacBook").unwrap();
+
+        assert_eq!(credential.project, "mesh-remote");
+        assert_eq!(credential.role, "worker");
+        assert!(!credential.token.is_empty());
+        let devices = list_devices(project.path()).unwrap();
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].device, "guus-macbook");
+        assert_eq!(devices[0].role, "worker");
+        assert_ne!(devices[0].credential_hash, credential.token);
+        assert!(!project
+            .path()
+            .join(".workbench/mesh/devices/guus-macbook.key")
+            .exists());
+        assert!(!project
+            .path()
+            .join(".workbench/mesh/projects/guus-macbook.cred")
+            .exists());
+        assert!(project_token_role(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            &credential.token
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn persist_project_credential_writes_joining_home_secret_files() {
+        let joining_home = tempfile::tempdir().unwrap();
+        let credential = ProjectCredential {
+            project: "mesh-remote".to_string(),
+            role: "worker".to_string(),
+            token: "secret-remote-token".to_string(),
+        };
+
+        let cred_path = persist_project_credential(
+            Some(joining_home.path().to_path_buf()),
+            "Guus MacBook",
+            &credential,
+        )
+        .unwrap();
+
+        assert_eq!(
+            cred_path,
+            joining_home.path().join("mesh/projects/guus-macbook.cred")
+        );
+        let stored = read_project_credential(joining_home.path(), "guus-macbook.cred");
+        assert_eq!(stored.project, "mesh-remote");
+        assert_eq!(stored.role, "worker");
+        assert_eq!(stored.token, "secret-remote-token");
+        assert!(joining_home
+            .path()
+            .join("mesh/devices/guus-macbook.key")
+            .is_file());
+    }
+
+    #[test]
+    fn revoke_device_blocks_registered_remote_credential() {
+        let project = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let invite = create_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+        let credential = issue_invite_credential(project.path(), &invite.token, "macbook").unwrap();
+
+        let revoke = revoke_device(project.path(), "macbook", "auth:owner").unwrap();
+
+        assert!(revoke.contains("device revoked"));
+        assert!(project_token_role(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            &credential.token
+        )
+        .is_err());
+        let devices = list_devices(project.path()).unwrap();
+        assert_eq!(devices[0].revoked_at.is_some(), true);
+        assert!(
+            std::fs::read_to_string(project.path().join(".workbench/mesh/audit.jsonl"))
+                .unwrap()
+                .contains("device.revoked")
+        );
     }
 
     #[cfg(unix)]
