@@ -266,7 +266,7 @@ D13="$(scaffold "E2E Mesh Natural" crew)"
 out="$(cd "$D13" && drive "$D13" 'Use the Workbench mesh plugin slash-command surface for every mesh operation. First start local mesh in the background with local-only binding, port 0, and pid-file mesh.pid, redirecting output to mesh.log so the session returns; wait until .workbench/mesh/server.json exists. Then handle this team request in the natural Workbench mesh way: I need a checkout lead room named lead:checkout, I need that room asked "what are you touching?", and I need to see who is connected. Choose the appropriate Workbench mesh operations yourself and print the concrete results from the room setup, chat send, and team roster. Do not call scripts/mesh.sh directly. Do not run mesh start in the foreground. Do not expose LAN.')"
 mesh_event_contains "$D13" 'room.created' 'lead:checkout' \
   && mesh_event_contains "$D13" 'message.sent' 'what are you touching' \
-  && contains "$out" 'connected_actor_count|session:lead|actor' \
+  && contains "$out" 'connected_actor_count:[[:space:]]*[0-9]+|session:lead' \
   && ok "mesh natural intent produces collaboration output" \
   || bad "mesh natural intent did not persist room and message events (model output: $(printf '%s' "$out" | tail -3 | tr '\n' ' '))"
 cleanup_mesh "$D13"
