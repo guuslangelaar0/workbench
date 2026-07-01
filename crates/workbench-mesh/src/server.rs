@@ -358,6 +358,7 @@ async fn websocket_session(socket: WebSocket, state: AppState, last_seq: u64, ro
 }
 
 fn append_event(state: &AppState, request: EventRequest) -> Result<EventEnvelope> {
+    let mut daemon_broadcast_seqs = state.daemon_broadcast_seqs.lock().ok();
     let event = state.store.append_event(
         &request.event_type,
         &request.room,
@@ -365,11 +366,40 @@ fn append_event(state: &AppState, request: EventRequest) -> Result<EventEnvelope
         request.to.as_deref(),
         request.payload,
     )?;
-    if let Ok(mut seqs) = state.daemon_broadcast_seqs.lock() {
-        seqs.insert(event.seq);
+    let should_broadcast = daemon_broadcast_seqs
+        .as_mut()
+        .map(|seqs| remember_daemon_broadcast_seq(seqs, &state.tail_scan_seq, event.seq))
+        .unwrap_or(true);
+    if should_broadcast {
+        let _ = state.events_tx.send(event.clone());
     }
-    let _ = state.events_tx.send(event.clone());
     Ok(event)
+}
+
+fn remember_daemon_broadcast_seq(
+    seqs: &mut BTreeSet<u64>,
+    tail_scan_seq: &AtomicU64,
+    seq: u64,
+) -> bool {
+    let scanned_seq = tail_scan_seq.load(Ordering::SeqCst);
+    prune_daemon_broadcast_seqs(seqs, scanned_seq);
+    if seq <= scanned_seq {
+        return false;
+    }
+    seqs.insert(seq);
+    true
+}
+
+fn prune_daemon_broadcast_seqs(seqs: &mut BTreeSet<u64>, scanned_seq: u64) {
+    loop {
+        let Some(seq) = seqs.iter().next().copied() else {
+            break;
+        };
+        if seq > scanned_seq {
+            break;
+        }
+        seqs.remove(&seq);
+    }
 }
 
 fn require_bearer(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
@@ -460,15 +490,18 @@ async fn tail_store_events(state: AppState) {
 
 async fn tail_store_events_once(state: &AppState) {
     let since = state.tail_scan_seq.load(Ordering::SeqCst);
+    let mut daemon_broadcast_seqs = state.daemon_broadcast_seqs.lock().ok();
+    if let Some(seqs) = daemon_broadcast_seqs.as_mut() {
+        prune_daemon_broadcast_seqs(seqs, since);
+    }
     let Ok(events) = state.store.list_events_since(since) else {
         return;
     };
     for event in events {
         state.tail_scan_seq.fetch_max(event.seq, Ordering::SeqCst);
-        let already_broadcast = state
-            .daemon_broadcast_seqs
-            .lock()
-            .map(|mut seqs| seqs.remove(&event.seq))
+        let already_broadcast = daemon_broadcast_seqs
+            .as_mut()
+            .map(|seqs| seqs.remove(&event.seq))
             .unwrap_or(false);
         if !already_broadcast {
             let _ = state.events_tx.send(event);
@@ -1001,6 +1034,34 @@ mod tests {
         }));
 
         server.abort();
+    }
+
+    #[test]
+    fn daemon_broadcast_registration_prunes_stale_scanned_seqs() {
+        let tail_scan_seq = AtomicU64::new(2);
+        let mut seqs = BTreeSet::from([1, 2, 3]);
+
+        assert!(super::remember_daemon_broadcast_seq(
+            &mut seqs,
+            &tail_scan_seq,
+            4
+        ));
+
+        assert_eq!(seqs, BTreeSet::from([3, 4]));
+    }
+
+    #[test]
+    fn daemon_broadcast_registration_rejects_seq_already_scanned_by_tailer() {
+        let tail_scan_seq = AtomicU64::new(3);
+        let mut seqs = BTreeSet::from([1, 2]);
+
+        assert!(!super::remember_daemon_broadcast_seq(
+            &mut seqs,
+            &tail_scan_seq,
+            3
+        ));
+
+        assert!(seqs.is_empty());
     }
 
     async fn wait_for_metadata(project: &Path) -> super::ServerMetadata {
