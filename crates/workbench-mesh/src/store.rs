@@ -272,11 +272,17 @@ mod tests {
             }));
         }
 
-        let seqs: Vec<u64> = handles.into_iter().map(|handle| handle.join().unwrap()).collect();
+        let seqs: Vec<u64> = handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect();
         let unique: BTreeSet<u64> = seqs.iter().copied().collect();
 
         assert_eq!(unique.len(), writers, "duplicate sequences: {seqs:?}");
-        assert_eq!(unique.into_iter().collect::<Vec<_>>(), (1..=writers as u64).collect::<Vec<_>>());
+        assert_eq!(
+            unique.into_iter().collect::<Vec<_>>(),
+            (1..=writers as u64).collect::<Vec<_>>()
+        );
     }
 
     #[test]

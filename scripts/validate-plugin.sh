@@ -80,8 +80,16 @@ mesh_command = os.path.join(root, "commands", "mesh.md")
 mesh_script = os.path.join(root, "scripts", "mesh.sh")
 mesh_launcher = os.path.join(root, "bin", "workbench-mesh")
 mesh_skill = os.path.join(root, "skills", "mesh", "SKILL.md")
+cargo_toml = os.path.join(root, "Cargo.toml")
 
 if os.path.exists(mesh_command):
+    try:
+        command_body = open(mesh_command).read()
+    except Exception as e:
+        command_body = ""
+        err(f"commands/mesh.md is not readable: {e}")
+    if "scripts/mesh.sh" not in command_body:
+        err("commands/mesh.md exists but does not reference scripts/mesh.sh")
     if not os.path.isfile(mesh_launcher):
         err("commands/mesh.md exists but bin/workbench-mesh is missing")
     elif not os.access(mesh_launcher, os.X_OK):
@@ -90,6 +98,8 @@ if os.path.exists(mesh_command):
         err("commands/mesh.md exists but scripts/mesh.sh is missing")
     if not os.path.isfile(mesh_skill):
         err("commands/mesh.md exists but skills/mesh/SKILL.md is missing")
+    if not os.path.isfile(cargo_toml):
+        err("commands/mesh.md exists but Cargo.toml is missing")
 
 if os.path.exists(mesh_script):
     result = subprocess.run(
@@ -101,6 +111,23 @@ if os.path.exists(mesh_script):
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
         err(f"scripts/mesh.sh fails bash -n: {detail}")
+
+if os.path.exists(mesh_launcher):
+    packaged_bins = [
+        path for path in glob.glob(os.path.join(root, "bin", "workbench-mesh.d", "*", "workbench-mesh"))
+        if os.path.isfile(path) and os.access(path, os.X_OK)
+    ]
+    try:
+        launcher_body = open(mesh_launcher).read()
+    except Exception as e:
+        launcher_body = ""
+        err(f"bin/workbench-mesh is not readable: {e}")
+    clear_error = (
+        "packaged binary missing" in launcher_body
+        and "cargo build -p workbench-mesh" in launcher_body
+    )
+    if not packaged_bins and not clear_error:
+        err("bin/workbench-mesh has no packaged target binaries and no clear missing-binary error")
 
 if problems:
     print("PLUGIN NOT PUBLISHABLE:")

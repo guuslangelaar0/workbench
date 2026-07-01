@@ -6,6 +6,9 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Workbench Mesh design implementation: Rust control-plane binary, local/LAN command center, authenticated invites, structured lead/worker rooms, actor hierarchy, statusline presence, and outcome-level plugin tests.
+
 ## [0.4.0] - 2026-06-30
 
 The lead-purpose release. Workbench now treats a lead as a durable, named actor with one current purpose, and it gives that lead a native parking path for unrelated work so feature branches stay focused without losing useful bugs, follow-ups, or ideas.

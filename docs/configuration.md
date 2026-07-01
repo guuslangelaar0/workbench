@@ -119,6 +119,28 @@ The set of lifecycle *stages* is not stored here — it's derived from the level
 
 ---
 
+## Mesh runtime state
+
+Workbench Mesh does not add long-lived config fields to `.workbench/config.json`. The command center is runtime state owned by the Rust `workbench-mesh` binary and the `scripts/mesh.sh` wrapper.
+
+| File | Meaning |
+|------|---------|
+| `.workbench/mesh/server.json` | Project-local command-center host, port, and same-user local token. `/workbench:mesh open` reads this cached snapshot to print the URL. |
+| `$WORKBENCH_HOME/mesh/` | Local credential material for the same OS user and scoped LAN invite tokens (`~/.workbench/mesh/` by default). Treat this directory as private runtime state. |
+| `$WORKBENCH_HOME/mesh/statusline/<project>.json` | Cached statusline snapshot: actor presence, availability, and current `doing` text. The statusline hook reads the cache instead of querying the live service on every prompt. |
+
+Start modes set the auth boundary:
+
+| Mode | Command | Boundary |
+|------|---------|----------|
+| Local | `/workbench:mesh start --local` | This machine only, same-user credential. |
+| LAN | `/workbench:mesh start --lan` | Trusted local network, explicit invite token for each joining device/session. |
+| Public | Deferred | Public internet exposure is not implemented or documented as supported. |
+
+LAN startup prints the hostname, `.local` mDNS name, raw IP address, and port so another device can connect without guessing which address works on the network.
+
+---
+
 ## Editing safely
 
 - **Change the level** with `/workbench:level up|down|<name>` rather than hand-editing — it also creates any new stage directories and shows you the dial diff first.

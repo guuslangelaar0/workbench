@@ -74,6 +74,40 @@ View or reconcile the **context backbone** in `.claude/architecture/` — C4-sty
 
 ---
 
+## Workbench Mesh
+
+### `/workbench:mesh start --local`
+Start the Rust-backed command center on this machine only. The wrapper bootstraps the same-user local credential, launches `bin/workbench-mesh` through `scripts/mesh.sh`, and writes runtime metadata to `.workbench/mesh/server.json`. When the port is auto-assigned, use `/workbench:mesh open` to print the command-center URL with the cached local token.
+
+### `/workbench:mesh start --lan`
+Start the command center on the local network for another trusted machine on the same LAN. The output shows the hostname form, the `.local` mDNS form, the raw LAN IP, and the port, then keeps public internet exposure unavailable in this version. Use `/workbench:mesh invite --role worker --ttl-seconds 900` to create a scoped invite token.
+
+### `/workbench:mesh invite [--role ROLE] [--ttl-seconds N] [--max-uses N]`
+Create a LAN invite token. Tokens are the auth boundary for another machine joining the mesh; local same-user access uses the cached local credential instead. `ROLE` defaults to `worker`.
+
+### `/workbench:mesh connect TOKEN [DEVICE]`
+Accept a local project invite token for this device. Remote URL acceptance is intentionally deferred until the Rust runtime supports it end-to-end; the wrapper fails clearly instead of pretending a URL token is local.
+
+### `/workbench:mesh status | who | jobs | open`
+Inspect the mesh runtime. `status` and `who` show registered actors and rooms, `jobs` lists recent job/task events, and `open` prints the cached command-center URL from `.workbench/mesh/server.json`.
+
+### `/workbench:mesh room NAME`
+Create or join a structured room. Lead channels conventionally use names like `lead:checkout` so multiple leads can coordinate without collapsing into one global chat.
+
+### `/workbench:mesh message TARGET TEXT...` / `/workbench:mesh ask TARGET QUESTION...`
+Send a message or question to an actor or room. Natural phrasing routes here: "talk to my MacBook Claude session" means inspect/start/invite as needed, "open a lead channel" means create a lead room, and "ask worker status" means address the worker actor with an ask/status request.
+
+### `/workbench:mesh handoff TASK_ID TARGET`
+Record a task handoff to another actor, preserving who handed off what and where the next owner should respond.
+
+### `/workbench:mesh availability STATE [--reason TEXT]` / `/workbench:mesh doing TEXT...`
+Publish this actor's availability and current work. The statusline hook reads the cached mesh snapshot so presence can show up cheaply without hitting the live API on every prompt.
+
+### `/workbench:mesh watch ACTOR`
+Follow updates for a lead, subagent, worker, or job actor. The actor hierarchy is: **leads** coordinate rooms and task ownership, **subagents** do delegated role work, **workers** represent joined devices/sessions, and **jobs** represent handoffs or task executions.
+
+---
+
 ## Continuity & maintenance
 
 ### `/workbench:boot`
@@ -120,3 +154,4 @@ The commands are thin markdown wrappers over the scripts in `scripts/`, which yo
 | `doctor.sh` | Deterministic health report for scaffolded projects |
 | `self-test.sh` | Contributor self-test for plugin source validation |
 | `arch-drift.sh` | Align authored C4 docs against graphify-extracted reality (architecture drift) |
+| `mesh.sh` | Wrapper for the Rust `bin/workbench-mesh` runtime and natural `/workbench:mesh` operations |

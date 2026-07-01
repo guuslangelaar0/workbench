@@ -90,6 +90,39 @@ The `enforcement` axis (`remind` / `warn-default` / `strict`) controls how force
 
 ---
 
+## Workbench Mesh command center
+
+Workbench Mesh is the richer control plane for coordinating Claude sessions across one machine or a trusted LAN. The slash command stays a thin markdown wrapper, `scripts/mesh.sh` stays a shell adapter, and the runtime behavior lives in the Rust binary launched through `bin/workbench-mesh`.
+
+Use it in natural language when the outcome is coordination rather than file editing:
+
+- "talk to my MacBook Claude session" routes to status/start/invite/connect guidance for another device.
+- "open a lead channel" creates a structured room such as `lead:checkout`.
+- "ask worker status" sends an ask/status request to the worker actor instead of inventing a new side channel.
+
+The command center has three exposure modes:
+
+| Mode | Command | Auth model |
+|------|---------|------------|
+| Local | `/workbench:mesh start --local` | Same-user local credential cached under `WORKBENCH_HOME` (`~/.workbench` by default); intended for this machine. |
+| LAN | `/workbench:mesh start --lan` | Explicit opt-in for the local network; another machine joins with a scoped invite token from `/workbench:mesh invite`. |
+| Public | Deferred | Public internet exposure is out of scope in this version. |
+
+When started for LAN, the wrapper prints every address form a user may need to copy: the host name, the `.local` mDNS name, the raw LAN IP, and the port. Runtime metadata is also written to `.workbench/mesh/server.json`, so `/workbench:mesh open` can print the current command-center URL later, including the local token when present.
+
+Mesh actors are hierarchical:
+
+| Actor | Role |
+|-------|------|
+| Lead | Coordinates a track, room, or task ownership boundary. |
+| Subagent | A delegated role running under a lead, such as engineer or verifier. |
+| Worker | A joined Claude session/device that can receive asks, handoffs, and status checks. |
+| Job | A task execution or handoff unit that emits lifecycle events. |
+
+The statusline integration reads a cached mesh snapshot rather than polling the live API on every render. That keeps prompt-time overhead low while still surfacing presence, availability, and current `doing` text when a mesh is active.
+
+---
+
 ## Discipline: brainstorm → spec → plan
 
 Workbench leans on the [superpowers](https://github.com/obra/superpowers) skills for the *thinking* part of building. Before significant work, the expectation is brainstorm → spec → plan, then execute task-by-task with a fresh implementer per task and a review pass. `/workbench:inception` applies this to greenfield genesis: it turns an idea into a v1 spec and a seeded backlog, and refuses to proceed until you name what's explicitly **out** of v1 — scope control as a first-class step.

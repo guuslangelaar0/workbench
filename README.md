@@ -56,6 +56,8 @@ On an unconfigured project it runs a short guided setup; on a configured one it 
 /workbench:lead status          # show or set this lead session's current purpose
 /workbench:park "bug title"     # park unrelated work as a real backlog task
 /workbench:mc                   # Mission Control: a dashboard of tasks, the in-review cap, build, prod
+/workbench:mesh start --local   # open the local Workbench Mesh command center
+/workbench:mesh start --lan     # invite another machine on your LAN
 /workbench:loop                 # run the autonomous teamlead loop: pick → dispatch → verify-gate → repeat
 ```
 
@@ -83,6 +85,7 @@ That's the whole rhythm: pick a level, capture work as tasks, let the loop drive
 | `/workbench:teamlead <topic>` | Scope this session to one track and lock tasks so leads don't collide |
 | `/workbench:inception` | Scope-controlled product genesis: an idea → a v1 spec + seeded backlog |
 | `/workbench:architecture` | View or reconcile the C4 context backbone (authored intent ↔ graphify-extracted reality, drift) |
+| `/workbench:mesh` | Start the Rust-backed command center, invite/connect local or LAN sessions, chat with leads/workers, and inspect actor/job status |
 | `/workbench:boot` | Boot protocol: verify reality from disk, reconcile, then brief |
 | `/workbench:checkpoint` | Write a `SESSION_STATE` checkpoint now for the next session |
 | `/workbench:upgrade` | Reconcile this project's workbench files to the current plugin version (preserves your edits) |
@@ -155,6 +158,7 @@ Five capabilities, all configured from the level you pick:
 - **Lead purpose + parking** — a lead session has a durable purpose (one task, one track, or a backlog-scouting pass). When unrelated work appears mid-feature, `/workbench:park` captures it as a backlog task with origin metadata instead of widening the active branch silently.
 - **Continuity** — `SessionStart` re-grounds each new session from disk, `PreCompact` checkpoints before context is compacted, and a `SESSION_STATE.md` handoff means the next session resumes from the file alone.
 - **Coordination** — multiple concurrent sessions register presence, claim tasks, and get warned before they collide; worktrees isolate parallel work.
+- **Workbench Mesh** — a Rust control-plane binary behind `/workbench:mesh` opens a local/LAN command center for natural requests like "talk to my MacBook Claude session", "open a lead channel", or "ask worker status." It uses same-user local credentials by default, LAN invite tokens when you explicitly expose the service with `start --lan`, and keeps public internet exposure out of scope.
 - **Discipline built in** — brainstorm → spec → plan before building; "done" means *verified with evidence*, never "should work."
 
 → The model behind each: **[docs/concepts.md](docs/concepts.md)**.
@@ -168,11 +172,13 @@ Everything lives in `.workbench/config.json`. It stores your **level**; the seve
 ## Tests
 
 ```sh
+cargo test --workspace          # Rust control-plane tests
 bash test/all.sh                 # fast, offline unit + integration suites (no API, no cost)
+bash scripts/validate-plugin.sh  # plugin/package publishability check
 WB_E2E=1 bash test/e2e/run.sh    # live: loads the real plugin into a headless Claude session
 ```
 
-The `test/all.sh` suites exercise every shell script directly and run free and offline (this is what CI runs). The gated `test/e2e/` harness loads the actual plugin via `claude -p --plugin-dir` and asserts on what the real model + commands + hooks do — the only layer that proves the markdown surface works end-to-end. It needs an authenticated `claude` CLI and costs tokens, so it skips cleanly unless `WB_E2E=1`.
+The offline suite covers shell behavior, Rust protocol/auth/service tests, the command-center API, packaging, hooks/statusline snapshots, and outcome-level plugin checks without calling external APIs. CI runs Rust tests, builds the `workbench-mesh` crate, runs `test/all.sh`, and validates the plugin. The gated `test/e2e/` harness loads the actual plugin via `claude -p --plugin-dir` and asserts on what the real model + commands + hooks do — the only layer that proves the markdown surface works end-to-end. It needs an authenticated `claude` CLI and costs tokens, so it skips cleanly unless `WB_E2E=1`.
 
 ## Project layout
 
@@ -183,7 +189,8 @@ workbench/
 ├── skills/             the operating disciplines (levels, orchestration, continuity, architecture, …)
 ├── agents/             engineer + verifier subagents
 ├── hooks/              SessionStart / PreCompact / PostToolUse / PreToolUse / Notification
-├── scripts/            the CLI: init, task-new, task-move, mc, levels, loop-policy, graduate, drift, upgrade, uninstall, doctor, self-test
+├── scripts/            the CLI: init, task-new, task-move, mc, mesh, levels, loop-policy, graduate, drift, upgrade, uninstall, doctor, self-test
+├── crates/             Rust runtime crates, including workbench-mesh
 ├── templates/          what gets scaffolded into a project (minimal | full profiles)
 ├── test/               all.sh (offline suites) + e2e/ (live-plugin)
 └── docs/               getting-started · levels · concepts · commands · configuration
