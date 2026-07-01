@@ -107,6 +107,17 @@ struct RevokeInviteRequest {
     token: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct AcceptInviteRequest {
+    token: String,
+    device: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RevokeDeviceRequest {
+    device: String,
+}
+
 pub async fn serve(opts: ServeOptions) -> Result<()> {
     auth::require_local_project_credential(&opts.project_root, opts.home.clone())?;
     let credential_token = auth::local_project_token(&opts.project_root, opts.home.clone())?;
@@ -157,7 +168,10 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
         .route("/api/state", get(api_state))
         .route("/api/events", get(api_events).post(post_event))
         .route("/api/invites", post(post_invite))
+        .route("/api/invites/accept", post(post_accept_invite))
         .route("/api/invites/revoke", post(post_revoke_invite))
+        .route("/api/devices", get(api_devices))
+        .route("/api/devices/revoke", post(post_revoke_device))
         .route("/ws", get(ws_handler))
         .with_state(state);
 
@@ -286,6 +300,50 @@ async fn post_revoke_invite(
         &state.project_root,
         state.home.clone(),
         &request.token,
+        &format!("auth:{role}"),
+    )?;
+    Ok(Json(json!({ "ok": true, "result": output })))
+}
+
+async fn post_accept_invite(
+    State(state): State<AppState>,
+    Json(request): Json<AcceptInviteRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let credential =
+        auth::issue_invite_credential(&state.project_root, &request.token, &request.device)?;
+    Ok(Json(json!({
+        "project": credential.project,
+        "role": credential.role,
+        "token": credential.token,
+        "device": auth::sanitize_device_name(&request.device),
+    })))
+}
+
+async fn api_devices(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    let role = bearer_role(&state, &headers)?;
+    if !matches!(role.as_str(), "owner" | "operator") {
+        return Err(ApiError::forbidden("owner/operator bearer required"));
+    }
+    Ok(Json(
+        json!({ "devices": auth::list_devices(&state.project_root)? }),
+    ))
+}
+
+async fn post_revoke_device(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<RevokeDeviceRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let role = bearer_role(&state, &headers)?;
+    if !matches!(role.as_str(), "owner" | "operator") {
+        return Err(ApiError::forbidden("owner/operator bearer required"));
+    }
+    let output = auth::revoke_device(
+        &state.project_root,
+        &request.device,
         &format!("auth:{role}"),
     )?;
     Ok(Json(json!({ "ok": true, "result": output })))
@@ -457,6 +515,7 @@ fn static_headers(content_type: &'static str) -> [(HeaderName, &'static str); 3]
 
 fn state_json(state: &AppState) -> Result<Value> {
     let events = state.store.list_events_since(0)?;
+    let devices = auth::list_devices(&state.project_root)?;
     let mut actors = BTreeSet::new();
     for event in &events {
         actors.insert(event.from.clone());
@@ -468,6 +527,7 @@ fn state_json(state: &AppState) -> Result<Value> {
         "event_count": events.len(),
         "connected_actor_count": actors.len(),
         "actors": actors.into_iter().collect::<Vec<_>>(),
+        "devices": devices,
         "events": events,
         "last_seq": events.last().map(|event| event.seq).unwrap_or(0),
     }))
@@ -534,7 +594,7 @@ fn random_bearer_token() -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
-fn write_server_metadata(project_root: &Path, metadata: &ServerMetadata) -> Result<()> {
+pub fn write_server_metadata(project_root: &Path, metadata: &ServerMetadata) -> Result<()> {
     let path = server_metadata_path(project_root);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
@@ -925,6 +985,192 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn remote_invite_accept_returns_credential_and_revoke_blocks_it() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let owner_token =
+            auth::local_project_token(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let invite = auth::create_invite(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+        let base = format!("http://{}:{}", metadata.host, metadata.port);
+        let client = Client::new();
+
+        let accepted: Value = client
+            .post(format!("{base}/api/invites/accept"))
+            .json(&json!({ "token": invite.token, "device": "macbook" }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(accepted["project"], "mesh-remote");
+        assert_eq!(accepted["role"], "worker");
+        assert_eq!(accepted["device"], "macbook");
+        let remote_token = accepted["token"].as_str().unwrap();
+        assert!(!remote_token.is_empty());
+
+        let state_response = client
+            .get(format!("{base}/api/state"))
+            .bearer_auth(remote_token)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(state_response.status(), reqwest::StatusCode::OK);
+
+        let devices: Value = client
+            .get(format!("{base}/api/devices"))
+            .bearer_auth(&owner_token)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(devices["devices"][0]["device"], "macbook");
+        assert!(devices.to_string().find(remote_token).is_none());
+
+        let revoke = client
+            .post(format!("{base}/api/devices/revoke"))
+            .bearer_auth(&owner_token)
+            .json(&json!({ "device": "macbook" }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(revoke.status(), reqwest::StatusCode::OK);
+
+        let rejected = client
+            .get(format!("{base}/api/state"))
+            .bearer_auth(remote_token)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(rejected.status(), reqwest::StatusCode::UNAUTHORIZED);
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn device_api_requires_owner_or_operator_for_inventory() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let worker_token = accept_role(project.path(), home.path(), "worker", "worker");
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+        let base = format!("http://{}:{}", metadata.host, metadata.port);
+
+        let unauth = Client::new()
+            .get(format!("{base}/api/devices"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(unauth.status(), reqwest::StatusCode::UNAUTHORIZED);
+
+        let worker = Client::new()
+            .get(format!("{base}/api/devices"))
+            .bearer_auth(&worker_token)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(worker.status(), reqwest::StatusCode::FORBIDDEN);
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn remote_client_message_posts_to_cached_daemon() {
+        let project = TempDir::new().unwrap();
+        let host_home = TempDir::new().unwrap();
+        let join_home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Remote");
+        auth::bootstrap(project.path(), Some(host_home.path().to_path_buf())).unwrap();
+        let owner_token =
+            auth::local_project_token(project.path(), Some(host_home.path().to_path_buf()))
+                .unwrap();
+        let invite = auth::create_invite(
+            project.path(),
+            Some(host_home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(host_home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+        let base = format!("http://{}:{}", metadata.host, metadata.port);
+
+        client::accept_remote_invite(
+            project.path().to_path_buf(),
+            Some(join_home.path().to_path_buf()),
+            base.clone(),
+            invite.token,
+            "laptop".to_string(),
+        )
+        .await
+        .unwrap();
+        client::send_message(
+            project.path().to_path_buf(),
+            Some(join_home.path().to_path_buf()),
+            "repo:mesh-remote".to_string(),
+            "hello from laptop".to_string(),
+        )
+        .await
+        .unwrap();
+
+        let state: Value = Client::new()
+            .get(format!("{base}/api/state"))
+            .bearer_auth(&owner_token)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(state.to_string().contains("hello from laptop"));
+
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn websocket_receives_locally_appended_cli_event() {
         let project = TempDir::new().unwrap();
         let home = TempDir::new().unwrap();
@@ -954,6 +1200,7 @@ mod tests {
             "lead:checkout".to_string(),
             "what are you touching?".to_string(),
         )
+        .await
         .unwrap();
 
         let broadcast = read_ws_json(&mut socket).await;

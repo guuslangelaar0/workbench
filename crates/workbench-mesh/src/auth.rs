@@ -80,6 +80,10 @@ pub fn project_id_for(project_root: &Path) -> Result<String> {
     project_id(project_root)
 }
 
+pub fn sanitize_device_name(value: &str) -> String {
+    sanitize_name(value)
+}
+
 pub fn bootstrap(project_root: &Path, home: Option<PathBuf>) -> Result<String> {
     let auth_paths = paths(home)?;
     let project_id = project_id(project_root)?;

@@ -2,12 +2,12 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use anyhow::{Context, Result};
-use reqwest::Client;
+use reqwest::{Client, Url};
 use serde_json::{json, Value};
 
 use crate::auth;
 use crate::protocol::EventEnvelope;
-use crate::server::read_server_metadata;
+use crate::server::{read_server_metadata, write_server_metadata, ServerMetadata};
 use crate::statusline;
 use crate::store::MeshStore;
 
@@ -78,8 +78,124 @@ pub async fn bench(project_root: PathBuf, home: Option<PathBuf>, messages: u64) 
     Ok(())
 }
 
-pub fn create_room(project_root: PathBuf, home: Option<PathBuf>, name: String) -> Result<()> {
-    let event = append_local_event(
+pub async fn accept_remote_invite(
+    project_root: PathBuf,
+    home: Option<PathBuf>,
+    url: String,
+    token: String,
+    device: String,
+) -> Result<()> {
+    let metadata = remote_metadata_from_url(&url)?;
+    let response = Client::new()
+        .post(format!("{}/api/invites/accept", base_url(&metadata)))
+        .json(&json!({ "token": token, "device": device }))
+        .send()
+        .await
+        .context("post remote invite accept")?
+        .error_for_status()
+        .context("remote invite rejected")?;
+    let credential: auth::ProjectCredential = response
+        .json()
+        .await
+        .context("parse remote invite credential")?;
+    let local_project = auth::project_id_for(&project_root)?;
+    if credential.project != local_project {
+        anyhow::bail!(
+            "remote project mismatch: expected {local_project}, got {}",
+            credential.project
+        );
+    }
+    let credential_path = auth::persist_project_credential(home, &device, &credential)?;
+    write_server_metadata(&project_root, &metadata)?;
+    println!("device {} connected", auth::sanitize_device_name(&device));
+    println!("project: {}", credential.project);
+    println!("role: {}", credential.role);
+    println!("url: {}", base_url(&metadata));
+    println!("credential: {}", credential_path.display());
+    Ok(())
+}
+
+pub(crate) fn remote_metadata_from_url(url: &str) -> Result<ServerMetadata> {
+    let parsed = Url::parse(url).context("parse remote mesh URL")?;
+    if parsed.scheme() != "http" {
+        anyhow::bail!("remote mesh URL must use http");
+    }
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| anyhow::anyhow!("remote mesh URL requires a host"))?
+        .to_string();
+    let port = parsed
+        .port_or_known_default()
+        .ok_or_else(|| anyhow::anyhow!("remote mesh URL requires a port"))?;
+    Ok(ServerMetadata {
+        mode: "remote".to_string(),
+        host: host.clone(),
+        port,
+        hostname: host.clone(),
+        mdns: if host.ends_with(".local") {
+            host.clone()
+        } else {
+            String::new()
+        },
+        lan_ips: Vec::new(),
+        local_token: String::new(),
+    })
+}
+
+pub async fn list_devices(project_root: PathBuf, home: Option<PathBuf>) -> Result<()> {
+    auth::require_local_project_credential(&project_root, home.clone())?;
+    let token = auth::local_project_token(&project_root, home)?;
+    let metadata = read_server_metadata(&project_root)?;
+    let body: Value = Client::new()
+        .get(format!("{}/api/devices", base_url(&metadata)))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .context("get daemon devices")?
+        .error_for_status()
+        .context("daemon devices rejected")?
+        .json()
+        .await
+        .context("parse daemon devices")?;
+    if let Some(devices) = body.get("devices").and_then(Value::as_array) {
+        for device in devices {
+            println!(
+                "{} role={} revoked={}",
+                device.get("device").and_then(Value::as_str).unwrap_or("-"),
+                device.get("role").and_then(Value::as_str).unwrap_or("-"),
+                device
+                    .get("revoked_at")
+                    .map(|value| !value.is_null())
+                    .unwrap_or(false)
+            );
+        }
+    }
+    Ok(())
+}
+
+pub async fn revoke_device(
+    project_root: PathBuf,
+    home: Option<PathBuf>,
+    device: String,
+) -> Result<()> {
+    auth::require_local_project_credential(&project_root, home.clone())?;
+    let token = auth::local_project_token(&project_root, home)?;
+    let metadata = read_server_metadata(&project_root)?;
+    Client::new()
+        .post(format!("{}/api/devices/revoke", base_url(&metadata)))
+        .bearer_auth(&token)
+        .json(&json!({ "device": device }))
+        .send()
+        .await
+        .context("post daemon device revoke")?
+        .error_for_status()
+        .context("daemon device revoke rejected")?;
+    println!("device revoked");
+    Ok(())
+}
+
+pub async fn create_room(project_root: PathBuf, home: Option<PathBuf>, name: String) -> Result<()> {
+    let event = append_or_post_event(
         &project_root,
         home,
         "room.created",
@@ -87,18 +203,19 @@ pub fn create_room(project_root: PathBuf, home: Option<PathBuf>, name: String) -
         DEFAULT_ACTOR,
         None,
         json!({ "name": name }),
-    )?;
+    )
+    .await?;
     println!("room: created {} seq={}", event.room, event.seq);
     Ok(())
 }
 
-pub fn send_message(
+pub async fn send_message(
     project_root: PathBuf,
     home: Option<PathBuf>,
     to: String,
     text: String,
 ) -> Result<()> {
-    let event = append_local_event(
+    let event = append_or_post_event(
         &project_root,
         home,
         "message.sent",
@@ -106,18 +223,19 @@ pub fn send_message(
         DEFAULT_ACTOR,
         Some(&to),
         json!({ "text": text }),
-    )?;
+    )
+    .await?;
     println!("message: sent seq={}", event.seq);
     Ok(())
 }
 
-pub fn ask_status(
+pub async fn ask_status(
     project_root: PathBuf,
     home: Option<PathBuf>,
     to: String,
     question: String,
 ) -> Result<()> {
-    let event = append_local_event(
+    let event = append_or_post_event(
         &project_root,
         home,
         "message.request_status",
@@ -125,18 +243,19 @@ pub fn ask_status(
         DEFAULT_ACTOR,
         Some(&to),
         json!({ "question": question }),
-    )?;
+    )
+    .await?;
     println!("ask: sent seq={}", event.seq);
     Ok(())
 }
 
-pub fn handoff_task(
+pub async fn handoff_task(
     project_root: PathBuf,
     home: Option<PathBuf>,
     task_id: String,
     to: String,
 ) -> Result<()> {
-    let event = append_local_event(
+    let event = append_or_post_event(
         &project_root,
         home,
         "task.handoff",
@@ -144,18 +263,19 @@ pub fn handoff_task(
         DEFAULT_ACTOR,
         Some(&to),
         json!({ "task_id": task_id }),
-    )?;
+    )
+    .await?;
     println!("handoff: sent seq={}", event.seq);
     Ok(())
 }
 
-pub fn set_availability(
+pub async fn set_availability(
     project_root: PathBuf,
     home: Option<PathBuf>,
     state: String,
     reason: Option<String>,
 ) -> Result<()> {
-    let event = append_local_event(
+    let event = append_or_post_event(
         &project_root,
         home,
         "presence.heartbeat",
@@ -163,13 +283,14 @@ pub fn set_availability(
         DEFAULT_ACTOR,
         None,
         json!({ "availability": state, "reason": reason }),
-    )?;
+    )
+    .await?;
     println!("availability: updated seq={}", event.seq);
     Ok(())
 }
 
-pub fn set_doing(project_root: PathBuf, home: Option<PathBuf>, text: String) -> Result<()> {
-    let event = append_local_event(
+pub async fn set_doing(project_root: PathBuf, home: Option<PathBuf>, text: String) -> Result<()> {
+    let event = append_or_post_event(
         &project_root,
         home,
         "actor.status",
@@ -177,13 +298,18 @@ pub fn set_doing(project_root: PathBuf, home: Option<PathBuf>, text: String) -> 
         DEFAULT_ACTOR,
         None,
         json!({ "current_step": text }),
-    )?;
+    )
+    .await?;
     println!("doing: updated seq={}", event.seq);
     Ok(())
 }
 
-pub fn watch_actor(project_root: PathBuf, home: Option<PathBuf>, actor: String) -> Result<()> {
-    let event = append_local_event(
+pub async fn watch_actor(
+    project_root: PathBuf,
+    home: Option<PathBuf>,
+    actor: String,
+) -> Result<()> {
+    let event = append_or_post_event(
         &project_root,
         home,
         "message.sent",
@@ -191,7 +317,8 @@ pub fn watch_actor(project_root: PathBuf, home: Option<PathBuf>, actor: String) 
         DEFAULT_ACTOR,
         Some(&actor),
         json!({ "intent": "watch", "actor": actor }),
-    )?;
+    )
+    .await?;
     println!("watch: added seq={}", event.seq);
     Ok(())
 }
@@ -217,7 +344,7 @@ pub fn job_events(
         .collect())
 }
 
-pub fn spawn_actor(
+pub async fn spawn_actor(
     project_root: PathBuf,
     home: Option<PathBuf>,
     kind: String,
@@ -226,7 +353,7 @@ pub fn spawn_actor(
     task_id: Option<String>,
 ) -> Result<()> {
     let actor = spawned_actor_id(&kind, task_id.as_deref());
-    let event = append_local_event(
+    let event = append_or_post_event(
         &project_root,
         home,
         "actor.spawned",
@@ -240,7 +367,8 @@ pub fn spawn_actor(
             "purpose": purpose,
             "task_id": task_id,
         }),
-    )?;
+    )
+    .await?;
     println!("actor: spawned seq={}", event.seq);
     Ok(())
 }
@@ -251,7 +379,7 @@ pub fn snapshot_statusline(project_root: PathBuf, home: Option<PathBuf>) -> Resu
     Ok(())
 }
 
-fn append_local_event(
+async fn append_or_post_event(
     project_root: &std::path::Path,
     home: Option<PathBuf>,
     event_type: &str,
@@ -260,7 +388,28 @@ fn append_local_event(
     to: Option<&str>,
     payload: Value,
 ) -> Result<crate::protocol::EventEnvelope> {
-    auth::require_local_mutating_project_credential(project_root, home)?;
+    auth::require_local_mutating_project_credential(project_root, home.clone())?;
+    if let Ok(metadata) = read_server_metadata(project_root) {
+        if metadata.mode == "remote" {
+            let token = auth::local_project_token(project_root, home)?;
+            let response = Client::new()
+                .post(format!("{}/api/events", base_url(&metadata)))
+                .bearer_auth(&token)
+                .json(&json!({
+                    "type": event_type,
+                    "room": room,
+                    "from": from,
+                    "to": to,
+                    "payload": payload,
+                }))
+                .send()
+                .await
+                .context("post remote daemon event")?
+                .error_for_status()
+                .context("remote daemon event rejected")?;
+            return response.json().await.context("parse remote daemon event");
+        }
+    }
     MeshStore::open(project_root)?.append_event(event_type, room, from, to, payload)
 }
 
@@ -314,6 +463,12 @@ mod tests {
     use crate::store::MeshStore;
 
     use super::{job_events, send_message};
+
+    #[test]
+    fn remote_metadata_url_rejects_non_http_scheme() {
+        let err = super::remote_metadata_from_url("ssh://example.com:47321").unwrap_err();
+        assert!(err.to_string().contains("remote mesh URL must use http"));
+    }
 
     #[test]
     fn job_events_require_local_project_credential() {
@@ -380,8 +535,8 @@ mod tests {
         assert_eq!(events[0].payload["task_id"], "two");
     }
 
-    #[test]
-    fn append_local_event_rejects_observer_project_credential() {
+    #[tokio::test]
+    async fn append_local_event_rejects_observer_project_credential() {
         let project = TempDir::new().unwrap();
         let home = TempDir::new().unwrap();
         write_project_config(project.path(), "Mesh Client");
@@ -393,6 +548,7 @@ mod tests {
             "session:worker".to_string(),
             "status?".to_string(),
         )
+        .await
         .unwrap_err();
 
         assert_eq!(
@@ -402,8 +558,8 @@ mod tests {
         assert!(!project.path().join(".workbench/mesh/events.jsonl").exists());
     }
 
-    #[test]
-    fn append_local_event_allows_worker_project_credential() {
+    #[tokio::test]
+    async fn append_local_event_allows_worker_project_credential() {
         let project = TempDir::new().unwrap();
         let home = TempDir::new().unwrap();
         write_project_config(project.path(), "Mesh Client");
@@ -415,6 +571,7 @@ mod tests {
             "session:worker".to_string(),
             "status?".to_string(),
         )
+        .await
         .unwrap();
 
         let events = MeshStore::open(project.path())

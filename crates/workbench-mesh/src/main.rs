@@ -20,6 +20,7 @@ enum Command {
     Event(EventCommand),
     Auth(AuthCommand),
     Invite(InviteCommand),
+    Device(DeviceCommand),
     Serve(ServeArgs),
     Status(ClientArgs),
     Who(ClientArgs),
@@ -172,7 +173,39 @@ struct InviteAcceptArgs {
     #[arg(long)]
     home: Option<PathBuf>,
     #[arg(long)]
+    url: Option<String>,
+    #[arg(long)]
     token: String,
+    #[arg(long)]
+    device: String,
+}
+
+#[derive(Debug, Args)]
+struct DeviceCommand {
+    #[command(subcommand)]
+    command: DeviceSubcommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum DeviceSubcommand {
+    List(DeviceListArgs),
+    Revoke(DeviceRevokeArgs),
+}
+
+#[derive(Debug, Args)]
+struct DeviceListArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+struct DeviceRevokeArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
     #[arg(long)]
     device: String,
 }
@@ -316,7 +349,8 @@ async fn main() -> Result<()> {
     match cli.command {
         Command::Event(event) => run_event(event),
         Command::Auth(auth) => run_auth(auth),
-        Command::Invite(invite) => run_invite(invite),
+        Command::Invite(invite) => run_invite(invite).await,
+        Command::Device(device) => run_device(device).await,
         Command::Serve(args) => {
             server::serve(ServeOptions {
                 project_root: args.target,
@@ -330,23 +364,23 @@ async fn main() -> Result<()> {
         Command::Status(args) => client::status(args.target, args.home).await,
         Command::Who(args) => client::who(args.target, args.home).await,
         Command::Bench(args) => client::bench(args.target, args.home, args.messages).await,
-        Command::Room(room) => run_room(room),
+        Command::Room(room) => run_room(room).await,
         Command::Message(args) => {
-            client::send_message(args.target, args.home, args.to_actor, args.text)
+            client::send_message(args.target, args.home, args.to_actor, args.text).await
         }
         Command::Ask(args) => {
-            client::ask_status(args.target, args.home, args.to_actor, args.question)
+            client::ask_status(args.target, args.home, args.to_actor, args.question).await
         }
         Command::Handoff(args) => {
-            client::handoff_task(args.target, args.home, args.task_id, args.to_actor)
+            client::handoff_task(args.target, args.home, args.task_id, args.to_actor).await
         }
         Command::Jobs(args) => client::print_jobs(args.target, args.home, args.since),
         Command::Availability(args) => {
-            client::set_availability(args.target, args.home, args.state, args.reason)
+            client::set_availability(args.target, args.home, args.state, args.reason).await
         }
-        Command::Doing(args) => client::set_doing(args.target, args.home, args.text),
-        Command::Watch(args) => client::watch_actor(args.target, args.home, args.actor),
-        Command::Actor(actor) => run_actor(actor),
+        Command::Doing(args) => client::set_doing(args.target, args.home, args.text).await,
+        Command::Watch(args) => client::watch_actor(args.target, args.home, args.actor).await,
+        Command::Actor(actor) => run_actor(actor).await,
         Command::Snapshot(snapshot) => run_snapshot(snapshot),
     }
 }
@@ -365,29 +399,43 @@ fn run_auth(auth_command: AuthCommand) -> Result<()> {
     }
 }
 
-fn run_invite(invite_command: InviteCommand) -> Result<()> {
+async fn run_invite(invite_command: InviteCommand) -> Result<()> {
     match invite_command.command {
         InviteSubcommand::Create(args) => invite_create(args),
-        InviteSubcommand::Accept(args) => invite_accept(args),
+        InviteSubcommand::Accept(args) => invite_accept(args).await,
     }
 }
 
-fn run_room(room_command: RoomCommand) -> Result<()> {
+async fn run_device(device_command: DeviceCommand) -> Result<()> {
+    match device_command.command {
+        DeviceSubcommand::List(args) => client::list_devices(args.target, args.home).await,
+        DeviceSubcommand::Revoke(args) => {
+            client::revoke_device(args.target, args.home, args.device).await
+        }
+    }
+}
+
+async fn run_room(room_command: RoomCommand) -> Result<()> {
     match room_command.command {
-        RoomSubcommand::Create(args) => client::create_room(args.target, args.home, args.name),
+        RoomSubcommand::Create(args) => {
+            client::create_room(args.target, args.home, args.name).await
+        }
     }
 }
 
-fn run_actor(actor_command: ActorCommand) -> Result<()> {
+async fn run_actor(actor_command: ActorCommand) -> Result<()> {
     match actor_command.command {
-        ActorSubcommand::Spawn(args) => client::spawn_actor(
-            args.target,
-            args.home,
-            args.kind,
-            args.parent,
-            args.purpose,
-            args.task_id,
-        ),
+        ActorSubcommand::Spawn(args) => {
+            client::spawn_actor(
+                args.target,
+                args.home,
+                args.kind,
+                args.parent,
+                args.purpose,
+                args.task_id,
+            )
+            .await
+        }
     }
 }
 
@@ -449,12 +497,16 @@ fn invite_create(args: InviteCreateArgs) -> Result<()> {
     Ok(())
 }
 
-fn invite_accept(args: InviteAcceptArgs) -> Result<()> {
-    println!(
-        "{}",
-        auth::accept_invite(&args.target, args.home, &args.token, &args.device)?
-    );
-    Ok(())
+async fn invite_accept(args: InviteAcceptArgs) -> Result<()> {
+    if let Some(url) = args.url {
+        client::accept_remote_invite(args.target, args.home, url, args.token, args.device).await
+    } else {
+        println!(
+            "{}",
+            auth::accept_invite(&args.target, args.home, &args.token, &args.device)?
+        );
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -463,7 +515,7 @@ mod tests {
 
     use clap::Parser;
 
-    use super::{Cli, Command};
+    use super::{Cli, Command, DeviceSubcommand, InviteSubcommand};
 
     #[test]
     fn parses_jobs_as_top_level_project_command() {
@@ -486,6 +538,62 @@ mod tests {
                 assert_eq!(args.since, 7);
             }
             other => panic!("expected jobs command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_remote_invite_accept_url() {
+        let cli = Cli::try_parse_from([
+            "workbench-mesh",
+            "invite",
+            "accept",
+            "--target",
+            "/tmp/project",
+            "--home",
+            "/tmp/home",
+            "--url",
+            "http://127.0.0.1:47321",
+            "--token",
+            "wb_invite_test",
+            "--device",
+            "macbook",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Command::Invite(invite) => match invite.command {
+                InviteSubcommand::Accept(args) => {
+                    assert_eq!(args.url.as_deref(), Some("http://127.0.0.1:47321"));
+                    assert_eq!(args.token, "wb_invite_test");
+                    assert_eq!(args.device, "macbook");
+                }
+                other => panic!("expected invite accept, got {other:?}"),
+            },
+            other => panic!("expected invite command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_device_revoke() {
+        let cli = Cli::try_parse_from([
+            "workbench-mesh",
+            "device",
+            "revoke",
+            "--target",
+            "/tmp/project",
+            "--home",
+            "/tmp/home",
+            "--device",
+            "macbook",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Command::Device(device) => match device.command {
+                DeviceSubcommand::Revoke(args) => assert_eq!(args.device, "macbook"),
+                other => panic!("expected device revoke, got {other:?}"),
+            },
+            other => panic!("expected device command, got {other:?}"),
         }
     }
 }
