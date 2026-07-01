@@ -20,5 +20,8 @@
     "continuity",
     "maturity-model",
     "claude-code"
+  ],
+  "dependencies": [
+    { "name": "superpowers", "version": ">=6.1.0" }
   ]
 }

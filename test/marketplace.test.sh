@@ -15,6 +15,16 @@ chk "validator reports publishable"     "bash '$V' '$HERE' 2>/dev/null | grep -q
 chk "license is MIT, not Proprietary"   "grep -q '\"license\": \"MIT\"' '$HERE/.claude-plugin/plugin.json' && ! grep -qi 'proprietary' '$HERE/.claude-plugin/plugin.json'"
 chk "homepage is not stale (beebeeb)"   "! grep -qi 'beebeeb' '$HERE/.claude-plugin/plugin.json'"
 chk "LICENSE file exists + is MIT"      "[ -f '$HERE/LICENSE' ] && grep -qi 'MIT License' '$HERE/LICENSE'"
+chk "plugin declares superpowers dependency or docs fallback" "python3 - <<'PY' '$HERE/.claude-plugin/plugin.json' '$HERE/README.md'
+import json, sys
+pj=json.load(open(sys.argv[1]))
+deps=pj.get('dependencies', [])
+ok=any(isinstance(d, dict) and d.get('name')=='superpowers' and d.get('version')=='>=6.1.0' for d in deps)
+docs='/plugin install superpowers@claude-plugins-official' in open(sys.argv[2]).read()
+raise SystemExit(0 if (ok or docs) else 1)
+PY"
+chk "README documents Superpowers" "grep -q 'Superpowers' '$HERE/README.md' && grep -q '/plugin install superpowers@claude-plugins-official' '$HERE/README.md'"
+chk "README documents verified Mesh binary acquisition" "grep -q 'checksum-verified' '$HERE/README.md' && grep -q 'checksums.txt' '$HERE/README.md'"
 
 # --- negatives: the validator must REJECT broken manifests ---
 mkbad() { # builds a temp plugin dir; $1 = plugin.json body, $2 = marketplace.json body, $3 = write LICENSE? (1/0)

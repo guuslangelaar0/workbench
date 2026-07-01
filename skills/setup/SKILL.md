@@ -17,6 +17,24 @@ Before prompting the user for anything, **read the project signals** to understa
 
 Then **give positive feedback**: name what's already good. Example: "You have 87 commits with consistent message style, a feature-branch workflow, and two tagged releases — that's a solid foundation." Be specific, not generic. This is the first thing the user hears — make it feel like a colleague who's paying attention, not a form.
 
+## Step 0a: Check Superpowers availability
+
+Run `claude plugin list --json` when the CLI is available. If `superpowers@claude-plugins-official` is not installed/enabled, tell the user:
+
+```text
+Workbench works best with Superpowers for brainstorm -> spec -> plan, TDD, code review, verification-before-completion, and subagent-driven development.
+Install it with:
+/plugin install superpowers@claude-plugins-official
+```
+
+Map these user intents to Superpowers when available:
+- "brainstorm/spec this properly" -> `superpowers:brainstorming`
+- "write the implementation plan" -> `superpowers:writing-plans`
+- "build this test-first" -> `superpowers:test-driven-development`
+- "build with subagents" -> `superpowers:subagent-driven-development`
+- "review before shipping" -> `superpowers:requesting-code-review`
+- "prove it is done" -> `superpowers:verification-before-completion`
+
 ## Step 0b: Infer level and recommend
 
 **Run the detector — don't eyeball it.** It maps the same git/repo signals to a level deterministically:

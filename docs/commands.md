@@ -79,6 +79,8 @@ View or reconcile the **context backbone** in `.claude/architecture/` — C4-sty
 ### `/workbench:mesh start --local`
 Start the Rust-backed command center on this machine only. Durable same-user credential material lives outside git under `$WORKBENCH_HOME` (`~/.workbench` by default) with OS-protected permissions. The wrapper launches `bin/workbench-mesh` through `scripts/mesh.sh` and writes ignored project runtime metadata to `.workbench/mesh/server.json` for host/port discovery; that metadata may include an ephemeral local daemon access token, but not the durable credential or root key, and `open` does not print tokenized daemon URLs. When the port is auto-assigned, use `/workbench:mesh open` to print the cached command-center URL.
 
+On first `/workbench:mesh` use, Workbench resolves the Rust binary in this order: bundled binary, checksum-verified cached binary under `${CLAUDE_PLUGIN_DATA}`, local development build, then a GitHub release download verified against `checksums.txt`. If no verified asset exists for your platform, it prints the exact `cargo build --release -p workbench-mesh` fallback instead of running an unsigned binary.
+
 ### `/workbench:mesh start --lan`
 Start the command center on the local network for another trusted machine on the same LAN. The output shows the hostname form, the `.local` mDNS form, the raw LAN IP, and the port, then keeps public internet exposure unavailable in this version. Use `/workbench:mesh invite --role worker --ttl-seconds 900` to create a scoped invite token.
 

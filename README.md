@@ -34,9 +34,12 @@ Coding agents are brilliant in the moment and amnesiac across sessions. workbenc
 workbench is a Claude Code plugin. From any Claude Code session:
 
 ```text
+/plugin install superpowers@claude-plugins-official
 /plugin marketplace add guuslangelaar0/workbench
 /plugin install workbench@workbench
 ```
+
+Workbench declares Superpowers as its companion discipline plugin on Claude Code versions that support plugin dependencies. If your Claude Code build does not auto-install it, install it explicitly with `/plugin install superpowers@claude-plugins-official`.
 
 Then start (or restart) Claude Code in your project. There is one prefix to remember — type `/workbench` and the command menu filters to the whole `/workbench:*` family. The front door is:
 
@@ -60,6 +63,8 @@ On an unconfigured project it runs a short guided setup; on a configured one it 
 /workbench:mesh start --lan     # invite another machine on your LAN
 /workbench:loop                 # run the autonomous teamlead loop: pick → dispatch → verify-gate → repeat
 ```
+
+On first `/workbench:mesh` use, Workbench resolves the Rust binary in this order: bundled binary, checksum-verified cached binary under `${CLAUDE_PLUGIN_DATA}`, local development build, then a GitHub release download verified against `checksums.txt`. If no verified asset exists for your platform, it prints the exact `cargo build --release -p workbench-mesh` fallback instead of running an unsigned binary.
 
 That's the whole rhythm: pick a level, capture work as tasks, let the loop drive them to *verified* with evidence, and graduate the level when the project outgrows it.
 
@@ -199,6 +204,7 @@ workbench/
 ## Works with
 
 - **[graphify](https://github.com/safishamsi/graphify)** — supplies the *extracted reality* half of the context backbone (the real module graph that `/workbench:architecture drift` reconciles against your authored C4 docs).
+- **[Superpowers](https://github.com/anthropics/claude-code/tree/main/plugins/superpowers)** — the companion discipline layer for brainstorm -> spec -> plan, TDD, code review, verification-before-completion, and subagent-driven development. Workbench routes those intents to Superpowers when it is installed.
 - **[Claude Code](https://claude.com/claude-code)** — the host. workbench is a plugin; everything it scaffolds is plain files that outlive it.
 
 ## Contributing
