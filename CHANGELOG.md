@@ -6,6 +6,16 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Mesh remote/LAN onboarding: `/workbench:mesh connect http://HOST:PORT TOKEN [DEVICE]` redeems a trusted LAN invite through the host daemon, stores the joining device credential outside the repo, and lets the host list/revoke device credentials.
+
+### Changed
+- Mesh invite output now includes copyable connect commands using hostname/mDNS and raw IP forms while keeping tokens out of URLs.
+- The command center now includes a Devices inventory and uses the backend `observer` role label.
+
+### Fixed
+- Remote invite tokens are no longer treated as unsupported or accidentally local-only; revoked remote device credentials stop authenticating immediately.
+
 ## [0.5.1] - 2026-07-01
 
 ### Added

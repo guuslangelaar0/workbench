@@ -79,6 +79,7 @@ doing="$(json_string "$json" doing)"
 active="$(json_number "$json" active_count)"; [ -n "$active" ] || active=0
 stale="$(json_number "$json" stale_count)"; [ -n "$stale" ] || stale=0
 watched="$(json_array_strings "$json" watched)"
+devices="$(json_array_strings "$json" devices)"
 unread="$(json_number "$json" unread_mentions)"; [ -n "$unread" ] || unread=0
 
 activity="$availability"
@@ -86,6 +87,7 @@ activity="$availability"
 
 line="workbench/$project | $actor | $activity | team $active active, $stale stale"
 [ -n "$watched" ] && line="$line | watching $watched"
+[ -n "$devices" ] && line="$line | devices $devices"
 [ "$unread" -gt 0 ] 2>/dev/null && line="$line | $unread unread"
 
 printf '%s\n' "$line"

@@ -87,8 +87,11 @@ Start the command center on the local network for another trusted machine on the
 ### `/workbench:mesh invite [--role ROLE] [--ttl-seconds N] [--max-uses N]`
 Create a LAN invite token. Tokens are the auth boundary for another machine joining the mesh; local same-user access uses durable credentials stored under `$WORKBENCH_HOME` / `~/.workbench`, not project-local `.workbench/mesh/server.json`. `ROLE` defaults to `worker`.
 
-### `/workbench:mesh connect TOKEN [DEVICE]`
-Accept a local project invite token for this device. Remote URL acceptance is intentionally deferred until the Rust runtime supports it end-to-end; the wrapper fails clearly instead of pretending a URL token is local.
+### `/workbench:mesh connect [URL] TOKEN [DEVICE]`
+Accept an invite token for this device. Without `URL`, the token is redeemed against the local project runtime. With `http://HOST:PORT`, the token is redeemed against a trusted LAN mesh host, and the joining device stores its credential under `$WORKBENCH_HOME/mesh/`. The token is a command argument, not a URL parameter.
+
+### `/workbench:mesh devices` / `/workbench:mesh revoke-device DEVICE`
+List connected LAN devices or revoke a device credential. Revocation happens on the daemon-side hashed device registry, so an already-issued remote bearer token stops working immediately.
 
 ### `/workbench:mesh status | who | jobs | open`
 Inspect the mesh runtime. `status` and `who` show registered actors and rooms, `jobs` lists recent job/task events, and `open` prints the cached non-tokenized command-center URL from ignored discovery metadata in `.workbench/mesh/server.json`.

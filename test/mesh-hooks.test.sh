@@ -13,7 +13,7 @@ cat > "$HOME_TMP/mesh/statusline/aaa-other.json" <<'JSON'
 {"project":"OtherProject","current_actor":"wrong actor","availability":"busy","doing":"wrong cache","active_count":9,"stale_count":8,"watched":["wrong watcher"],"unread_mentions":7}
 JSON
 cat > "$HOME_TMP/mesh/statusline/meshhooks.json" <<'JSON'
-{"project":"MeshHooks","current_actor":"checkout lead","availability":"busy","doing":"retry tests","active_count":3,"stale_count":1,"watched":["macbook testing 0042"],"unread_mentions":2}
+{"project":"MeshHooks","current_actor":"checkout lead","availability":"busy","doing":"retry tests","active_count":3,"stale_count":1,"watched":["macbook testing 0042"],"devices":["macbook"],"unread_mentions":2}
 JSON
 cat > "$TMP/.workbench/mesh/server.json" <<'JSON'
 {"host":"127.0.0.1","port":47321,"local_token":"secret-local-token"}
@@ -24,6 +24,7 @@ chk "statusline preserves workbench brand and names project" "printf '%s' \"\$OU
 chk "statusline prints actor" "printf '%s' \"\$OUT\" | grep -q 'checkout lead'"
 chk "statusline prints team pulse" "printf '%s' \"\$OUT\" | grep -q '3 active'"
 chk "statusline does not require server" "printf '%s' \"\$OUT\" | grep -q 'macbook testing 0042'"
+chk "statusline prints connected devices" "printf '%s' \"\$OUT\" | grep -q 'devices macbook'"
 chk "statusline selects matching project cache" "! printf '%s' \"\$OUT\" | grep -q 'wrong actor'"
 chk "statusline avoids network/build/blocking commands" "! grep -Eq '(^|[[:space:];|&])(curl|git|cargo|sleep|jq)([[:space:];|&]|$)' '$HERE/hooks/bin/mesh-statusline.sh'"
 

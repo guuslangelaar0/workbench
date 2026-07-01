@@ -16,6 +16,8 @@ Use Workbench Mesh for cross-session, cross-device, and teamlead communication i
 - Use `/workbench:mesh handoff <task-id> <target>` only when the user wants work transferred or delegated.
 - Use `/workbench:mesh availability <state>` and `/workbench:mesh doing <text>` to publish this session's current presence before coordinating.
 - Use `/workbench:mesh invite --role <role>` only when another device or user needs to join over LAN.
+- Use `/workbench:mesh connect URL TOKEN [DEVICE]` when the user is on the joining machine and has an invite URL/token from another trusted LAN host.
+- Use `/workbench:mesh devices` and `/workbench:mesh revoke-device <device>` to inspect and remove LAN device credentials.
 
 Chat, status, and help are first-class mesh work. Do not reduce every cross-session interaction to a task handoff.
 

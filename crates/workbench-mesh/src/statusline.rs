@@ -19,6 +19,7 @@ pub struct StatuslineSnapshot {
     pub active_count: usize,
     pub stale_count: usize,
     pub watched: Vec<String>,
+    pub devices: Vec<String>,
     pub unread_mentions: usize,
 }
 
@@ -47,6 +48,7 @@ pub fn project_events_snapshot(project: &str, events: &[EventEnvelope]) -> Statu
     let mut active = BTreeSet::new();
     let mut stale = BTreeSet::new();
     let mut watched = BTreeSet::new();
+    let mut devices = BTreeSet::new();
     let mut room_names = BTreeSet::new();
     let mut actor_purposes = BTreeMap::new();
     let mut availability_by_actor = BTreeMap::new();
@@ -123,6 +125,18 @@ pub fn project_events_snapshot(project: &str, events: &[EventEnvelope]) -> Statu
                 }
             }
             "message.mention" => unread_mentions += 1,
+            "device.connected" => {
+                if let Some(device) = event.payload.get("device").and_then(|value| value.as_str()) {
+                    devices.insert(device.to_string());
+                } else if let Some(to) = &event.to {
+                    devices.insert(to.trim_start_matches("device:").to_string());
+                }
+            }
+            "device.revoked" => {
+                if let Some(device) = event.payload.get("device").and_then(|value| value.as_str()) {
+                    devices.remove(device);
+                }
+            }
             "presence.stale" | "actor.stale" => {
                 stale.insert(event.from.clone());
                 active.remove(&event.from);
@@ -155,6 +169,7 @@ pub fn project_events_snapshot(project: &str, events: &[EventEnvelope]) -> Statu
         active_count: active.len(),
         stale_count: stale.len(),
         watched: watched.into_iter().collect(),
+        devices: devices.into_iter().collect(),
         unread_mentions,
     }
 }
@@ -166,9 +181,14 @@ pub fn render_compact(snapshot: &StatuslineSnapshot) -> String {
         }
         _ => snapshot.availability.clone(),
     };
+    let devices = if snapshot.devices.is_empty() {
+        String::new()
+    } else {
+        format!(" | devices {}", snapshot.devices.join(", "))
+    };
     format!(
-        "workbench | {} | {} | team {} active, {} stale",
-        snapshot.current_actor, activity, snapshot.active_count, snapshot.stale_count
+        "workbench | {} | {} | team {} active, {} stale{}",
+        snapshot.current_actor, activity, snapshot.active_count, snapshot.stale_count, devices
     )
 }
 
@@ -362,6 +382,31 @@ mod tests {
 
         assert_eq!(snapshot.current_actor, "checkout lead");
         assert_eq!(snapshot.purpose, None);
+    }
+
+    #[test]
+    fn device_events_appear_in_snapshot_and_rendering() {
+        let events = vec![
+            event(
+                1,
+                "device.connected",
+                "auth:invite",
+                Some("device:macbook"),
+                json!({ "device": "macbook", "role": "worker" }),
+            ),
+            event(
+                2,
+                "presence.heartbeat",
+                "session:lead",
+                None,
+                json!({ "availability": "available" }),
+            ),
+        ];
+
+        let snapshot = project_events_snapshot("meshops", &events);
+
+        assert_eq!(snapshot.devices, vec!["macbook"]);
+        assert!(super::render_compact(&snapshot).contains("devices macbook"));
     }
 
     fn event(

@@ -105,10 +105,10 @@ The command center has three exposure modes:
 | Mode | Command | Auth model |
 |------|---------|------------|
 | Local | `/workbench:mesh start --local` | Same-user access for this machine. Durable credential material lives outside git under `$WORKBENCH_HOME` (`~/.workbench` by default) with OS-protected permissions; project-local metadata may only bootstrap the current daemon and is not printed as URL authority. |
-| LAN | `/workbench:mesh start --lan` | Explicit opt-in for the local network; another machine joins with a scoped invite token from `/workbench:mesh invite`. |
+| LAN | `/workbench:mesh start --lan` | Explicit opt-in for the local network; another machine joins with a scoped invite token from `/workbench:mesh invite` and `/workbench:mesh connect http://HOST:PORT TOKEN [DEVICE]`. |
 | Public | Deferred | Public internet exposure is out of scope in this version. |
 
-When started for LAN, the wrapper prints every address form a user may need to copy: the host name, the `.local` mDNS name, the raw LAN IP, and the port. Ignored runtime metadata is also written to `.workbench/mesh/server.json`, so `/workbench:mesh open` can print the current command-center URL later. That file is for host/port discovery and may include an ephemeral local daemon access token, but it is not the durable same-user credential store or root key and the wrapper does not print it in invite/open URLs.
+When started for LAN, the wrapper prints every address form a user may need to copy: the host name, the `.local` mDNS name, the raw LAN IP, and the port. Trusted LAN URL acceptance is supported through `connect`, with tokens passed as command arguments rather than URL parameters. Ignored runtime metadata is also written to `.workbench/mesh/server.json`, so `/workbench:mesh open` can print the current command-center URL later. That file is for host/port discovery and may include an ephemeral local daemon access token, but it is not the durable same-user credential store or root key and the wrapper does not print it in invite/open URLs.
 
 Mesh actors are hierarchical:
 
@@ -119,7 +119,7 @@ Mesh actors are hierarchical:
 | Worker | A joined Claude session/device that can receive asks, handoffs, and status checks. |
 | Job | A task execution or handoff unit that emits lifecycle events. |
 
-The statusline integration reads a cached mesh snapshot rather than polling the live API on every render. That keeps prompt-time overhead low while still surfacing presence, availability, and current `doing` text when a mesh is active.
+The statusline integration reads a cached mesh snapshot rather than polling the live API on every render. That keeps prompt-time overhead low while still surfacing presence, availability, current `doing` text, and connected LAN devices when a mesh is active.
 
 ---
 

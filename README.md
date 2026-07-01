@@ -61,6 +61,7 @@ On an unconfigured project it runs a short guided setup; on a configured one it 
 /workbench:mc                   # Mission Control: a dashboard of tasks, the in-review cap, build, prod
 /workbench:mesh start --local   # open the local Workbench Mesh command center
 /workbench:mesh start --lan     # invite another machine on your LAN
+/workbench:mesh connect http://HOST:PORT TOKEN macbook  # join a trusted LAN mesh
 /workbench:loop                 # run the autonomous teamlead loop: pick → dispatch → verify-gate → repeat
 ```
 
@@ -163,7 +164,7 @@ Five capabilities, all configured from the level you pick:
 - **Lead purpose + parking** — a lead session has a durable purpose (one task, one track, or a backlog-scouting pass). When unrelated work appears mid-feature, `/workbench:park` captures it as a backlog task with origin metadata instead of widening the active branch silently.
 - **Continuity** — `SessionStart` re-grounds each new session from disk, `PreCompact` checkpoints before context is compacted, and a `SESSION_STATE.md` handoff means the next session resumes from the file alone.
 - **Coordination** — multiple concurrent sessions register presence, claim tasks, and get warned before they collide; worktrees isolate parallel work.
-- **Workbench Mesh** — a Rust control-plane binary behind `/workbench:mesh` opens a local/LAN command center for natural requests like "talk to my MacBook Claude session", "open a lead channel", or "ask worker status." It uses same-user local credentials by default, LAN invite tokens when you explicitly expose the service with `start --lan`, and keeps public internet exposure out of scope.
+- **Workbench Mesh** — a Rust control-plane binary behind `/workbench:mesh` opens a local/LAN command center for natural requests like "talk to my MacBook Claude session", "open a lead channel", or "ask worker status." Remote/LAN joins use short-lived invite tokens exchanged for device credentials stored outside the repo. The host keeps only hashed device credentials and can list/revoke devices through `/workbench:mesh devices` and `/workbench:mesh revoke-device`.
 - **Discipline built in** — brainstorm → spec → plan before building; "done" means *verified with evidence*, never "should work."
 
 → The model behind each: **[docs/concepts.md](docs/concepts.md)**.

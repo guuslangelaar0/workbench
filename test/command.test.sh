@@ -22,5 +22,6 @@ chk "mesh command exists"       "[ -f '$HERE/commands/mesh.md' ]"
 chk "mesh command uses mesh.sh"  "grep -q 'scripts/mesh.sh' '$HERE/commands/mesh.md'"
 chk "mesh command blocks public exposure" "grep -qi 'Never expose public internet' '$HERE/commands/mesh.md'"
 chk "mesh command maps room chat intent" "grep -q 'message lead:checkout what are you touching' '$HERE/commands/mesh.md'"
+chk "mesh command routes remote natural intent" "grep -q 'talk to my MacBook Claude' '$HERE/commands/mesh.md' && grep -q 'connect URL TOKEN' '$HERE/commands/mesh.md'"
 
 [ "$fail" = 0 ] && echo "PASS: command" || { echo "command test failed"; exit 1; }
