@@ -95,8 +95,26 @@ PY
 mesh_event_contains() { # <dir> <event-type> <payload-regex>
   local events="$1/.workbench/mesh/events.jsonl"
   [ -f "$events" ] || return 1
-  grep -q "\"type\":\"$2\"" "$events" || return 1
-  grep -qiE "$3" "$events"
+  python3 - "$events" "$2" "$3" <<'PY'
+import json
+import re
+import sys
+
+path, want_type, pattern = sys.argv[1:4]
+evidence = re.compile(pattern, re.IGNORECASE)
+
+with open(path, encoding="utf-8") as f:
+    for raw in f:
+        line = raw.rstrip("\n")
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") == want_type and evidence.search(line):
+            raise SystemExit(0)
+
+raise SystemExit(1)
+PY
 }
 
 # ---- scenario 1: the plugin loads and /workbench:task creates a task ---------
@@ -245,7 +263,7 @@ rm -rf "$D12"
 # ---- scenario 13: /workbench:mesh maps natural collaboration intent ---------
 note "13) /workbench:mesh maps natural team intent to chat/status events"
 D13="$(scaffold "E2E Mesh Natural" crew)"
-out="$(cd "$D13" && drive "$D13" 'Run /workbench:mesh start --local --port 0 --pid-file mesh.pid > mesh.log 2>&1 & through the Workbench plugin slash-command surface so local credentials exist and the daemon stays in the background. Wait until .workbench/mesh/server.json exists. Then run these exact slash-command operations: /workbench:mesh room lead:checkout; /workbench:mesh message lead:checkout what are you touching?; /workbench:mesh who. Paste the concrete room, message, and who command results. Do not add a create subcommand to room. Do not bypass the slash-command surface. Do it directly.')"
+out="$(cd "$D13" && drive "$D13" 'Use the Workbench mesh plugin slash-command surface for every mesh operation. First start local mesh in the background with local-only binding, port 0, and pid-file mesh.pid, redirecting output to mesh.log so the session returns; wait until .workbench/mesh/server.json exists. Then handle this team request in the natural Workbench mesh way: I need a checkout lead room named lead:checkout, I need that room asked "what are you touching?", and I need to see who is connected. Choose the appropriate Workbench mesh operations yourself and print the concrete results from the room setup, chat send, and team roster. Do not call scripts/mesh.sh directly. Do not run mesh start in the foreground. Do not expose LAN.')"
 mesh_event_contains "$D13" 'room.created' 'lead:checkout' \
   && mesh_event_contains "$D13" 'message.sent' 'what are you touching' \
   && contains "$out" 'connected_actor_count|session:lead|actor' \
