@@ -90,7 +90,7 @@ That's the whole rhythm: pick a level, capture work as tasks, let the loop drive
 | `/workbench:epic "<title>"` | Create or list epics — groups of related tasks with a live task rollup (pair level and up) |
 | `/workbench:decision "<title>"` | Capture an irreversible architecture/product fork in `decisions/` |
 | `/workbench:dispatch <id>` | Move a task to in-development and dispatch it to an engineer, using native worktree isolation for parallel lanes |
-| `/workbench:codex-engineer <id>` | Dispatch a task to Codex through the OpenAI Codex plugin while Workbench keeps lifecycle and verification ownership; `--reconcile` handles Codex lanes that finish without a callback |
+| `/workbench:codex-engineer <id>` | Dispatch a task to Codex through the OpenAI Codex plugin while Workbench keeps lifecycle and verification ownership; `--reconcile`, `/workbench:mc`, and `/workbench:mesh jobs` show callback-less Codex lane status. |
 | `/workbench:verify <id>` | Run a task's verification and gate it to `verified/` (or back) |
 | `/workbench:mc` | Mission Control: a text dashboard of tasks, cap, build, and prod |
 | `/workbench:teamlead <topic>` | Scope this session to one track and lock tasks so leads don't collide |
@@ -212,7 +212,7 @@ workbench/
 
 - **[graphify](https://github.com/safishamsi/graphify)** — supplies the *extracted reality* half of the context backbone (the real module graph that `/workbench:architecture drift` reconciles against your authored C4 docs).
 - **Superpowers** — the companion discipline layer for brainstorm -> spec -> plan, TDD, code review, verification-before-completion, and subagent-driven development. Workbench routes those intents to Superpowers when it is installed.
-- **OpenAI Codex plugin** — optional native Codex engineer lane via `/workbench:codex-engineer`, backed by the Codex plugin's `codex:codex-rescue` subagent.
+- **OpenAI Codex plugin** — optional native Codex engineer lane via `/workbench:codex-engineer`, backed by the Codex plugin's `codex:codex-rescue` subagent. Codex lanes are tracked as Workbench jobs so the lead can reconcile from disk when a callback is dropped.
 - **[Claude Code](https://claude.com/claude-code)** — the host. workbench is a plugin; everything it scaffolds is plain files that outlive it.
 
 ## Contributing

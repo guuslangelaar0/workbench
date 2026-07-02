@@ -8,8 +8,8 @@ Dispatch a task to Codex through the native OpenAI Codex plugin. Use this when t
 
 You are still the Workbench lead. Codex is the engineer. You own task lifecycle, review, and verification after Codex returns.
 
-Codex completion notifications are best-effort. Codex may finish and disappear from the active thread list without sending the same second callback Claude engineer lanes send. Treat the task file, git state, lane lease, and `claude agents` as the source of truth.
-The disk lease commands are `lane.sh start`, `lane.sh status`, and `lane.sh beat`; they make Codex progress visible even when the callback is dropped.
+Codex completion notifications are best-effort. Codex may finish and disappear from the active thread list without sending the same second callback Claude engineer lanes send. Treat the Workbench job ledger, task file, git state, lane lease, and `claude agents` as the source of truth.
+The disk lease commands are `lane.sh start`, `lane.sh status`, and `lane.sh beat`; the job ledger lives under `.workbench/jobs/`. Together they make Codex progress visible even when the callback is dropped.
 
 1. Parse `$ARGUMENTS`:
    - first non-flag token is the 4-digit task id

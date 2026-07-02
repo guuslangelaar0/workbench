@@ -60,7 +60,7 @@ Capture an irreversible architecture/product fork in `.claude/tasks/decisions/` 
 Move an explicit unblocked task to `in-development/` and dispatch it to an engineer subagent in the given lane. It must respect task claims, `Blocked-by` dependencies, and in-review cap pressure before spawning work. Engineer/verifier agents use Claude Code native `isolation: worktree`; for multiple same-repo lanes, use `--worktree --background` to launch a native `claude --worktree <name> --bg --agent engineer` lane and monitor it with `claude agents`. `--shared` avoids a persistent/background worktree and uses the normal foreground Task-tool lane; that lane can still use Claude's temporary worktree isolation. When a lane needs current-branch state, commit/push that state or set Claude Code `worktree.baseRef` to `"head"` before launch.
 
 ### `/workbench:codex-engineer <id> [--background|--wait|--reconcile] [--fresh|--resume] [--model <model>] [--effort <level>]`
-Move a task to `in-development/` and dispatch it to Codex through the OpenAI Codex plugin's native `codex:codex-rescue` subagent. Workbench still owns task claiming, lifecycle, review, and `/workbench:verify`; Codex acts as the engineer lane. Codex completion callbacks are best-effort, so `--reconcile` checks `claude agents`, the disk lane lease, task notes, and git state when Codex finished without returning a second notification. If Codex is not set up, run `/codex:setup`.
+Move a task to `in-development/` and dispatch it to Codex through the OpenAI Codex plugin's native `codex:codex-rescue` subagent. Workbench still owns task claiming, lifecycle, review, and `/workbench:verify`; Codex acts as the engineer lane. Codex completion callbacks are best-effort, so `--reconcile` checks `claude agents`, the disk lane lease, task notes, the Workbench job ledger, and git state when Codex finished without returning a second notification. Use `--reconcile` when Codex appears to have finished without returning a callback. Workbench reads the job ledger, lane lease, task notes, git artifacts, and active Claude agents before deciding whether the next action is wait, verify, retry, or re-dispatch. If Codex is not set up, run `/codex:setup`.
 
 ### `/workbench:verify <id>`
 Run a task's declared verification, review the diff, build, and gate it: on pass → `verified/` (or `staged/` if deploy-gated) with evidence captured; on fail → back to `in-development/`.
@@ -103,7 +103,7 @@ Accept an invite token for this device. Without `URL`, the token is redeemed aga
 List connected LAN devices or revoke a device credential. Revocation happens on the daemon-side hashed device registry, so an already-issued remote bearer token stops working immediately.
 
 ### `/workbench:mesh status | who | jobs | open`
-Inspect the mesh runtime. `status` and `who` show registered actors and rooms, `jobs` lists recent job/task events, and `open` prints the cached non-tokenized command-center URL from ignored discovery metadata in `.workbench/mesh/server.json`.
+Inspect the mesh runtime. `status` and `who` show registered actors and rooms, `jobs` lists active Workbench jobs when Codex lanes are in flight and otherwise falls back to recent mesh job/task events, and `open` prints the cached non-tokenized command-center URL from ignored discovery metadata in `.workbench/mesh/server.json`.
 
 ### `/workbench:mesh room NAME`
 Create or join a structured room. Lead channels conventionally use names like `lead:checkout` so multiple leads can coordinate without collapsing into one global chat.

@@ -6,6 +6,9 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Track Codex engineer lanes as durable Workbench jobs so `/workbench:mc`, `/workbench:mesh jobs`, and `/workbench:codex-engineer --reconcile` can show status even when Codex does not send a completion callback.
+
 ## [0.7.1] - 2026-07-02
 
 The uninstall deactivation fix. Workbench project uninstall now removes the active config marker so a repo that has been uninstalled no longer re-enters Workbench through hooks, hook-mode checks, or the front door.
