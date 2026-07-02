@@ -1,4 +1,5 @@
 {
+  "description": "Pair/crew preset: 3 generic generators + the critic. Rewrite the generators for YOUR project's 2-3 genuinely distinct areas of concern — these defaults are placeholders for domains, not the domains themselves.",
   "cadence_hours": 24,
   "queue_low_water": 2,
   "retro_slice": 3,

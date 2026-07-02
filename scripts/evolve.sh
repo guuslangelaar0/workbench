@@ -15,7 +15,11 @@
 #   last-summit     epoch of the last summit start (written by record-summit)
 #
 # Usage:
-#   evolve.sh init             [--target DIR]              scaffold roster + ledger (idempotent)
+#   evolve.sh init             [--target DIR] [--preset solo|crew|admin-example]
+#                                scaffold roster + ledger (idempotent). Without --preset the
+#                                tier follows the project's maturity level: solo -> the
+#                                2-persona solo preset; pair/crew/fleet -> the 3+1 crew preset.
+#                                admin-example is the worked 4-generator internal-admin panel.
 #   evolve.sh validate         [--target DIR]              check the roster (exit 2 on invalid)
 #   evolve.sh roster           [--target DIR]              TSV: name<TAB>role<TAB>prompt
 #   evolve.sh check            [--target DIR] [--track T]  first line: disabled | due <reason> | not-due
@@ -34,11 +38,12 @@ evo_ledger() { printf '%s\n' "$(evo_dir "$1")/ideas-log.md"; }
 evo_stamp()  { printf '%s\n' "$(evo_dir "$1")/last-summit"; }
 
 CMD="${1:-}"; [ "$#" -gt 0 ] && shift
-TARGET="$PWD" TRACK="" LIMIT="" PERSONA="" IDEA="" DISPOSITION=""
+TARGET="$PWD" TRACK="" LIMIT="" PERSONA="" IDEA="" DISPOSITION="" PRESET=""
 need_arg() { [ "$#" -ge 2 ] || { echo "evolve.sh: $1 requires a value" >&2; exit 64; }; }
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --target)      need_arg "$@"; TARGET="$2"; shift 2 ;;
+    --preset)      need_arg "$@"; PRESET="$2"; shift 2 ;;
     --track)       need_arg "$@"; TRACK="$2"; shift 2 ;;
     --limit)       need_arg "$@"; LIMIT="$2"; shift 2 ;;
     --persona)     need_arg "$@"; PERSONA="$2"; shift 2 ;;
@@ -168,8 +173,19 @@ case "$CMD" in
     if [ -f "$dir/personas.json" ]; then
       echo "evolve: roster already exists at $dir/personas.json (left untouched)"
     else
-      cp "$PLUGIN_ROOT/templates/evolution/personas.json" "$dir/personas.json"
-      echo "evolve: scaffolded default roster at $dir/personas.json — edit it for YOUR domain"
+      # Preset tiers follow the existing maturity ladder — no separate preset dial.
+      if [ -z "$PRESET" ]; then
+        lvl="$(sed -n 's/.*"level"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$(il_cfg_dir "$TARGET")/config.json" 2>/dev/null | head -1)"
+        case "$lvl" in
+          solo) PRESET="solo" ;;
+          *)    PRESET="crew" ;;   # pair/crew/fleet: split generators by real domains
+        esac
+        echo "evolve: level '${lvl:-unknown}' -> preset '$PRESET' (override with --preset solo|crew|admin-example)"
+      fi
+      src="$PLUGIN_ROOT/templates/evolution/personas.$PRESET.json"
+      [ -f "$src" ] || { echo "evolve.sh: unknown preset '$PRESET' (solo|crew|admin-example)" >&2; exit 64; }
+      cp "$src" "$dir/personas.json"
+      echo "evolve: scaffolded '$PRESET' roster at $dir/personas.json — rewrite the generators for YOUR domain"
     fi
     _ensure_ledger "$TARGET"
     echo "evolve: ledger at $(evo_ledger "$TARGET")"

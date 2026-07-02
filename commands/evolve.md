@@ -12,13 +12,13 @@ Read `$ARGUMENTS` and act:
 
 ## `init`
 
-Scaffold the persona roster + ideas ledger (idempotent, never overwrites an existing roster):
+Scaffold the persona roster + ideas ledger (idempotent, never overwrites an existing roster). Without `--preset`, the tier follows the project's maturity level in `.workbench/config.json` — solo gets the 2-persona preset (one broad generator + critic), pair/crew/fleet get the 3-generator crew preset:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/evolve.sh" init --target "${CLAUDE_PROJECT_DIR}"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/evolve.sh" init --target "${CLAUDE_PROJECT_DIR}" [--preset solo|crew|admin-example]
 ```
 
-Then **help the human tailor the roster to their domain**: read the scaffolded `.workbench/evolution/personas.json`, show the default panel (3 generic generators + 1 critic), and offer to rewrite the generator personas for this project's actual domain (keep exactly ONE critic — the constraint is enforced by `evolve.sh validate`). The roster schema is `templates/schemas/personas.schema.json` in the plugin.
+Then **help the human tailor the roster to their domain** (wizard-style, like `/workbench:setup`): read the scaffolded `.workbench/evolution/personas.json`, present the suggested tier as a *starting point*, and offer to rewrite the generator personas into this project's actual 2–3 genuinely distinct areas of concern — the persona-splitting heuristic is in the `evolution` skill. For an internal admin/ops-surface project, show the `admin-example` preset (a worked 4-generator panel) as a reference. Keep exactly ONE critic — the constraint is enforced by `evolve.sh validate`. The roster schema is `templates/schemas/personas.schema.json` in the plugin.
 
 ## `status`
 

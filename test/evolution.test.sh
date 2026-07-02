@@ -23,8 +23,32 @@ chk "evolution skill keeps the ledger phrase literal" "grep -q 'retrospective au
 chk "orchestration wires the trigger" "grep -q 'evolve.sh' '$HERE/skills/orchestration/SKILL.md'"
 chk "loop command wires the trigger"  "grep -q 'evolve.sh' '$HERE/commands/loop.md'"
 chk "personas schema is valid JSON"   "python3 -m json.tool '$HERE/templates/schemas/personas.schema.json' >/dev/null"
-chk "default roster is valid JSON"    "python3 -m json.tool '$HERE/templates/evolution/personas.json' >/dev/null"
 chk "schema requires exactly-one-critic doc" "grep -qi 'exactly one' '$HERE/templates/schemas/personas.schema.json'"
+
+# presets: valid JSON, tier shapes, and each passes evolve.sh validate
+for preset in solo crew admin-example; do
+  chk "preset $preset is valid JSON" "python3 -m json.tool '$HERE/templates/evolution/personas.$preset.json' >/dev/null"
+  PD="$(mktemp -d)"; mkdir -p "$PD/.workbench/evolution" "$PD/.claude/tasks/backlog"
+  cp "$HERE/templates/evolution/personas.$preset.json" "$PD/.workbench/evolution/personas.json"
+  chk "preset $preset validates" "bash '$EV' validate --target '$PD' >/dev/null"
+  rm -rf "$PD"
+done
+chk "solo preset is 1 generator + critic" "[ \"\$(python3 -c \"import json;p=json.load(open('$HERE/templates/evolution/personas.solo.json'))['personas'];print(len(p), sum(1 for x in p if x['role']=='critic'))\")\" = '2 1' ]"
+chk "crew preset is 3 generators + critic" "[ \"\$(python3 -c \"import json;p=json.load(open('$HERE/templates/evolution/personas.crew.json'))['personas'];print(len(p), sum(1 for x in p if x['role']=='critic'))\")\" = '4 1' ]"
+chk "admin example is 4 generators + critic" "[ \"\$(python3 -c \"import json;p=json.load(open('$HERE/templates/evolution/personas.admin-example.json'))['personas'];print(len(p), sum(1 for x in p if x['role']=='critic'))\")\" = '5 1' ]"
+chk "admin example is labeled as example" "grep -qi 'example' '$HERE/templates/evolution/personas.admin-example.json'"
+chk "admin example scopes track=admin" "python3 -c \"import json,sys;sys.exit(0 if json.load(open('$HERE/templates/evolution/personas.admin-example.json'))['track']=='admin' else 1)\""
+
+# level-aware init: solo level -> solo preset; crew level -> crew preset; --preset wins
+LS="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --profile full --level solo --name ls --mission m --target "$LS" >/dev/null 2>&1
+bash "$EV" init --target "$LS" >/dev/null
+chk "solo level scaffolds solo preset" "[ \"\$(bash '$EV' roster --target '$LS' | wc -l | tr -d ' ')\" = 2 ]"
+rm -rf "$LS"
+LF="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --profile full --level fleet --name lf --mission m --target "$LF" >/dev/null 2>&1
+chk "unknown preset rejected" "! bash '$EV' init --target '$LF' --preset nope >/dev/null 2>&1"
+bash "$EV" init --target "$LF" --preset admin-example >/dev/null
+chk "--preset overrides level" "[ \"\$(bash '$EV' roster --target '$LF' | wc -l | tr -d ' ')\" = 5 ]"
+rm -rf "$LF"
 
 # --- scaffold + roster validation -----------------------------------------------
 P="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --profile full --level crew --name evo --mission m --target "$P" >/dev/null 2>&1

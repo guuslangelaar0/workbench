@@ -15,9 +15,17 @@ Evolution is **off by default**. The universal loop rule is "features are sugges
 
 ## The roster — `.workbench/evolution/personas.json`
 
-Project-configurable; schema in `templates/schemas/personas.schema.json`. Each persona has a `name`, a `role` (`generator` | `critic`), and a `prompt` (its role description, used verbatim as the agent-panel prompt). Constraints `evolve.sh validate` enforces: at least one generator, **exactly one critic**, unique names, non-empty prompts. One critic wearing several lenses (actually-done? security/abuse exposure? UX coherence?) is sharper than several overlapping skeptics with diluted feedback — keep it that way. The default scaffold ships generic personas (product-visionary, user-advocate, operator, critic); a project should rewrite the generators for its own domain (e.g. a storage product might use visionary / support-lead / storage-ops / billing-ops).
+Project-configurable; schema in `templates/schemas/personas.schema.json`. Each persona has a `name`, a `role` (`generator` | `critic`), and a `prompt` (its role description, used verbatim as the agent-panel prompt). Constraints `evolve.sh validate` enforces: at least one generator, **exactly one critic**, unique names, non-empty prompts. One critic wearing several lenses (actually-done? security/abuse exposure? UX coherence?) is sharper than several overlapping skeptics with diluted feedback — keep it that way.
 
-Knobs in the same file: `cadence_hours` (default 24), `queue_low_water` (default 2), `retro_slice` (default 3), `track` (default all).
+**Presets follow the maturity ladder** (`templates/evolution/personas.*.json`; `evolve.sh init` picks by the project's level, `--preset` overrides):
+
+- `solo` — 2 personas: one broad generator + the critic. A solo-level project rarely has enough genuinely distinct domains to justify splitting voices.
+- `crew` — 3 generators + the critic (the pair/crew/fleet default). The scaffolded generators (product-visionary, user-advocate, operator) are *placeholders for domains* — rewrite them into whichever 2–3 areas of concern are actually this project's biggest.
+- `admin-example` — a **worked example**, not a default: the full 4-generator panel (product-visionary, support-lead, storage-ops, billing-ops + critic) from the one real instance of this mechanism, a project evolving an internal admin/ops control surface. Copy it only if those really are your domains.
+
+**When to add a persona** — domain-driven, never size-driven. Add a generator when the project has a genuinely separate area of concern that keeps getting shortchanged because no voice owns it: its ideas would use different grounding, different vocabulary, and a different definition of "excellent" than the existing generators'. If a candidate persona's proposals would substantially overlap an existing one's, splitting is artificial busywork — sharpen the existing prompt instead. And never add a second critic: widen the one critic's lenses.
+
+Knobs in the same file: `cadence_hours` (default 24), `queue_low_water` (default 2), `retro_slice` (default 3), `track` (default all), optional `description`.
 
 ## Trigger — whichever comes first
 
