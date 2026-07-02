@@ -20,6 +20,16 @@ printf '{"trigger":"manual","session_id":"s1"}' | CLAUDE_PROJECT_DIR="$TMP" bash
 chk "precompact wrote marker"  "ls '$TMP/.workbench/checkpoints/'*.json >/dev/null 2>&1"
 ND="$(mktemp -d)"; printf '{}' | CLAUDE_PROJECT_DIR="$ND" bash "$HERE/hooks/bin/precompact-checkpoint.sh" >/dev/null 2>&1; echo "rc=$?" >/tmp/pc.$$
 chk "precompact no-op elsewhere" "[ \"\$(cat /tmp/pc.$$)\" = 'rc=0' ] && ! ls '$ND/.workbench' >/dev/null 2>&1"
+DIS="$(mktemp -d)"
+bash "$HERE/scripts/init.sh" --profile full --name "HooksOff" --mission m --target "$DIS" --hooks disabled >/dev/null 2>&1
+disabled_brief="$(CLAUDE_PROJECT_DIR="$DIS" CLAUDE_PLUGIN_ROOT="$HERE" bash "$HERE/hooks/bin/ground-session.sh" </dev/null 2>/dev/null || true)"
+chk "disabled hooks suppress SessionStart brief" "[ -z \"\$disabled_brief\" ]"
+printf '{"trigger":"manual","session_id":"s1"}' | CLAUDE_PROJECT_DIR="$DIS" CLAUDE_PLUGIN_ROOT="$HERE" bash "$HERE/hooks/bin/precompact-checkpoint.sh" >/dev/null 2>&1
+chk "disabled hooks suppress precompact checkpoint" "! ls '$DIS/.workbench/checkpoints/'*.json >/dev/null 2>&1"
+printf '{"hook_event_name":"UserPromptSubmit","session_id":"s","prompt":"Let'\''s grab the next feature from the backlog."}' \
+  | CLAUDE_PROJECT_DIR="$DIS" CLAUDE_PLUGIN_ROOT="$HERE" bash "$HERE/hooks/bin/intent-router.sh" > "$DIS/disabled-intent.json"
+chk "disabled hooks suppress intent router" "[ ! -s '$DIS/disabled-intent.json' ]"
+rm -rf "$DIS"
 rm -rf "$TMP" "$ND" /tmp/pc.$$
 
 # --- SessionStart presence must be scoped to CLAUDE_PROJECT_DIR, not the cwd ---
