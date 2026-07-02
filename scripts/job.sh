@@ -24,6 +24,19 @@ job_valid() {
   grep -q '^job_id=' "$file" && grep -q '^task_id=' "$file" && grep -q '^status=' "$file"
 }
 
+job_duplicate_ordinal() {
+  local job_id="$1" suffix stem
+  if [[ "$job_id" =~ -[0-9]+$ ]]; then
+    suffix="${job_id##*-}"
+    stem="${job_id%-${suffix}}"
+    if [[ "$stem" =~ -[0-9]{8}T[0-9]{6}Z$ ]]; then
+      printf '%s\n' "$suffix"
+      return
+    fi
+  fi
+  printf '1\n'
+}
+
 job_write() {
   local file="$1" job_id="$2" type="$3" task_id="$4" owner="$5" status="$6" started="$7" updated="$8" branch="$9" runtime_mode="${10}" runtime_flags="${11}" task_file="${12}" lane_file="${13}" reconcile_command="${14}" output_ref="${15}" last_summary="${16}" verification_hint="${17}"
   {
@@ -136,17 +149,19 @@ case "$CMD" in
       case "$1" in --target) TARGET="${2:-}"; shift 2 ;; *) echo "job.sh: unknown latest arg '$1'" >&2; exit 64 ;; esac
     done
     dir="$(jobs_dir "$TARGET")"; [ -d "$dir" ] || exit 1
-    best=""; best_started=""; best_job_id=""
+    best=""; best_started=""; best_job_id=""; best_ordinal=0
     for file in "$dir"/*.job; do
       [ -e "$file" ] || continue
       job_valid "$file" || continue
       [ "$(job_get "$file" task_id)" = "$TASK_ID" ] || continue
       started="$(job_get "$file" started_at)"
       job_id="$(job_get "$file" job_id)"
-      if [ -z "$best" ] || [ "$started" \> "$best_started" ] || { [ "$started" = "$best_started" ] && [ "$job_id" \> "$best_job_id" ]; }; then
+      ordinal="$(job_duplicate_ordinal "$job_id")"
+      if [ -z "$best" ] || [ "$started" \> "$best_started" ] || { [ "$started" = "$best_started" ] && { [ "$ordinal" -gt "$best_ordinal" ] || { [ "$ordinal" -eq "$best_ordinal" ] && [ "$job_id" \> "$best_job_id" ]; }; }; }; then
         best="$file"
         best_started="$started"
         best_job_id="$job_id"
+        best_ordinal="$ordinal"
       fi
     done
     [ -n "$best" ] || exit 1

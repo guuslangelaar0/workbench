@@ -62,6 +62,16 @@ COLLIDE_COUNT="$(find "$TMP/.workbench/jobs" -name 'codex-0077-*.job' | wc -l | 
 chk "same-second starts create distinct job ids" "[ -n '$COLLIDE_ID_ONE' ] && [ -n '$COLLIDE_ID_TWO' ] && [ '$COLLIDE_ID_ONE' != '$COLLIDE_ID_TWO' ]"
 chk "same-second starts keep both job files" "[ '$COLLIDE_COUNT' = 2 ] && [ -f '$TMP/.workbench/jobs/$COLLIDE_ID_ONE.job' ] && [ -f '$TMP/.workbench/jobs/$COLLIDE_ID_TWO.job' ]"
 
+DUP_LAST_ID=""
+DUP_COUNT=0
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  DUP_OUT="$(PATH="$TMP/bin:$PATH" bash "$HERE/scripts/job.sh" start codex-engineer 0088 --target "$TMP")"
+  DUP_LAST_ID="$(printf '%s\n' "$DUP_OUT" | sed -n 's/^job: started //p' | awk '{print $1}')"
+  [ -n "$DUP_LAST_ID" ] && DUP_COUNT=$((DUP_COUNT + 1))
+done
+DUP_LATEST_OUT="$(bash "$HERE/scripts/job.sh" latest 0088 --target "$TMP")"
+chk "latest resolves newest same-second duplicate job numerically" "[ '$DUP_COUNT' = 10 ] && [ '$DUP_LATEST_OUT' = '$DUP_LAST_ID' ]"
+
 cat > "$TMP/.workbench/jobs/a-new.job" <<'JOB'
 job_id=a-new
 type=codex-engineer
