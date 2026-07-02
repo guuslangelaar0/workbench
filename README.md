@@ -65,6 +65,8 @@ On an unconfigured project it runs a short guided setup; on a configured one it 
 /workbench:loop                 # run the autonomous teamlead loop: pick → dispatch → verify-gate → repeat
 ```
 
+During onboarding, Workbench asks whether to enable its hooks. The recommended answer is yes: hooks make future Claude sessions re-ground from disk, route normal chat into Workbench actions, surface lead purpose, and checkpoint before compaction. If you skip hooks, slash commands still work, but Workbench will not feel always-on in that repo.
+
 On first `/workbench:mesh` use, Workbench resolves the Rust binary in this order: bundled binary, checksum-verified cached binary under `${CLAUDE_PLUGIN_DATA}`, local development build, then a GitHub release download verified against `checksums.txt`. If no verified asset exists for your platform, it prints the exact `cargo build --release -p workbench-mesh` fallback instead of running an unsigned binary.
 
 That's the whole rhythm: pick a level, capture work as tasks, let the loop drive them to *verified* with evidence, and graduate the level when the project outgrows it.

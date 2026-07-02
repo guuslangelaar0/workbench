@@ -50,6 +50,8 @@ CLAUDE.md                     project instructions for every session
 scripts/coord/                multi-session coordination tooling
 ```
 
+Workbench hooks are shipped by the plugin and controlled per project by `.workbench/config.json`. `/workbench:workbench` records whether hooks are enabled or disabled for the repo. Use `bash scripts/hooks-mode.sh status --target <repo>` from the plugin checkout to inspect the recorded state during development.
+
 > Already configured? `/workbench:workbench` instead shows your current status and the next sensible actions.
 
 ## 3. Do some work

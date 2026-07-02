@@ -52,6 +52,7 @@ The JSON Schema is in [`templates/schemas/config.schema.json`](../templates/sche
 | `version` | Plugin version that last scaffolded/upgraded this project. `/workbench:upgrade` uses it to reconcile. |
 | `initialized_at` | ISO-8601 timestamp of first scaffold. |
 | `level` | **The spine.** One of `solo` \| `pair` \| `crew` \| `fleet`. This single value drives the seven dials and the lifecycle stages. Change it with `/workbench:level`. |
+| `.workbench/config.json` `workbench.hooks` | Project-level hook preference. `enabled` gives the full always-on Workbench experience; `disabled` keeps slash commands available but makes plugin hooks no-op for that repo. |
 
 > This is the only place the level is stored. There is intentionally **no** persisted `dials` block and **no** `lifecycle.states` array — both are derived. See [levels.md](levels.md).
 

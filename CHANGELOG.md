@@ -12,6 +12,7 @@ All notable changes to workbench are documented here. The format follows
 - Codex engineer reconciliation: `/workbench:codex-engineer <id> --reconcile` checks `claude agents`, lane leases, task notes, and git state when Codex finishes without returning a second notification.
 - Native Claude Code worktree lanes: Workbench engineer/verifier agents now declare `isolation: worktree`, `/workbench:dispatch` documents `--worktree --background` for same-repo parallel lanes, and coordination guidance prefers Claude Code's `--worktree`, `--bg`, `claude agents`, and `worktree.baseRef` surfaces with the existing Workbench worktree helper as fallback.
 - Natural intent routing hardening: added `/workbench:decision`, `/workbench:next`, and an offline intent-router hook; strengthened task/loop/dispatch/epic routing for committed work, security bugs, in-review cap pressure, blocked dependencies, and level-aware big-effort capture.
+- Workbench onboarding now makes `/workbench:workbench` the single front door, recommends project-level hooks for the always-on experience, supports an explicit skip-hooks path, and clarifies that `/workbench:setup` and `/workbench:init` are setup/scaffold entry points behind the front door.
 
 ## [0.6.0] - 2026-07-01
 

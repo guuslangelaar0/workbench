@@ -56,6 +56,21 @@ State the recommendation plainly using its output: "Based on your git history �
 
 The per-axis dial questions below remain available as the **override mechanism** — after level selection, offer to walk the axes for fine-tuning, or accept all level defaults and scaffold immediately.
 
+## Step 0c: Ask the Workbench hooks question
+
+Ask:
+
+```text
+Install Workbench hooks? Recommended.
+```
+
+Options:
+
+- **Yes, recommended** — new Claude sessions re-ground from disk, normal chat routes into Workbench actions, lead purpose stays visible, tangents can be parked, mesh/team context is surfaced, and compaction checkpoints preserve continuity.
+- **No, skip hooks** — slash commands still work, but Claude will not automatically re-ground or route normal chat through Workbench in future sessions.
+
+Record the answer as `--hooks enabled` or `--hooks disabled` when calling `init.sh`.
+
 ## Flow (continues after assessment)
 
 1. **Project basics** (not tiered — ask directly): project name; one-line mission; launch target (optional); greenfield or existing project; repo topology (single repo or multi-repo workspace) + repo names/stacks if known; production URLs if any.
@@ -82,9 +97,9 @@ Cost-note guidance: phrase Better as "more thorough / higher spend", Leaner as "
 
 4. **Write `.workbench/config.json`** with all answers (use the schema at `${CLAUDE_PLUGIN_ROOT}/templates/schemas/config.schema.json`; set `workbench.version` from the plugin's `plugin.json`, `initialized_at` to now). Write it BEFORE scaffolding.
 
-5. **Scaffold**: run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/init.sh" --name "<name>" --mission "<mission>" --launch "<launch>" --level "<chosen-level>" --profile full --target "${CLAUDE_PROJECT_DIR}"`. The `--level` flag uses the level chosen in Step 0b (solo/pair/crew/fleet). init.sh is a **greenfield scaffold: it never overwrites a file that already exists** — your richer config and any existing CLAUDE.md/AGENTS.md/SOUL.md/coord scripts are preserved (it reports which), and it only writes the files that are missing, plus the manifest + git hook. To reconcile preserved files against the current templates, the user runs `/workbench:upgrade` — that is the only path that touches existing managed files.
+5. **Scaffold**: run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/init.sh" --name "<name>" --mission "<mission>" --launch "<launch>" --level "<chosen-level>" --profile full --hooks "<enabled-or-disabled>" --target "${CLAUDE_PROJECT_DIR}"`. The `--level` flag uses the level chosen in Step 0b (solo/pair/crew/fleet). The `--hooks` flag uses the answer from Step 0c.
 
-6. **Next step**: greenfield → offer `/workbench:inception` (the product-genesis brainstorm). Existing → tell them `/workbench:boot` then `/workbench:loop`. Summarize what was configured (the chosen tiers) and what was scaffolded.
+6. **Next step**: greenfield → offer `/workbench:inception` (the product-genesis brainstorm). Existing → tell them `/workbench:boot` then `/workbench:loop`. Summarize what was configured (the chosen tiers) and what was scaffolded. If hooks are enabled, tell the user the next Claude session in this repo should automatically receive a Workbench operating brief. If hooks are disabled, tell the user that `/workbench:*` commands still work and hooks can be enabled later from `/workbench:workbench`.
 
 ## Principles
 - The wizard is the first defense against the "ideator" failure: it makes the cost/quality tradeoffs explicit and forces intentional choices rather than silent maximalism.
