@@ -6,6 +6,10 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-02
+
+The native-agent release. Workbench now speaks more naturally to Claude Code's latest orchestration model: Codex can run as a first-class engineer lane, Claude worktree lanes are documented and routed through Workbench, normal chat intents are steered into the right command, and first-run onboarding makes hooks an intentional project choice.
+
 ### Added
 - Release live gate: `scripts/release-gate.sh --live` runs the offline release checks plus real Claude plugin E2E and live intent conformance, fails if required live layers skip, and writes ignored evidence under `.workbench/release/`; `/workbench:self-test --live` delegates to it.
 - Native Codex engineer lane: `/workbench:codex-engineer` dispatches a Workbench task through the OpenAI Codex plugin's `codex:codex-rescue` subagent while keeping Workbench responsible for task lifecycle, review, and verification.
@@ -13,6 +17,14 @@ All notable changes to workbench are documented here. The format follows
 - Native Claude Code worktree lanes: Workbench engineer/verifier agents now declare `isolation: worktree`, `/workbench:dispatch` documents `--worktree --background` for same-repo parallel lanes, and coordination guidance prefers Claude Code's `--worktree`, `--bg`, `claude agents`, and `worktree.baseRef` surfaces with the existing Workbench worktree helper as fallback.
 - Natural intent routing hardening: added `/workbench:decision`, `/workbench:next`, and an offline intent-router hook; strengthened task/loop/dispatch/epic routing for committed work, security bugs, in-review cap pressure, blocked dependencies, and level-aware big-effort capture.
 - Workbench onboarding now makes `/workbench:workbench` the single front door, recommends project-level hooks for the always-on experience, supports an explicit skip-hooks path, and clarifies that `/workbench:setup` and `/workbench:init` are setup/scaffold entry points behind the front door.
+
+### Changed
+- `/workbench:setup` and `/workbench:init` now defer users toward `/workbench:workbench`, keeping setup, scaffold, and day-to-day status behind one front door.
+- Hook state is recorded under `.workbench/config.json` as an explicit project preference, so teams can choose the full always-on experience or command-only mode without editing hook definitions.
+
+### Fixed
+- Workbench hooks now resolve the configured project root from repo subdirectories before reading config, so starting Claude inside `repo/sub/dir` still gets the operating brief, intent routing, statusline context, and hook-mode behavior for the parent Workbench project.
+- Mesh command-center test checks no longer trip `pipefail` false negatives from `grep -q` closing early on large JavaScript payloads.
 
 ## [0.6.0] - 2026-07-01
 
