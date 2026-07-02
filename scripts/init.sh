@@ -2,7 +2,7 @@
 # workbench scaffolder. Deterministic; the interactive wizard
 # (/workbench:setup) is layered on top.
 #
-# Usage: init.sh --name <NAME> [--mission <M>] [--launch <L>] [--target <DIR>]
+# Usage: init.sh --name <NAME> [--mission <M>] [--launch <L>] [--target <DIR>] [--hooks enabled|disabled]
 set -euo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"   # workbench/scripts
 PLUGIN_ROOT="$(cd "$SELF_DIR/.." && pwd)"                  # workbench

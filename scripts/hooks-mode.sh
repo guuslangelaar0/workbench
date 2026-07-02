@@ -96,7 +96,7 @@ workbench = data.setdefault("workbench", {})
 workbench["hooks"] = {
     "mode": mode,
     "version": version,
-    "updated_at": datetime.datetime.now(datetime.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    "updated_at": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
 }
 open(dst, "w").write(json.dumps(data, indent=2) + "\n")
 PY
