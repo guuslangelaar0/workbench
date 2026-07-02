@@ -10,7 +10,17 @@
       "properties": {
         "version": { "type": "string" },
         "initialized_at": { "type": "string" },
-        "level": { "enum": ["solo", "pair", "crew", "fleet"] }
+        "level": { "enum": ["solo", "pair", "crew", "fleet"] },
+        "hooks": {
+          "type": "object",
+          "required": ["mode", "version", "updated_at"],
+          "properties": {
+            "mode": { "enum": ["enabled", "disabled"] },
+            "version": { "type": "string" },
+            "updated_at": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
       }
     },
     "project": {

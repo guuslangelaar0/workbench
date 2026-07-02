@@ -9,7 +9,7 @@ PLUGIN_ROOT="$(cd "$SELF_DIR/.." && pwd)"                  # workbench
 . "$SELF_DIR/lib.sh"
 . "$SELF_DIR/levels.sh"
 
-NAME="" MISSION="" LAUNCH="" TARGET="$PWD" PROFILE="full" LEVEL="" LEVEL_EXPLICIT=0
+NAME="" MISSION="" LAUNCH="" TARGET="$PWD" PROFILE="full" LEVEL="" LEVEL_EXPLICIT=0 HOOKS_MODE="enabled" HOOKS_EXPLICIT=0
 need_arg() { [ "$#" -ge 2 ] || { echo "init.sh: $1 requires a value" >&2; exit 64; }; }
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -19,6 +19,7 @@ while [ "$#" -gt 0 ]; do
     --target)  need_arg "$@"; TARGET="$2"; shift 2 ;;
     --profile) need_arg "$@"; PROFILE="$2"; shift 2 ;;
     --level)   need_arg "$@"; LEVEL="$2"; LEVEL_EXPLICIT=1; shift 2 ;;
+    --hooks)   need_arg "$@"; HOOKS_MODE="$2"; HOOKS_EXPLICIT=1; shift 2 ;;
     *) echo "init.sh: unknown arg '$1'" >&2; exit 64 ;;
   esac
 done
@@ -26,6 +27,7 @@ done
 [ -n "$MISSION" ] || MISSION="(mission not set)"
 [ -n "$LAUNCH" ]  || LAUNCH="(no target date)"
 case "$PROFILE" in minimal|full) ;; *) echo "init.sh: --profile must be minimal|full" >&2; exit 64 ;; esac
+case "$HOOKS_MODE" in enabled|disabled) ;; *) echo "init.sh: --hooks must be enabled|disabled" >&2; exit 64 ;; esac
 # default level: fleet for full profile, solo for minimal
 [ -n "$LEVEL" ] || { [ "$PROFILE" = full ] && LEVEL="fleet" || LEVEL="solo"; }
 wb_level_index "$LEVEL" >/dev/null || { echo "init.sh: --level must be solo|pair|crew|fleet" >&2; exit 64; }
@@ -126,7 +128,12 @@ NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 if [ ! -f "$CFG" ]; then
   cat > "$CFG" <<JSON
 {
-  "workbench": { "version": "$VERSION", "initialized_at": "$NOW", "level": "$LEVEL" },
+  "workbench": {
+    "version": "$VERSION",
+    "initialized_at": "$NOW",
+    "level": "$LEVEL",
+    "hooks": { "mode": "$HOOKS_MODE", "version": "$VERSION", "updated_at": "$NOW" }
+  },
   "project": {
     "name": "$(il_json_escape "$NAME")",
     "mission": "$(il_json_escape "$MISSION")",
@@ -180,6 +187,13 @@ elif [ "$LEVEL_EXPLICIT" = 1 ]; then
     }
     { print }
   ' "$CFG" > "$CFG.tmp" && mv "$CFG.tmp" "$CFG"
+fi
+if [ "$HOOKS_EXPLICIT" = 1 ]; then
+  if [ "$HOOKS_MODE" = enabled ]; then
+    bash "$SELF_DIR/hooks-mode.sh" enable --target "$TARGET" --plugin-root "$PLUGIN_ROOT" >/dev/null
+  else
+    bash "$SELF_DIR/hooks-mode.sh" disable --target "$TARGET" --plugin-root "$PLUGIN_ROOT" >/dev/null
+  fi
 fi
 
 # 5. .workbench/manifest.json — install ledger with hashes, ownership, and side effects.
