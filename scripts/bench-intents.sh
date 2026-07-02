@@ -19,13 +19,13 @@
 # Live invocation costs API tokens and is gated by WB_BENCH=1; --simulate runs free offline.
 # Usage: bench-intents.sh [--simulate] [--keep] [--only <id>] [--set train|holdout|all]
 # Env:
-#   WB_BENCH_TIMEOUT=240  live per-case timeout in seconds
+#   WB_BENCH_TIMEOUT=300  live per-case timeout in seconds
 set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SELF_DIR/.." && pwd)"
 CASES="$ROOT/test/benchmark/intents/cases"
 SIMULATE=0 KEEP=0 ONLY="" SET="all"
-LIVE_TIMEOUT="${WB_BENCH_TIMEOUT:-240}"
+LIVE_TIMEOUT="${WB_BENCH_TIMEOUT:-300}"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --simulate) SIMULATE=1; shift ;;
@@ -45,7 +45,7 @@ if [ "$SIMULATE" = 0 ] && [ "${WB_BENCH:-0}" != 1 ]; then
   exit 2
 fi
 
-pass=0 total=0
+pass=0 total=0 timeouts=0 failures=0
 for cdir in "$CASES"/*/; do
   [ -d "$cdir" ] || continue
   id="$(basename "$cdir")"
@@ -86,8 +86,10 @@ CLAUDE_EXIT_${live_rc}"
     verdict="PASS"; pass=$((pass+1))
   elif [ "$timed_out" = 1 ]; then
     verdict="TIMEOUT"
+    timeouts=$((timeouts+1))
   else
     verdict="fail"
+    failures=$((failures+1))
   fi
   printf '  %-22s [%-4s] %s\n' "$id" "$level" "$verdict"
   [ "$KEEP" = 1 ] && echo "      (kept: $P)" || rm -rf "$P"
@@ -99,5 +101,10 @@ read -r conf grade <<EOF
 $(awk -v p="$pass" -v t="$total" 'BEGIN{ printf "%.0f %.0f", 100.0*p/t, 100.0*p/t }')
 EOF
 printf "BENCH-INTENT [set=%s] conformance=%d/%d  expectancy=%d  grade=%d/100\n" "$SET" "$pass" "$total" "$conf" "$grade"
-[ "$pass" -lt "$total" ] && echo "  ↳ a failed case = the plugin's description/trigger didn't make the model do the right thing (fixable)."
+if [ "$timeouts" -gt 0 ]; then
+  echo "  ↳ a timed-out case = the live model call exceeded WB_BENCH_TIMEOUT before the oracle could evaluate behavior."
+fi
+if [ "$failures" -gt 0 ]; then
+  echo "  ↳ a failed case = the plugin's description/trigger didn't make the model do the right thing (fixable)."
+fi
 exit 0
