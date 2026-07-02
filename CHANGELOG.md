@@ -6,8 +6,20 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-02
+
+The Codex lane observability release. Workbench now tracks Codex engineer lanes as durable jobs on disk, so a lead can recover from dropped callbacks, see active Codex work in Mission Control and Mesh, and close jobs when verification finishes.
+
 ### Added
 - Track Codex engineer lanes as durable Workbench jobs so `/workbench:mc`, `/workbench:mesh jobs`, and `/workbench:codex-engineer --reconcile` can show status even when Codex does not send a completion callback.
+
+### Changed
+- `/workbench:codex-engineer` now records job lifecycle transitions for dispatch, reconcile, normal return, launch failure, and verification handoff.
+- `/workbench:verify` now closes matching Codex jobs as `verified` or `failed` so active job dashboards do not show completed work as still running.
+
+### Fixed
+- Workbench job ids are allocated atomically for concurrent same-second starts, and duplicate job ordering is deterministic.
+- `job.sh update --output-ref ""` can clear a stale output reference instead of preserving misleading evidence.
 
 ## [0.7.1] - 2026-07-02
 
