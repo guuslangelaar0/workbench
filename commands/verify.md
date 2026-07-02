@@ -23,7 +23,9 @@ Run the verification gate for a task. Follow the `orchestration` and `task-lifec
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-move.sh" <id> verified --target "${CLAUDE_PROJECT_DIR}"`
    (Use `staged` instead of `verified` when the level's lifecycle includes a `staged` stage — Crew and Fleet are deploy-gated — and a prod deploy is still pending.)
    `task-move.sh` runs the **verification-contract gate** on any move into `verified`/`staged`/`shipped`: at `crew`+ it **refuses** the move unless real acceptance criteria *and* a populated `## Verification evidence` section exist (`scripts/verify-gate.sh`; advisory at `solo`/`pair`; `WB_SKIP_VERIFY_GATE=1` overrides the rare legit case). So capture evidence *first* — "verified" is structurally unfakeable.
+   After the move succeeds, close any matching Workbench job: if `bash "${CLAUDE_PLUGIN_ROOT}/scripts/job.sh" latest <id> --target "${CLAUDE_PROJECT_DIR}"` returns `<job-id>`, run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/job.sh" update <job-id> --target "${CLAUDE_PROJECT_DIR}" --status verified --summary "Workbench verification passed; task moved forward." --output-ref "<task file path or verification evidence>"`.
 4. **On FAIL** — note exactly what's missing in `## Notes`, then move it back:
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-move.sh" <id> in-development --target "${CLAUDE_PROJECT_DIR}"`
+   If a matching Workbench job exists, update it to `failed` with an evidence-based summary so active job dashboards do not keep showing completed Codex work as running.
 
 Report the verdict honestly with the evidence. Only `verified/` (or `shipped/`) with evidence is "done."

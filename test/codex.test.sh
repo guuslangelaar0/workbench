@@ -25,6 +25,8 @@ chk "codex engineer starts workbench job" "grep -q 'job.sh.*start codex-engineer
 chk "codex engineer updates workbench job" "grep -q 'job.sh.*update' '$HERE/commands/codex-engineer.md'"
 chk "codex engineer reconcile reads latest job" "grep -q 'job.sh.*latest' '$HERE/commands/codex-engineer.md'"
 chk "codex engineer reports job tracking surfaces" "grep -q '/workbench:mc' '$HERE/commands/codex-engineer.md' && grep -q '/workbench:mesh jobs' '$HERE/commands/codex-engineer.md'"
+chk "codex engineer marks returned job" "grep -q 'job.sh.*update <job-id>.*--status returned' '$HERE/commands/codex-engineer.md'"
+chk "verify marks codex job verified" "grep -q 'job.sh.*latest <id>' '$HERE/commands/verify.md' && grep -q 'job.sh.*update <job-id>.*--status verified' '$HERE/commands/verify.md'"
 chk "codex bridge names job ledger" "grep -qi 'job ledger\\|workbench job' '$HERE/skills/codex-bridge/SKILL.md'"
 chk "orchestration checks active jobs before codex redispatch" "grep -qi 'job.sh.*list --active\\|active jobs' '$HERE/skills/orchestration/SKILL.md'"
 chk "README documents codex job observability" "grep -qi 'Codex.*job\\|job.*Codex' '$HERE/README.md' && grep -q '/workbench:mesh jobs' '$HERE/README.md'"

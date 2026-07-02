@@ -25,6 +25,9 @@ chk "job update changes status" "grep -q '^status=needs-review$' '$TMP/.workbenc
 chk "job update changes summary" "grep -q '^last_summary=Artifacts found; run verification.$' '$TMP/.workbench/jobs/$JOB_ID.job'"
 chk "job update records output ref" "grep -q '^output_ref=.workbench/jobs/snapshot.md$' '$TMP/.workbench/jobs/$JOB_ID.job'"
 
+bash "$HERE/scripts/job.sh" update "$JOB_ID" --target "$TMP" --output-ref "" >/dev/null
+chk "job update can clear output ref" "grep -q '^output_ref=$' '$TMP/.workbench/jobs/$JOB_ID.job'"
+
 LIST_OUT="$(bash "$HERE/scripts/job.sh" list --target "$TMP")"
 chk "job list shows codex job" "printf '%s' \"\$LIST_OUT\" | grep -q \"$JOB_ID\" && printf '%s' \"\$LIST_OUT\" | grep -q 'needs-review'"
 

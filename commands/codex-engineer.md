@@ -128,6 +128,8 @@ Then append a task note saying Codex launch failed and leave the task in `in-dev
 
 14. If the `Agent` call fails before the Workbench job was created but after the task was claimed or moved, append a task note saying Codex launch failed and leave the task in `in-development` for the lead to re-dispatch or move back.
 
-15. When Codex returns, report that the task is ready for Workbench verification. Do not claim it is done. Tell the user or lead to run `/workbench:verify <id>`.
+15. When Codex returns, run:
+`bash "${CLAUDE_PLUGIN_ROOT}/scripts/job.sh" update <job-id> --target "${CLAUDE_PROJECT_DIR}" --status returned --summary "Codex returned; run Workbench verification." --output-ref "<task notes, report path, or empty>"`
+Then report that the task is ready for Workbench verification. Do not claim it is done. Tell the user or lead to run `/workbench:verify <id>`.
 
 16. If Codex does not return but `claude agents` shows no active Codex thread anymore, immediately run `/workbench:codex-engineer <id> --reconcile`. Do not wait for a second notification.

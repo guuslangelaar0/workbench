@@ -117,13 +117,13 @@ case "$CMD" in
   update)
     JOB_ID="${1:-}"; shift || true
     [ -n "$JOB_ID" ] || { echo "job.sh: update requires <job-id>" >&2; exit 64; }
-    STATUS=""; SUMMARY=""; OUTPUT_REF=""
+    STATUS=""; SUMMARY=""; OUTPUT_REF=""; OUTPUT_REF_SET=0
     while [ "$#" -gt 0 ]; do
       case "$1" in
         --target) TARGET="${2:-}"; shift 2 ;;
         --status) STATUS="${2:-}"; shift 2 ;;
         --summary) SUMMARY="${2:-}"; shift 2 ;;
-        --output-ref) OUTPUT_REF="${2:-}"; shift 2 ;;
+        --output-ref) OUTPUT_REF="${2:-}"; OUTPUT_REF_SET=1; shift 2 ;;
         *) echo "job.sh: unknown update arg '$1'" >&2; exit 64 ;;
       esac
     done
@@ -131,7 +131,7 @@ case "$CMD" in
     [ -f "$file" ] || { echo "job.sh: no job '$JOB_ID'" >&2; exit 1; }
     [ -n "$STATUS" ] || STATUS="$(job_get "$file" status)"
     [ -n "$SUMMARY" ] || SUMMARY="$(job_get "$file" last_summary)"
-    [ -n "$OUTPUT_REF" ] || OUTPUT_REF="$(job_get "$file" output_ref)"
+    [ "$OUTPUT_REF_SET" = 1 ] || OUTPUT_REF="$(job_get "$file" output_ref)"
     job_write "$file" "$JOB_ID" "$(job_get "$file" type)" "$(job_get "$file" task_id)" "$(job_get "$file" owner)" "$STATUS" "$(job_get "$file" started_at)" "$(now_iso)" "$(job_get "$file" branch)" "$(job_get "$file" runtime_mode)" "$(job_get "$file" runtime_flags)" "$(job_get "$file" task_file)" "$(job_get "$file" lane_file)" "$(job_get "$file" reconcile_command)" "$OUTPUT_REF" "$SUMMARY" "$(job_get "$file" verification_hint)"
     echo "job: updated $JOB_ID status=$STATUS"
     ;;
