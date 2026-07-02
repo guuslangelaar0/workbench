@@ -15,6 +15,8 @@ sid="$(get session_id)"
 
 P="${CLAUDE_PROJECT_DIR:-$PWD}"
 _cfg="$(il_cfg_dir "$P")"
+[ -f "$_cfg/config.json" ] || exit 0
+il_hooks_enabled "$P" || exit 0
 [ -d "$_cfg" ] || exit 0   # not a workbench project — no-op
 
 sums="$(bash "$SELF_DIR/../../scripts/usage-sum.sh" "$tp" 2>/dev/null)" || exit 0

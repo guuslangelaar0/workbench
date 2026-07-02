@@ -4,10 +4,11 @@
 # SessionStart (matcher "compact"). No-ops unless this is a workbench project.
 set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$SELF_DIR/../../scripts/lib.sh"
+. "$SELF_DIR/../../scripts/lib.sh" 2>/dev/null || exit 0
 P="${CLAUDE_PROJECT_DIR:-$PWD}"
 _cfg_dir="$(il_cfg_dir "$P")"
 [ -f "$_cfg_dir/config.json" ] || exit 0
+il_hooks_enabled "$P" || exit 0
 dir="$_cfg_dir/checkpoints"; mkdir -p "$dir"
 input="$(cat 2>/dev/null || true)"
 trigger="$(printf '%s' "$input" | sed -n 's/.*"trigger"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"

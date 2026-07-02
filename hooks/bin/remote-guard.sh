@@ -11,10 +11,11 @@
 # --force-with-lease is allowed). It is a safety net, not a complete sandbox.
 set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$SELF_DIR/../../scripts/lib.sh"
+. "$SELF_DIR/../../scripts/lib.sh" 2>/dev/null || exit 0
 P="${CLAUDE_PROJECT_DIR:-$PWD}"
 _cfg="$(il_cfg_dir "$P")/config.json"
 [ -f "$_cfg" ] || exit 0
+il_hooks_enabled "$P" || exit 0
 remote="$(sed -n 's/.*"remote"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_cfg" | head -1)"
 [ -n "$remote" ] && [ "$remote" != off ] || exit 0
 

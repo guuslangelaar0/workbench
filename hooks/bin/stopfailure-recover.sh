@@ -29,6 +29,11 @@ else
   else CFG="$P/.workbench"; fi
 fi
 
+[ -d "$CFG" ] || exit 0
+if [ -f "$CFG/config.json" ] && command -v il_hooks_enabled >/dev/null 2>&1; then
+  il_hooks_enabled "$P" || exit 0
+fi
+
 # Read the event payload (best-effort; empty stdin is fine).
 input="$(cat 2>/dev/null || true)"
 

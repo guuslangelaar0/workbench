@@ -9,6 +9,20 @@ il_cfg_dir() { # <project_root>
   else printf '%s\n' "$1/.workbench"; fi
 }
 
+# True when Workbench hooks should run for this project. Missing hook preference
+# is treated as enabled for backward compatibility with pre-hook-choice configs.
+il_hooks_enabled() { # <project_root>
+  local cfg="$1"
+  cfg="$(il_cfg_dir "$cfg")/config.json"
+  [ -f "$cfg" ] || return 1
+  awk '
+    /"hooks"[[:space:]]*:/ { in_hooks=1 }
+    in_hooks && /"mode"[[:space:]]*:[[:space:]]*"disabled"/ { disabled=1 }
+    in_hooks && /\}/ { in_hooks=0 }
+    END { exit disabled ? 1 : 0 }
+  ' "$cfg" 2>/dev/null
+}
+
 # sha256 of a file -> bare hex. Works on Linux (sha256sum) and macOS (shasum).
 il_hash() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}';

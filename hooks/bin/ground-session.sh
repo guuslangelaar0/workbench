@@ -4,10 +4,11 @@
 # is a workbench project. Keep output well under the ~10k char cap.
 set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$SELF_DIR/../../scripts/lib.sh"
+. "$SELF_DIR/../../scripts/lib.sh" 2>/dev/null || exit 0
 P="${CLAUDE_PROJECT_DIR:-$PWD}"
 _cfg="$(il_cfg_dir "$P")/config.json"
 [ -f "$_cfg" ] || exit 0
+il_hooks_enabled "$P" || exit 0
 T="$P/.claude/tasks"
 input="$(cat)"
 get_json_string() {

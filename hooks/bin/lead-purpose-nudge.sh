@@ -6,6 +6,9 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 PROJECT="${CLAUDE_PROJECT_DIR:-$PWD}"
+. "$PLUGIN_ROOT/scripts/lib.sh" 2>/dev/null || exit 0
+[ -f "$(il_cfg_dir "$PROJECT")/config.json" ] || exit 0
+il_hooks_enabled "$PROJECT" || exit 0
 LEAD="$PLUGIN_ROOT/scripts/lead.sh"
 [ -x "$LEAD" ] || exit 0
 

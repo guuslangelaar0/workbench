@@ -3,7 +3,12 @@
 # Offline-only and deterministic; it never mutates project state.
 set -uo pipefail
 
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SELF_DIR/../../scripts/lib.sh" 2>/dev/null || exit 0
+
 PROJECT="${CLAUDE_PROJECT_DIR:-$PWD}"
+[ -f "$(il_cfg_dir "$PROJECT")/config.json" ] || exit 0
+il_hooks_enabled "$PROJECT" || exit 0
 input="$(cat)"
 
 json_string_from() {
