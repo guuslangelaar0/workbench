@@ -1,12 +1,23 @@
 #!/usr/bin/env bash
-# Fakes the CORRECT behavior after variant.sh: #1203 and #1204 are both already
-# audited (per the ledger, post-variant); #1207 is the oldest-by-ID verified/shipped
-# admin task WITHOUT a retro entry, so the new retro entry targets #1207.
+# Genuinely exercises the real retrospective-selection logic post-variant: `evolve.sh
+# retro-candidates --track admin` does the actual ledger-grep-and-exclude against the
+# variant's real .claude/tasks/{verified,shipped} state (which now includes #1207,
+# added by variant.sh) — whichever id it picks is what gets audited and logged via the
+# real `evolve.sh log` / `record-summit`. No hardcoded "#1207" anywhere in this script;
+# the id comes from the real command, proving the mechanism generalizes rather than
+# having any task ID hardcoded (the property this case exists to prove).
 set -uo pipefail
-cat >> .workbench/evolution/ideas-log.md <<'EOF'
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/../lib.sh"
 
-## Summit — 2026-07-02 09:00 UTC
+target_id="$(bash "$ROOT/scripts/evolve.sh" retro-candidates --target . --track admin --limit 1)"
+[ -n "$target_id" ] || { echo "simulate.sh: evolve.sh retro-candidates returned nothing" >&2; exit 1; }
 
-- [2026-07-02] critic — retrospective audit of task #1207: verified, reason codes visible, but no filter/search by reason code across refunds — minor expansion queued as task #1208.
-EOF
-echo "workbench: retrospective audited task #1207 (oldest unaudited after #1203/#1204 covered)" > .run-output
+bash "$ROOT/scripts/evolve.sh" record-summit --target . >/dev/null
+
+bash "$ROOT/scripts/evolve.sh" log --target . \
+  --persona critic \
+  --idea "retrospective audit of task #$target_id" \
+  --disposition "verified, reason codes visible, but no filter/search by reason code across refunds — minor expansion queued"
+
+echo "workbench: retrospective audited task #$target_id (oldest unaudited per evolve.sh retro-candidates, after #1203/#1204 covered)" > .run-output
