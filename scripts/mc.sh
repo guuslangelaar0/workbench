@@ -122,6 +122,24 @@ if [[ ${#indev[@]} -gt 0 ]]; then
   done
 fi
 
+# ----- active jobs (Codex and other delegated lanes) -----
+if [[ -x "$SELF_DIR/job.sh" ]]; then
+  jobs="$(bash "$SELF_DIR/job.sh" list --active --target "$ROOT" 2>/dev/null)"
+  if [[ -n "$jobs" ]]; then
+    section "Jobs"
+    while IFS=$'\t' read -r job_id job_type task_id job_status job_summary; do
+      [[ -n "$job_id" ]] || continue
+      col="$C_AMBER"
+      case "$job_status" in
+        running|returned) col="$C_AMBER" ;;
+        needs-review) col="$C_BLUE" ;;
+        dead|failed) col="$C_RED" ;;
+      esac
+      printf "  ${col}%-24s${C_RESET} %-12s task %-5s ${C_DIM}%s${C_RESET}\n" "$job_id" "$job_status" "$task_id" "$job_summary"
+    done <<< "$jobs"
+  fi
+fi
+
 # ----- decisions awaiting -----
 dec=(.claude/tasks/decisions/*.md)
 if [[ ${#dec[@]} -gt 0 ]]; then

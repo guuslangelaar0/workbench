@@ -11,6 +11,11 @@ chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; 
 bash "$HERE/scripts/init.sh" --name "Acme" --mission "Test." --target "$TMP" --profile full >/dev/null 2>&1
 bash "$HERE/scripts/task-new.sh" --title "Dash Task" --estimate "~2h" --target "$TMP" >/dev/null
 bash "$HERE/scripts/task-move.sh" 0001 in-review --target "$TMP" >/dev/null
+JOB_OUT="$(bash "$HERE/scripts/job.sh" start codex-engineer 0001 --target "$TMP" --owner codex --runtime-mode background --summary 'Codex is editing files.')"
+JOB_ID="$(printf '%s\n' "$JOB_OUT" | sed -n 's/^job: started //p' | awk '{print $1}')"
+DONE_OUT="$(bash "$HERE/scripts/job.sh" start codex-engineer 0099 --target "$TMP" --owner codex --runtime-mode background --summary 'Already verified.')"
+DONE_ID="$(printf '%s\n' "$DONE_OUT" | sed -n 's/^job: started //p' | awk '{print $1}')"
+bash "$HERE/scripts/job.sh" update "$DONE_ID" --target "$TMP" --status verified --summary 'Verified by Workbench.' >/dev/null
 
 out="$(cd "$TMP" && bash "$HERE/scripts/mc.sh" --no-prod --no-build 2>/dev/null)"
 
@@ -19,6 +24,9 @@ chk "shows backlog row"       "printf '%s' \"\$out\" | grep -q 'backlog'"
 chk "shows in-review row"     "printf '%s' \"\$out\" | grep -q 'in-review'"
 chk "lists the task id 0001"  "printf '%s' \"\$out\" | grep -q '0001'"
 chk "shows in-review cap"     "printf '%s' \"\$out\" | grep -qi 'cap'"
+chk "shows Jobs section"      "printf '%s' \"\$out\" | grep -q 'Jobs'"
+chk "shows active codex job"  "printf '%s' \"\$out\" | grep -q \"$JOB_ID\" && printf '%s' \"\$out\" | grep -q 'Codex is editing files.'"
+chk "hides terminal codex job" "! printf '%s' \"\$out\" | grep -q \"$DONE_ID\""
 chk "exits 0 cleanly"         "(cd '$TMP' && bash '$HERE/scripts/mc.sh' --no-prod --no-build >/dev/null 2>&1)"
 
 [ "$fail" = 0 ] && echo "PASS: mc" || { echo "mc test failed"; exit 1; }
