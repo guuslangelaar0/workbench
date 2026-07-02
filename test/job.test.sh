@@ -42,4 +42,63 @@ bash "$HERE/scripts/job.sh" update "$JOB_ID" --target "$TMP" --status verified -
 ACTIVE_OUT="$(bash "$HERE/scripts/job.sh" list --active --target "$TMP")"
 chk "active list hides terminal job" "! printf '%s' \"\$ACTIVE_OUT\" | grep -q \"$JOB_ID\""
 
+REAL_DATE="$(command -v date)"
+mkdir -p "$TMP/bin"
+{
+  printf '#!/usr/bin/env bash\n'
+  printf 'case "$*" in\n'
+  printf "  '-u +%%Y%%m%%dT%%H%%M%%SZ') printf '%%s\\n' '20260702T120000Z' ;;\n"
+  printf "  '-u +%%Y-%%m-%%dT%%H:%%M:%%SZ') printf '%%s\\n' '2026-07-02T12:00:00Z' ;;\n"
+  printf '  *) exec %s "$@" ;;\n' "$REAL_DATE"
+  printf 'esac\n'
+} > "$TMP/bin/date"
+chmod +x "$TMP/bin/date"
+
+COLLIDE_ONE="$(PATH="$TMP/bin:$PATH" bash "$HERE/scripts/job.sh" start codex-engineer 0077 --target "$TMP")"
+COLLIDE_TWO="$(PATH="$TMP/bin:$PATH" bash "$HERE/scripts/job.sh" start codex-engineer 0077 --target "$TMP")"
+COLLIDE_ID_ONE="$(printf '%s\n' "$COLLIDE_ONE" | sed -n 's/^job: started //p' | awk '{print $1}')"
+COLLIDE_ID_TWO="$(printf '%s\n' "$COLLIDE_TWO" | sed -n 's/^job: started //p' | awk '{print $1}')"
+COLLIDE_COUNT="$(find "$TMP/.workbench/jobs" -name 'codex-0077-*.job' | wc -l | tr -d ' ')"
+chk "same-second starts create distinct job ids" "[ -n '$COLLIDE_ID_ONE' ] && [ -n '$COLLIDE_ID_TWO' ] && [ '$COLLIDE_ID_ONE' != '$COLLIDE_ID_TWO' ]"
+chk "same-second starts keep both job files" "[ '$COLLIDE_COUNT' = 2 ] && [ -f '$TMP/.workbench/jobs/$COLLIDE_ID_ONE.job' ] && [ -f '$TMP/.workbench/jobs/$COLLIDE_ID_TWO.job' ]"
+
+cat > "$TMP/.workbench/jobs/a-new.job" <<'JOB'
+job_id=a-new
+type=codex-engineer
+task_id=0099
+task_file=.claude/tasks
+owner=codex
+status=running
+started_at=2026-07-02T12:01:00Z
+updated_at=2026-07-02T12:01:00Z
+branch=feature/jobs
+runtime_mode=foreground
+runtime_flags=
+lane_file=.workbench/lanes/0099.lane
+reconcile_command=/workbench:codex-engineer 0099 --reconcile
+output_ref=
+last_summary=new
+verification_hint=/workbench:verify 0099
+JOB
+cat > "$TMP/.workbench/jobs/z-old.job" <<'JOB'
+job_id=z-old
+type=codex-engineer
+task_id=0099
+task_file=.claude/tasks
+owner=codex
+status=running
+started_at=2026-07-02T12:00:00Z
+updated_at=2026-07-02T12:00:00Z
+branch=feature/jobs
+runtime_mode=foreground
+runtime_flags=
+lane_file=.workbench/lanes/0099.lane
+reconcile_command=/workbench:codex-engineer 0099 --reconcile
+output_ref=
+last_summary=old
+verification_hint=/workbench:verify 0099
+JOB
+LATEST_ORDER_OUT="$(bash "$HERE/scripts/job.sh" latest 0099 --target "$TMP")"
+chk "latest resolves newest job by timestamp" "[ '$LATEST_ORDER_OUT' = 'a-new' ]"
+
 [ "$fail" = 0 ] && echo "PASS: job" || { echo "job test failed"; exit 1; }

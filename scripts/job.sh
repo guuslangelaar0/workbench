@@ -73,9 +73,16 @@ case "$CMD" in
     done
     dir="$(jobs_dir "$TARGET")"; mkdir -p "$dir"
     ts="$(now_utc)"; iso="$(now_iso)"
-    JOB_ID="${TYPE%%-*}-${TASK_ID}-${ts}"
-    [ "$TYPE" = "codex-engineer" ] && JOB_ID="codex-${TASK_ID}-${ts}"
+    base_job_id="${TYPE%%-*}-${TASK_ID}-${ts}"
+    [ "$TYPE" = "codex-engineer" ] && base_job_id="codex-${TASK_ID}-${ts}"
+    JOB_ID="$base_job_id"
     file="$dir/$JOB_ID.job"
+    suffix=2
+    while [ -e "$file" ]; do
+      JOB_ID="${base_job_id}-${suffix}"
+      file="$dir/$JOB_ID.job"
+      suffix=$((suffix + 1))
+    done
     [ -n "$BRANCH" ] || BRANCH="$(git -C "$TARGET" branch --show-current 2>/dev/null || true)"
     [ -n "$TASK_FILE" ] || TASK_FILE=".claude/tasks"
     job_write "$file" "$JOB_ID" "$TYPE" "$TASK_ID" "$OWNER" "running" "$iso" "$iso" "$BRANCH" "$RUNTIME_MODE" "$RUNTIME_FLAGS" "$TASK_FILE" ".workbench/lanes/$TASK_ID.lane" "/workbench:codex-engineer $TASK_ID --reconcile" "$OUTPUT_REF" "$SUMMARY" "/workbench:verify $TASK_ID"
@@ -129,12 +136,18 @@ case "$CMD" in
       case "$1" in --target) TARGET="${2:-}"; shift 2 ;; *) echo "job.sh: unknown latest arg '$1'" >&2; exit 64 ;; esac
     done
     dir="$(jobs_dir "$TARGET")"; [ -d "$dir" ] || exit 1
-    best=""
+    best=""; best_started=""; best_job_id=""
     for file in "$dir"/*.job; do
       [ -e "$file" ] || continue
       job_valid "$file" || continue
       [ "$(job_get "$file" task_id)" = "$TASK_ID" ] || continue
-      best="$file"
+      started="$(job_get "$file" started_at)"
+      job_id="$(job_get "$file" job_id)"
+      if [ -z "$best" ] || [ "$started" \> "$best_started" ] || { [ "$started" = "$best_started" ] && [ "$job_id" \> "$best_job_id" ]; }; then
+        best="$file"
+        best_started="$started"
+        best_job_id="$job_id"
+      fi
     done
     [ -n "$best" ] || exit 1
     job_get "$best" job_id
