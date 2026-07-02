@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "workbench evolution persona roster (.workbench/evolution/personas.json)",
+  "description": "Project-configurable persona panel for /workbench:evolve summits. Flat object: scalar knobs plus one 'personas' array of flat objects (string values only) — the shape scripts/evolve.sh's dependency-free parser understands. Exactly one persona must have role 'critic'.",
+  "type": "object",
+  "required": ["personas"],
+  "properties": {
+    "cadence_hours": {
+      "type": "number",
+      "minimum": 1,
+      "default": 24,
+      "description": "A summit is due when more than this many hours have passed since the last one, regardless of backlog depth (keeps the retrospective mandate from starving)."
+    },
+    "queue_low_water": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 2,
+      "description": "A summit is due when the unblocked backlog (for the configured track) drops below this count — the 'keep 2-3 tasks queued' threshold."
+    },
+    "retro_slice": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 3,
+      "description": "How many not-yet-audited verified/shipped tasks each summit re-examines (oldest-by-ID first)."
+    },
+    "track": {
+      "type": "string",
+      "default": "",
+      "description": "Optional **Track:** scope for trigger counting, retrospective candidates, and synthesized tasks. Empty = all tracks."
+    },
+    "personas": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["name", "role", "prompt"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "role": { "enum": ["generator", "critic"] },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The persona's role description, used verbatim as its agent-panel prompt."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,19 @@
+# Ideas ledger — evolution summits
+
+Append-only. One entry per idea any persona raises in any summit — this file is
+the panel's memory across cycles and the human's readable window into what the
+"board" has been thinking about. Every summit READS it before generating (so a
+rejected idea is not re-proposed identically) and greps it for
+`retrospective audit of task #NNNN` entries to rotate retrospective coverage.
+
+Entry format (one line, written by `evolve.sh log`):
+
+```
+- [YYYY-MM-DD] <persona> — <idea one-liner> — <disposition>
+```
+
+Dispositions: `queued as task #NNNN` · `merged into existing task #NNNN` ·
+`rejected by critic: <reason>` · `deferred: <reason>` ·
+`retrospective audit of task #NNNN: <disposition>`
+
+Created: {{CREATED}}
