@@ -43,6 +43,16 @@ When work needs implementation discipline, route through Superpowers: brainstorm
 
 The queue is not a static pile — it breathes. The cycle is: **brainstorm → plan → loop-to-build → replenish**. When `backlog/` empties, generate the next batch from specs and the roadmap; never idle.
 
+### Evolution summits (opt-in replenishment)
+
+If the project has a persona roster at `.workbench/evolution/personas.json`, the loop's replenishment has a second engine: the **evolution summit** (see the `evolution` skill / `/workbench:evolve`). As part of the normal rotation — after each verify-gate close, and always before treating `backlog/` as drained — run the cheap trigger check:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/evolve.sh" check --target "${CLAUDE_PROJECT_DIR}"
+```
+
+`disabled` → skip (evolution is opt-in; never scaffold it unasked). `due <reason>` → convene the summit per the `evolution` skill (generators fan out in parallel, one critic pass, survivors synthesized into normal backlog tasks, every idea logged to the ideas ledger), then resume dispatch immediately — a summit is one step of the rotation, not a separate mode or scheduler. `not-due` → carry on. The trigger fires when the unblocked backlog for the roster's track drops below its `queue_low_water` ("keep 2–3 queued") or its `cadence_hours` have passed since the last summit — whichever comes first, so the retrospective mandate isn't starved during quiet, full-backlog periods. Creating the roster file is the human's standing approval for panel-sourced backlog tasks, so a summit does not violate the carved rule below; the ledger is its audit trail.
+
 **Stay pointed at the north star.** Every few closes the loop runs a value-drift check (`scripts/value-audit.sh check` — wired into the SessionStart scan); when it surfaces a `value-audit` suggestion, *act on it*: compare the recent closes against the charter goal + roadmap, re-prioritize the backlog if the work is drifting low-value or scope-creeping, then `value-audit.sh done` to reset the cadence. Closing tasks is not the goal; moving the charter's outcomes is.
 
 ### The carved rule
@@ -72,4 +82,4 @@ The mode comes from an explicit `dial_overrides.loop_autonomy` in `.workbench/co
 Only `verified/` (or `shipped/`) with evidence is done. "In review" is "code committed, awaiting verification." Never "should work." Claim only what you checked against the source of truth — git, disk, a passing command, a real browser. This is the bar in `.claude/SOUL.md`; embody it.
 
 ## Composes with
-`task-lifecycle` (states, cap, moves) · `models` (who runs what) · `session-continuity` (checkpoint/boot) · `coordination` (multi-session presence, task locking, worktrees) · `superpowers:verification-before-completion` · `superpowers:requesting-code-review` · `/workbench:codex-engineer` (native Codex engineer lane when stuck or user-directed). The dashboard is `/workbench:mc`.
+`task-lifecycle` (states, cap, moves) · `models` (who runs what) · `session-continuity` (checkpoint/boot) · `coordination` (multi-session presence, task locking, worktrees) · `evolution` (opt-in persona-panel summits that replenish the backlog) · `superpowers:verification-before-completion` · `superpowers:requesting-code-review` · `/workbench:codex-engineer` (native Codex engineer lane when stuck or user-directed). The dashboard is `/workbench:mc`.

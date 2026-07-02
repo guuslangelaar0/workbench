@@ -21,7 +21,15 @@ Keep 2–3 tasks queued per lane. Surface decisions to `.claude/tasks/decisions/
 
 **Never wait blind on a completion notification.** After dispatching background work (engineers/verifiers/workflows), schedule a self-paced fallback heartbeat (`ScheduleWakeup` — the `/loop` mechanism) so a dropped signal or a silently-dead agent can't strand you. On wake, reconcile against disk (commits, branches, task `## Notes`), gate what finished, and **re-dispatch what died** — don't re-wait. Cadence is cache-aware: ~`1200s` for in-process subagents, `≤270s` only for fast external state. See the `orchestration` skill, Step 4b.
 
-**When the backlog drains**, read the autonomy mode before deciding what to do next:
+**Replenishment — evolution summits (opt-in).** If `.workbench/evolution/personas.json` exists, consult the summit trigger as part of the rotation (after verify-gate closes, and always before treating the backlog as drained):
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/evolve.sh" check --target "${CLAUDE_PROJECT_DIR}"
+```
+
+On `due <reason>`, run `/workbench:evolve` (the `evolution` skill) to convene the persona panel and synthesize new backlog tasks, then resume dispatch immediately. On `disabled` or `not-due`, carry on — never scaffold evolution unasked.
+
+**When the backlog drains** (and evolution is disabled or not-due), read the autonomy mode before deciding what to do next:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/loop-policy.sh" "${CLAUDE_PROJECT_DIR}"
