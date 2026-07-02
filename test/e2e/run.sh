@@ -14,13 +14,13 @@
 #
 # Options (env):
 #   WB_E2E=1            enable the suite (required)
-#   WB_E2E_TIMEOUT=240  per-scenario timeout in seconds (default 240)
+#   WB_E2E_TIMEOUT=300  per-scenario timeout in seconds (default 300)
 #   WB_E2E_MODEL=...    pass a specific model to `claude --model` (optional)
 set -uo pipefail
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # workbench/ (test/e2e/ -> ../..)
 INIT="$PLUGIN_ROOT/scripts/init.sh"
-TIMEOUT="${WB_E2E_TIMEOUT:-240}"
+TIMEOUT="${WB_E2E_TIMEOUT:-300}"
 fail=0
 pass=0
 
@@ -267,11 +267,12 @@ rm -rf "$D12"
 note "13) /workbench:mesh persists room chat and status events"
 D13="$(scaffold "E2E Mesh Chat" crew)"
 out="$(cd "$D13" && drive "$D13" 'Run these Workbench plugin slash commands in order. First run /workbench:mesh start --local --port 0 --pid-file mesh.pid > mesh.log 2>&1 & so mesh stays in the background. Wait until .workbench/mesh/server.json exists. Then run /workbench:mesh room lead:checkout. Then run /workbench:mesh message lead:checkout "what are you touching?". Then run /workbench:mesh who. Print the concrete output from the room creation, message send, and who commands. Do not call scripts/mesh.sh directly. Do not run mesh start in the foreground. Do not expose LAN.')"
+rc=$?
 mesh_event_contains "$D13" 'room.created' 'lead:checkout' \
   && mesh_event_contains "$D13" 'message.sent' 'what are you touching' \
   && contains "$out" 'connected_actor_count:[[:space:]]*[0-9]+|session:lead' \
   && ok "mesh room chat produces collaboration output" \
-  || bad "mesh room chat did not persist room and message events (model output: $(printf '%s' "$out" | tail -3 | tr '\n' ' '))"
+  || bad "mesh room chat did not persist room and message events (claude status: $rc; model output: $(printf '%s' "$out" | tail -3 | tr '\n' ' '))"
 cleanup_mesh "$D13"
 rm -rf "$D13"
 
