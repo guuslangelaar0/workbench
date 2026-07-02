@@ -43,6 +43,7 @@ ACTIVE_OUT="$(bash "$HERE/scripts/job.sh" list --active --target "$TMP")"
 chk "active list hides terminal job" "! printf '%s' \"\$ACTIVE_OUT\" | grep -q \"$JOB_ID\""
 
 REAL_DATE="$(command -v date)"
+REAL_GIT="$(command -v git)"
 mkdir -p "$TMP/bin"
 {
   printf '#!/usr/bin/env bash\n'
@@ -53,6 +54,40 @@ mkdir -p "$TMP/bin"
   printf 'esac\n'
 } > "$TMP/bin/date"
 chmod +x "$TMP/bin/date"
+{
+  printf '#!/usr/bin/env bash\n'
+  printf 'if [ "$1" = "-C" ] && [ "$3" = "branch" ] && [ "$4" = "--show-current" ]; then sleep 0.1; exit 0; fi\n'
+  printf 'exec %s "$@"\n' "$REAL_GIT"
+} > "$TMP/bin/git"
+chmod +x "$TMP/bin/git"
+
+CONCURRENT_DIR="$TMP/concurrent-starts"
+CONCURRENT_TASK="0066"
+mkdir -p "$CONCURRENT_DIR"
+pids=()
+for n in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  PATH="$TMP/bin:$PATH" bash "$HERE/scripts/job.sh" start codex-engineer "$CONCURRENT_TASK" --target "$TMP" > "$CONCURRENT_DIR/$n.out" 2> "$CONCURRENT_DIR/$n.err" &
+  pids+=("$!")
+done
+CONCURRENT_STATUS=0
+for pid in "${pids[@]}"; do
+  wait "$pid" || CONCURRENT_STATUS=1
+done
+CONCURRENT_IDS="$CONCURRENT_DIR/ids"
+: > "$CONCURRENT_IDS"
+for n in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  sed -n 's/^job: started //p' "$CONCURRENT_DIR/$n.out" | awk '{print $1}' >> "$CONCURRENT_IDS"
+done
+CONCURRENT_STARTED="$(grep -c "^codex-$CONCURRENT_TASK-" "$CONCURRENT_IDS" || true)"
+CONCURRENT_UNIQUE_IDS="$(sort "$CONCURRENT_IDS" | uniq | wc -l | tr -d ' ')"
+CONCURRENT_FILE_COUNT="$(find "$TMP/.workbench/jobs" -name "codex-$CONCURRENT_TASK-*.job" | wc -l | tr -d ' ')"
+CONCURRENT_MISSING=0
+while IFS= read -r concurrent_id; do
+  [ -n "$concurrent_id" ] || { CONCURRENT_MISSING=1; continue; }
+  [ -f "$TMP/.workbench/jobs/$concurrent_id.job" ] || CONCURRENT_MISSING=1
+done < "$CONCURRENT_IDS"
+chk "concurrent same-second starts create 12 unique job ids" "[ '$CONCURRENT_STATUS' = 0 ] && [ '$CONCURRENT_STARTED' = 12 ] && [ '$CONCURRENT_UNIQUE_IDS' = 12 ]"
+chk "concurrent same-second starts keep 12 job files" "[ '$CONCURRENT_FILE_COUNT' = 12 ] && [ '$CONCURRENT_MISSING' = 0 ]"
 
 COLLIDE_ONE="$(PATH="$TMP/bin:$PATH" bash "$HERE/scripts/job.sh" start codex-engineer 0077 --target "$TMP")"
 COLLIDE_TWO="$(PATH="$TMP/bin:$PATH" bash "$HERE/scripts/job.sh" start codex-engineer 0077 --target "$TMP")"

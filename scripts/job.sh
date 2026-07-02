@@ -59,6 +59,11 @@ job_write() {
   } > "$file"
 }
 
+job_reserve_file() {
+  local file="$1"
+  ( set -C; : > "$file" ) 2>/dev/null
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --target) TARGET="${2:-}"; shift 2 ;;
@@ -88,17 +93,25 @@ case "$CMD" in
     ts="$(now_utc)"; iso="$(now_iso)"
     base_job_id="${TYPE%%-*}-${TASK_ID}-${ts}"
     [ "$TYPE" = "codex-engineer" ] && base_job_id="codex-${TASK_ID}-${ts}"
-    JOB_ID="$base_job_id"
-    file="$dir/$JOB_ID.job"
-    suffix=2
-    while [ -e "$file" ]; do
-      JOB_ID="${base_job_id}-${suffix}"
+    suffix=1
+    while :; do
+      if [ "$suffix" = 1 ]; then
+        JOB_ID="$base_job_id"
+      else
+        JOB_ID="${base_job_id}-${suffix}"
+      fi
       file="$dir/$JOB_ID.job"
+      if job_reserve_file "$file"; then
+        break
+      fi
       suffix=$((suffix + 1))
     done
     [ -n "$BRANCH" ] || BRANCH="$(git -C "$TARGET" branch --show-current 2>/dev/null || true)"
     [ -n "$TASK_FILE" ] || TASK_FILE=".claude/tasks"
-    job_write "$file" "$JOB_ID" "$TYPE" "$TASK_ID" "$OWNER" "running" "$iso" "$iso" "$BRANCH" "$RUNTIME_MODE" "$RUNTIME_FLAGS" "$TASK_FILE" ".workbench/lanes/$TASK_ID.lane" "/workbench:codex-engineer $TASK_ID --reconcile" "$OUTPUT_REF" "$SUMMARY" "/workbench:verify $TASK_ID"
+    if ! job_write "$file" "$JOB_ID" "$TYPE" "$TASK_ID" "$OWNER" "running" "$iso" "$iso" "$BRANCH" "$RUNTIME_MODE" "$RUNTIME_FLAGS" "$TASK_FILE" ".workbench/lanes/$TASK_ID.lane" "/workbench:codex-engineer $TASK_ID --reconcile" "$OUTPUT_REF" "$SUMMARY" "/workbench:verify $TASK_ID"; then
+      rm -f "$file"
+      exit 1
+    fi
     echo "job: started $JOB_ID task=$TASK_ID status=running"
     ;;
   update)
