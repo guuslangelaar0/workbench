@@ -28,6 +28,9 @@ done
 "$BIN" availability --target "$TMP" --home "$HOME_TMP" busy --reason "running checkout tests"
 "$BIN" doing --target "$TMP" --home "$HOME_TMP" "running checkout retry tests"
 "$BIN" watch --target "$TMP" --home "$HOME_TMP" session:worker
+JOB_OUT="$(bash "$HERE/scripts/job.sh" start codex-engineer 0042 --target "$TMP" --owner codex --runtime-mode background --summary 'Codex is implementing checkout.')"
+JOB_ID="$(printf '%s\n' "$JOB_OUT" | sed -n 's/^job: started //p' | awk '{print $1}')"
+MESH_JOBS_OUT="$(CLAUDE_PLUGIN_ROOT="$HERE" CLAUDE_PROJECT_DIR="$TMP" WORKBENCH_HOME="$HOME_TMP" bash "$HERE/scripts/mesh.sh" jobs)"
 STATUSLINE_OUTPUT="$("$BIN" snapshot statusline --target "$TMP" --home "$HOME_TMP")"
 SNAPSHOT_PATH="$(find "$HOME_TMP/mesh/statusline" -type f -name '*.json' -print -quit)"
 
@@ -39,6 +42,9 @@ chk "actor spawn appends actor.spawned" "grep -q 'actor.spawned' '$TMP/.workbenc
 chk "availability appends presence.heartbeat" "grep -q 'presence.heartbeat' '$TMP/.workbench/mesh/events.jsonl'"
 chk "doing appends actor.status" "grep -q 'actor.status' '$TMP/.workbench/mesh/events.jsonl'"
 chk "watch appends payload intent" "grep -q '\"intent\":\"watch\"' '$TMP/.workbench/mesh/events.jsonl'"
+chk "mesh jobs shows workbench codex job" "printf '%s' \"\$MESH_JOBS_OUT\" | grep -q \"$JOB_ID\" && printf '%s' \"\$MESH_JOBS_OUT\" | grep -q 'Codex is implementing checkout.'"
+chk "mesh jobs includes task id" "printf '%s' \"\$MESH_JOBS_OUT\" | grep -q 'task:0042'"
+chk "mesh jobs includes job status" "printf '%s' \"\$MESH_JOBS_OUT\" | grep -q 'running'"
 chk "operation payloads include routed data" "python3 - '$TMP/.workbench/mesh/events.jsonl' <<'PY'
 import json
 import sys

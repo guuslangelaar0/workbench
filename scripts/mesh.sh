@@ -270,6 +270,17 @@ case "$cmd" in
     exec "$BIN" handoff "${PROJECT_ARGS[@]}" --task-id "$task_id" --to "$2"
     ;;
   jobs)
+    if [ -x "$PLUGIN_ROOT/scripts/job.sh" ]; then
+      job_out="$(bash "$PLUGIN_ROOT/scripts/job.sh" list --active --target "$TARGET" 2>/dev/null || true)"
+      if [ -n "$job_out" ]; then
+        printf 'Workbench jobs:\n'
+        printf '%s\n' "$job_out" | while IFS=$'\t' read -r job_id job_type task_id job_status job_summary; do
+          [ -n "$job_id" ] || continue
+          printf '  %s  %s  task:%s  %s\n' "$job_id" "$job_status" "$task_id" "$job_summary"
+        done
+        exit 0
+      fi
+    fi
     exec "$BIN" jobs "${PROJECT_ARGS[@]}" "$@"
     ;;
   availability)
