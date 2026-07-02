@@ -63,12 +63,12 @@ chk "style response has no referrer policy" "grep -qi '^referrer-policy: no-refe
 
 JS_HEADERS="$TMP/app.headers"
 JS="$(curl -fsS -D "$JS_HEADERS" "http://127.0.0.1:$PORT/assets/app.js" -H "Authorization: Bearer $TOKEN")"
-chk "app opens websocket" "printf '%s' \"\$JS\" | grep -q 'WebSocket'"
-chk "app posts events" "printf '%s' \"\$JS\" | grep -q '/api/events'"
-chk "app creates invites" "printf '%s' \"\$JS\" | grep -q '/api/invites'"
-chk "app lists devices" "printf '%s' \"\$JS\" | grep -q '/api/devices'"
-chk "app revokes devices" "printf '%s' \"\$JS\" | grep -q '/api/devices/revoke'"
-chk "app supports availability" "printf '%s' \"\$JS\" | grep -q 'availability.set'"
+chk "app opens websocket" "grep -q 'WebSocket' <<<\"\$JS\""
+chk "app posts events" "grep -q '/api/events' <<<\"\$JS\""
+chk "app creates invites" "grep -q '/api/invites' <<<\"\$JS\""
+chk "app lists devices" "grep -q '/api/devices' <<<\"\$JS\""
+chk "app revokes devices" "grep -q '/api/devices/revoke' <<<\"\$JS\""
+chk "app supports availability" "grep -q 'availability.set' <<<\"\$JS\""
 chk "app response is no-store" "grep -qi '^cache-control: no-store' '$JS_HEADERS'"
 chk "app response has no referrer policy" "grep -qi '^referrer-policy: no-referrer' '$JS_HEADERS'"
 
@@ -76,7 +76,7 @@ CSS_QUERY="$(curl -fsS "http://127.0.0.1:$PORT/assets/style.css?token=$TOKEN")"
 chk "query token style defines command rail" "printf '%s' \"\$CSS_QUERY\" | grep -q 'event-rail'"
 
 JS_QUERY="$(curl -fsS "http://127.0.0.1:$PORT/assets/app.js?token=$TOKEN")"
-chk "query token app opens websocket" "printf '%s' \"\$JS_QUERY\" | grep -q 'WebSocket'"
+chk "query token app opens websocket" "grep -q 'WebSocket' <<<\"\$JS_QUERY\""
 
 UNAUTH_RC=0
 curl -fsS "http://127.0.0.1:$PORT/" >/tmp/mesh.ui-unauth.$$ 2>&1 || UNAUTH_RC=$?
