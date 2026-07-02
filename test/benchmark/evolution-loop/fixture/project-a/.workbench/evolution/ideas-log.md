@@ -24,7 +24,7 @@ Created: 2026-06-01
 - [2026-06-18] storage-ops — Storage pool capacity dashboard — queued as task #1201.
 - [2026-06-18] support-lead — Bulk refund cancellation UI — queued as task #1200.
 - [2026-06-18] product-visionary — MRR trend chart on billing overview — queued as task #1202.
-- [2026-06-18] critic — retrospective audit of task #1204: shipped, prod-smoked, priority ordering genuinely solves the original problem — no expansion warranted at this time.
+- [2026-06-18]	[audit:#1204]	critic — retrospective audit of task #1204 — shipped, prod-smoked, priority ordering genuinely solves the original problem — no expansion warranted at this time.
 
 ## Summit — 2026-06-25 09:00 UTC
 

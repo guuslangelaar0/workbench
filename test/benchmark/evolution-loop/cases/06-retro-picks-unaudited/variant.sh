@@ -4,12 +4,16 @@
 # with no retro entry) is added. The correct pick this round is #1207 — proving the
 # mechanism actually greps the ledger and generalizes, rather than a hardcoded "#1203".
 set -uo pipefail
-cat >> .workbench/evolution/ideas-log.md <<'EOF'
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/../lib.sh"
 
-## Summit — 2026-06-28 09:00 UTC
-
-- [2026-06-28] critic — retrospective audit of task #1203: verified but checkbox-done, no search/filter/export — queued follow-up as task #1210 (fixture-only entry, no actual #1210 file needed for this variant).
-EOF
+# Real structural audit marker (evolve.sh log --audit-of), not a hand-written
+# heredoc — matches how the base fixture's #1204 entry is now seeded too, so
+# _audited_ids recognizes this as genuine coverage rather than free text.
+bash "$ROOT/scripts/evolve.sh" log --target . --audit-of 1203 \
+  --persona critic \
+  --idea "retrospective audit of task #1203" \
+  --disposition "verified but checkbox-done, no search/filter/export — queued follow-up as task #1210 (fixture-only entry, no actual #1210 file needed for this variant)" >/dev/null
 
 # bump _next-id past #1206 (reserved by other cases' synthesis output) so this
 # fixture-only verified task lands at the ID the case is written around: #1207
