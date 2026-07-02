@@ -213,7 +213,7 @@ fi
 
 if [ "$LIVE" = 1 ]; then
   e2e_cmd="${WB_RELEASE_E2E_CMD:-cd '$ROOT' && WB_E2E=1 bash test/e2e/run.sh}"
-  bench_cmd="${WB_RELEASE_BENCH_LIVE_CMD:-cd '$ROOT' && WB_BENCH=1 bash scripts/bench-intents.sh --set '$SET'}"
+  bench_cmd="${WB_RELEASE_BENCH_LIVE_CMD:-cd '$ROOT' && WB_BENCH=1 WB_BENCH_ATTEMPTS=2 bash scripts/bench-intents.sh --set '$SET'}"
   run_step "live_e2e" "Live plugin E2E" "e2e" "$e2e_cmd"
   run_step "live_bench" "Live intent bench" "live-bench" "$bench_cmd"
 else

@@ -20,12 +20,14 @@
 # Usage: bench-intents.sh [--simulate] [--keep] [--only <id>] [--set train|holdout|all]
 # Env:
 #   WB_BENCH_TIMEOUT=300  live per-case timeout in seconds
+#   WB_BENCH_ATTEMPTS=1   live attempts per case; release gate uses 2
 set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SELF_DIR/.." && pwd)"
 CASES="$ROOT/test/benchmark/intents/cases"
 SIMULATE=0 KEEP=0 ONLY="" SET="all"
 LIVE_TIMEOUT="${WB_BENCH_TIMEOUT:-300}"
+LIVE_ATTEMPTS="${WB_BENCH_ATTEMPTS:-1}"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --simulate) SIMULATE=1; shift ;;
@@ -38,6 +40,8 @@ done
 case "$SET" in train|holdout|all) ;; *) echo "bench-intents.sh: --set must be train|holdout|all (got '$SET')" >&2; exit 64 ;; esac
 case "$LIVE_TIMEOUT" in ''|*[!0-9]*) echo "bench-intents.sh: WB_BENCH_TIMEOUT must be a positive integer" >&2; exit 64 ;; esac
 [ "$LIVE_TIMEOUT" -gt 0 ] || { echo "bench-intents.sh: WB_BENCH_TIMEOUT must be a positive integer" >&2; exit 64; }
+case "$LIVE_ATTEMPTS" in ''|*[!0-9]*) echo "bench-intents.sh: WB_BENCH_ATTEMPTS must be a positive integer" >&2; exit 64 ;; esac
+[ "$LIVE_ATTEMPTS" -gt 0 ] || { echo "bench-intents.sh: WB_BENCH_ATTEMPTS must be a positive integer" >&2; exit 64; }
 [ -d "$CASES" ] || { echo "bench-intents.sh: no cases dir at $CASES" >&2; exit 1; }
 if [ "$SIMULATE" = 0 ] && [ "${WB_BENCH:-0}" != 1 ]; then
   echo "bench-intents.sh: the LIVE conformance run drives a real model and COSTS API TOKENS." >&2
@@ -56,43 +60,65 @@ for cdir in "$CASES"/*/; do
   total=$((total+1))
   level="$(tr -d ' \n' < "$cdir/level" 2>/dev/null)"; [ -n "$level" ] || level=crew
   prompt="$(cat "$cdir/prompt")"
-  timed_out=0
+  attempts=1
+  [ "$SIMULATE" = 0 ] && attempts="$LIVE_ATTEMPTS"
+  attempt=1
+  verdict=""
+  kept_path=""
 
-  P="$(mktemp -d)"
-  # seed a concrete mission so cases test intent ROUTING, not cold-start ambiguity
-  # (a blank project makes the model ask clarifying questions instead of acting).
-  bash "$ROOT/scripts/init.sh" --name "Intent" --level "$level" \
-    --mission "A small web product: a public REST API, a web UI, and a settings page." \
-    --target "$P" >/dev/null 2>&1
-  [ -f "$cdir/setup.sh" ] && ( cd "$P" && ROOT="$ROOT" bash "$cdir/setup.sh" ) >/dev/null 2>&1
+  while [ "$attempt" -le "$attempts" ]; do
+    timed_out=0
 
-  if [ "$SIMULATE" = 1 ]; then
-    : > "$P/.run-output"   # exists first; a simulate may legitimately write to it (e.g. mc output)
-    ( cd "$P" && ROOT="$ROOT" bash "$cdir/simulate.sh" ) >/dev/null 2>&1
-  else
-    out="$( cd "$P" && timeout "$LIVE_TIMEOUT" claude -p --plugin-dir "$ROOT" --dangerously-skip-permissions "$prompt" 2>/dev/null )"
-    live_rc=$?
-    if [ "$live_rc" -eq 124 ]; then
-      timed_out=1
-      out="TIMEOUT after ${LIVE_TIMEOUT}s: $prompt"
-    elif [ "$live_rc" -ne 0 ]; then
-      out="${out}
+    P="$(mktemp -d)"
+    # seed a concrete mission so cases test intent ROUTING, not cold-start ambiguity
+    # (a blank project makes the model ask clarifying questions instead of acting).
+    bash "$ROOT/scripts/init.sh" --name "Intent" --level "$level" \
+      --mission "A small web product: a public REST API, a web UI, and a settings page." \
+      --target "$P" >/dev/null 2>&1
+    [ -f "$cdir/setup.sh" ] && ( cd "$P" && ROOT="$ROOT" bash "$cdir/setup.sh" ) >/dev/null 2>&1
+
+    if [ "$SIMULATE" = 1 ]; then
+      : > "$P/.run-output"   # exists first; a simulate may legitimately write to it (e.g. mc output)
+      ( cd "$P" && ROOT="$ROOT" bash "$cdir/simulate.sh" ) >/dev/null 2>&1
+    else
+      out="$( cd "$P" && timeout "$LIVE_TIMEOUT" claude -p --plugin-dir "$ROOT" --dangerously-skip-permissions "$prompt" 2>/dev/null )"
+      live_rc=$?
+      if [ "$live_rc" -eq 124 ]; then
+        timed_out=1
+        out="TIMEOUT after ${LIVE_TIMEOUT}s: $prompt"
+      elif [ "$live_rc" -ne 0 ]; then
+        out="${out}
 CLAUDE_EXIT_${live_rc}"
+      fi
+      printf '%s' "$out" > "$P/.run-output"
     fi
-    printf '%s' "$out" > "$P/.run-output"
-  fi
 
-  if ( cd "$P" && RUN_OUTPUT="$P/.run-output" ROOT="$ROOT" bash "$cdir/oracle.sh" ) >/dev/null 2>&1; then
-    verdict="PASS"; pass=$((pass+1))
-  elif [ "$timed_out" = 1 ]; then
-    verdict="TIMEOUT"
-    timeouts=$((timeouts+1))
-  else
-    verdict="fail"
-    failures=$((failures+1))
-  fi
-  printf '  %-22s [%-4s] %s\n' "$id" "$level" "$verdict"
-  [ "$KEEP" = 1 ] && echo "      (kept: $P)" || rm -rf "$P"
+    if ( cd "$P" && RUN_OUTPUT="$P/.run-output" ROOT="$ROOT" bash "$cdir/oracle.sh" ) >/dev/null 2>&1; then
+      verdict="PASS"
+      pass=$((pass+1))
+      [ "$KEEP" = 1 ] && kept_path="$P" || rm -rf "$P"
+      break
+    elif [ "$timed_out" = 1 ]; then
+      verdict="TIMEOUT"
+    else
+      verdict="fail"
+    fi
+
+    if [ "$attempt" -lt "$attempts" ]; then
+      rm -rf "$P"
+      attempt=$((attempt+1))
+      continue
+    fi
+
+    [ "$verdict" = "TIMEOUT" ] && timeouts=$((timeouts+1)) || failures=$((failures+1))
+    [ "$KEEP" = 1 ] && kept_path="$P" || rm -rf "$P"
+    break
+  done
+
+  retry_note=""
+  [ "$attempt" -gt 1 ] && retry_note=" (attempt $attempt/$attempts)"
+  printf '  %-22s [%-4s] %s%s\n' "$id" "$level" "$verdict" "$retry_note"
+  [ "$KEEP" = 1 ] && [ -n "$kept_path" ] && echo "      (kept: $kept_path)"
 done
 
 echo "─────────────────────────────────────────────"

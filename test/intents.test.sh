@@ -88,6 +88,35 @@ ELAPSED=$((T1-T0))
 chk "live case timeout does not hang" "[ $TRC -eq 0 ] && [ $ELAPSED -lt 4 ] && printf '%s' \"\$TOUT\" | grep -q 'TIMEOUT'"
 rm -rf "$FAKEBIN"
 
+FAKEBIN="$(mktemp -d "${TMPDIR:-/tmp}/bench-intents-retrybin.XXXXXX")"
+COUNT_FILE="$FAKEBIN/count"
+cat > "$FAKEBIN/claude" <<'SH'
+#!/usr/bin/env bash
+count_file="${WB_FAKE_COUNT:?}"
+count="$(cat "$count_file" 2>/dev/null || printf '0')"
+count=$((count+1))
+printf '%s' "$count" > "$count_file"
+plugin=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--plugin-dir" ]; then
+    plugin="${2:-}"
+    shift 2
+    continue
+  fi
+  shift
+done
+if [ "$count" -lt 2 ]; then
+  printf 'not enough context yet\n'
+  exit 0
+fi
+bash "$plugin/scripts/task-new.sh" --target "$PWD" --state in-development --title "Fix CSV export crash on empty input file" >/dev/null 2>&1
+printf 'tracked CSV export empty input bug\n'
+SH
+chmod +x "$FAKEBIN/claude"
+RETRY_OUT="$(WB_BENCH=1 WB_BENCH_ATTEMPTS=2 WB_FAKE_COUNT="$COUNT_FILE" PATH="$FAKEBIN:$PATH" bash "$BI" --only 01-bug-autofile 2>&1)"
+chk "live retry can recover a transient miss" "printf '%s' \"\$RETRY_OUT\" | grep -q 'conformance=1/1' && printf '%s' \"\$RETRY_OUT\" | grep -q 'attempt 2/2' && [ \"\$(cat '$COUNT_FILE')\" = 2 ]"
+rm -rf "$FAKEBIN"
+
 # live path refuses without WB_BENCH=1
 chk "live refuses (exit 2)"      "bash '$BI' >/dev/null 2>&1; [ \$? -eq 2 ]"
 
