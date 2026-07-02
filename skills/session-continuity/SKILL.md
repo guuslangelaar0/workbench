@@ -10,6 +10,8 @@ The way of working must survive compaction and new sessions. It is kept active b
 ## Boot (new or resumed session)
 Run `/workbench:boot`: Phase 1 verify reality from disk (SESSION_STATE, tasks, git, build, prod), Phase 2 reconcile drift, Phase 3 brief in facts and wait for "go". Never trust chat memory over disk.
 
+When the user says "I'm back", "where were we?", or asks for a catch-up, read `.claude/SESSION_STATE.md` first and quote the `## Now` focus before interpreting a quiet repo as greenfield. Treat `SESSION_STATE.md` as the authoritative volatile state unless concrete disk evidence contradicts it. A catch-up is read-only: answer from disk, then stop unless the user asks for action after the briefing.
+
 ## Checkpoint discipline
 Write `.claude/SESSION_STATE.md` on cadence (default every ~30 min of active work; sooner for risky work) and at any natural seam — `/workbench:checkpoint` does it. The test: could a brand-new session resume from SESSION_STATE alone? If not, it is not a real checkpoint. The SessionStart hook re-injects the "Now" snapshot, so keep that section current.
 

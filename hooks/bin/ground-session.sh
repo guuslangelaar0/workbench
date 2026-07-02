@@ -87,7 +87,7 @@ ir="$(count in-review)"; [ "${ir:-0}" -ge "$cap" ] 2>/dev/null && echo "" && ech
 
 if [ -f "$P/.claude/SESSION_STATE.md" ]; then
   snap="$(sed -n '/^## Now/,/^## /p' "$P/.claude/SESSION_STATE.md" | sed '/^## /d;/^$/d' | head -8 | sed 's/^/  /')"
-  [ -n "$snap" ] && { echo ""; echo "SESSION_STATE 'Now' snapshot:"; printf '%s\n' "$snap"; }
+  [ -n "$snap" ] && { echo ""; echo "SESSION_STATE is the authoritative volatile state for resume/catch-up questions unless concrete disk evidence contradicts it."; echo "Resume/catch-up questions are read-only briefings: answer from disk, then stop unless the user asks for action."; echo "SESSION_STATE 'Now' snapshot:"; printf '%s\n' "$snap"; }
 fi
 
 if [ -x "$P/scripts/coord/wb-coord" ]; then

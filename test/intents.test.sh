@@ -26,6 +26,21 @@ SIM="$(bash "$BI" --simulate 2>/dev/null)"
 chk "simulate: $N/$N conformance" "printf '%s' \"\$SIM\" | grep -q 'conformance=$N/$N'"
 chk "simulate: grade 100"        "printf '%s' \"\$SIM\" | grep -q 'grade=100/100'"
 
+# continuity fixture must write a real current snapshot, not append a second malformed section.
+PC="$(mktemp -d)"
+bash "$ROOT/scripts/init.sh" --name Continuity --level crew --target "$PC" >/dev/null 2>&1
+( cd "$PC" && ROOT="$ROOT" bash "$CASES/08-continuity/setup.sh" ) >/dev/null 2>&1
+now_count="$(grep -c '^## Now' "$PC/.claude/SESSION_STATE.md" || true)"
+now_block="$(sed -n '/^## Now/,/^## /p' "$PC/.claude/SESSION_STATE.md" | sed '$d')"
+chk "08 continuity fixture has one Now section" "[ '$now_count' -eq 1 ]"
+chk "08 continuity fixture writes focus into Now" "printf '%s' \"\$now_block\" | grep -qi 'oauth token refresh'"
+chk "08 continuity fixture has git repo" "[ -d '$PC/.git' ]"
+chk "08 continuity fixture has OAuth task in development" "ls '$PC/.claude/tasks/in-development/'*oauth*token*refresh* >/dev/null 2>&1"
+chk "08 continuity fixture has API work evidence" "[ -f '$PC/api/auth-refresh.js' ]"
+chk "08 continuity fixture has committed handoff evidence" "( cd '$PC' && git log --oneline -1 >/dev/null 2>&1 )"
+chk "08 continuity fixture task is not placeholder-only" "grep -qi 'replay' '$PC/.claude/tasks/in-development/'*oauth*token*refresh*"
+rm -rf "$PC"
+
 # --only selects a single case
 ONE="$(bash "$BI" --simulate --only 01-bug-autofile 2>/dev/null)"
 chk "--only runs one case"       "printf '%s' \"\$ONE\" | grep -q 'conformance=1/1'"

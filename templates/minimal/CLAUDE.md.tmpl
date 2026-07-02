@@ -23,11 +23,14 @@ Hard routing rule: **"grab/pull/start the next task/feature from backlog" is `/w
 
 Hard routing rule: **"start/build <title>" first searches existing backlog tasks for that title.** If a matching task exists, run `/workbench:next <title>` or `deps.sh status <id>` before asking scope/stack questions. If it is blocked, report the dependency and stop.
 
+Hard routing rule: **"I'm back" / "where were we?" / "catch me up" starts from `.claude/SESSION_STATE.md`.** Read its `## Now` section first and treat it as the authoritative volatile state unless concrete disk evidence contradicts it. This is a read-only briefing: do not start inception, create decisions, dispatch work, edit files, or continue implementation until the user asks for action after the catch-up. Do not dismiss current-focus lines as stale/template content just because the repo is otherwise quiet.
+
 Hard routing rule: **"plan/decompose a big multi-part effort" is a lightweight capture first.** At fleet create one epic; at solo create flat backlog task stubs for the named parts. Do not choose providers, open decisions, initialize git, commit, or write a full spec unless the user explicitly asks for that depth.
 
 - **bug / "X is broken" / security or privacy bug / plaintext password or secret leak** → auto-file a task (`/workbench:task`); bugs are tracked, not just discussed. If the repo/code path is missing, still file it and record "locate affected repo/code path" as the first blocker.
 - **feature idea / "would be cool" / "for later"** → `/workbench:suggest add` (the suggestion surface) — not the task backlog, and never auto-built.
 - **status / overview / "where do things stand"** → run `/workbench:mc` and include the **Mission Control** dashboard output; don't reconstruct it by hand.
+- **"I'm back" / "where were we?" / "catch me up"** → read `.claude/SESSION_STATE.md` first, quote the current focus from `## Now`, then reconcile task counts. This is read-only: do not start inception, create decisions, dispatch work, edit files, or continue implementation until the user asks for action after the catch-up.
 - **"start work on X"** → create a task with `/workbench:task` to capture it, even while clarifying details.
 - **"grab/pull the next task" / "start the next feature from backlog"** → run `/workbench:next` first. It reports cap pressure, blockers, or the safe dispatch command.
 - **blocked work / unfinished `Blocked-by` dependency** → run `/workbench:next <hint>` or `deps.sh status <id>`, explain the dependency, and do not dispatch until the blocker is verified/shipped.

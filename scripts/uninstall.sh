@@ -35,11 +35,12 @@ import os
 import shutil
 import sys
 
-target, manifest_path = sys.argv[1], sys.argv[2]
+target, manifest_path = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
 apply = sys.argv[3] == "1"
 keep_data = sys.argv[4] == "1"
 force = sys.argv[5] == "1"
 manifest = json.load(open(manifest_path))
+cfg_dir = os.path.dirname(manifest_path)
 
 def sha(path):
     h = hashlib.sha256()
@@ -51,6 +52,7 @@ def sha(path):
 remove = []
 preserve = []
 confirm = []
+deactivate = []
 
 for entry in manifest.get("files", []):
     rel = entry["path"]
@@ -75,6 +77,12 @@ for entry in manifest.get("files", []):
     else:
         confirm.append((rel, "managed edited"))
 
+config_path = os.path.join(cfg_dir, "config.json")
+if os.path.exists(config_path):
+    deactivate.append((".workbench/config.json", config_path))
+if not keep_data and os.path.exists(manifest_path):
+    deactivate.append((".workbench/manifest.json", manifest_path))
+
 print("workbench uninstall " + ("apply" if apply else "dry-run"))
 print("")
 if remove:
@@ -91,6 +99,11 @@ if confirm:
     print("Needs confirmation:")
     for rel, reason in confirm:
         print(f"  {rel} ({reason})")
+if deactivate:
+    print("")
+    print("Would deactivate:" if not apply else "Deactivated:")
+    for rel, _ in deactivate:
+        print(f"  {rel}")
 
 side = manifest.get("side_effects", {})
 gitignore_blocks = side.get("gitignore_blocks", [])
@@ -159,8 +172,15 @@ for rel in remove:
         except FileNotFoundError:
             pass
 
-# Data is preserved by default. The flag is explicit documentation of intent for
-# callers and future destructive modes.
-if keep_data:
-    pass
+for _, full in deactivate:
+    try:
+        os.remove(full)
+    except FileNotFoundError:
+        pass
+
+if not keep_data:
+    try:
+        os.rmdir(cfg_dir)
+    except OSError:
+        pass
 PY

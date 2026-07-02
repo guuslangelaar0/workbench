@@ -6,6 +6,16 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-07-02
+
+The uninstall deactivation fix. Workbench project uninstall now removes the active config marker so a repo that has been uninstalled no longer re-enters Workbench through hooks, hook-mode checks, or the front door.
+
+### Fixed
+- `/workbench:uninstall --apply` now removes `.workbench/config.json`, which is the project-active marker used by hooks and setup detection.
+- Default uninstall also removes `.workbench/manifest.json`; `--keep-data` preserves the manifest as a cleanup ledger while still deactivating the project by removing the config marker.
+- The uninstall regression suite now asserts that an applied uninstall leaves hook-mode status `unconfigured`.
+- Resume/catch-up prompts such as "I'm back" and "where were we?" now route explicitly to `.claude/SESSION_STATE.md` before Workbench infers a greenfield project or starts inception from a quiet repo.
+
 ## [0.7.0] - 2026-07-02
 
 The native-agent release. Workbench now speaks more naturally to Claude Code's latest orchestration model: Codex can run as a first-class engineer lane, Claude worktree lanes are documented and routed through Workbench, normal chat intents are steered into the right command, and first-run onboarding makes hooks an intentional project choice.

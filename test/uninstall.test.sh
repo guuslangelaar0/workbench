@@ -19,6 +19,9 @@ bash "$HERE/scripts/uninstall.sh" --target "$TMP" --apply >/dev/null 2>&1
 chk "apply removes unchanged managed file" "[ ! -e '$TMP/scripts/coord/wb-coord' ]"
 chk "apply preserves merge file" "[ -f '$TMP/CLAUDE.md' ]"
 chk "apply preserves once file" "[ -f '$TMP/.workbench/loop-charter.md' ] && [ -f '$TMP/.claude/tasks/_next-id' ]"
+chk "apply removes active config marker" "[ ! -f '$TMP/.workbench/config.json' ]"
+chk "apply removes uninstall manifest by default" "[ ! -f '$TMP/.workbench/manifest.json' ]"
+chk "apply leaves hooks unconfigured" "bash '$HERE/scripts/hooks-mode.sh' status --target '$TMP' --plugin-root '$HERE' 2>/dev/null | grep -q '^state=unconfigured$'"
 chk "apply removes gitignore lock line" "! grep -qxF '/.claude/locks/' '$TMP/.gitignore' 2>/dev/null"
 chk "apply removes hook block" "! grep -q 'wb-coord commit guard' '$TMP/.git/hooks/pre-commit' 2>/dev/null"
 
@@ -33,6 +36,7 @@ bash "$HERE/scripts/init.sh" --name "Data" --mission "x" --target "$TMP3" >/dev/
 bash "$HERE/scripts/task-new.sh" --title "Keep Data" --target "$TMP3" >/dev/null
 bash "$HERE/scripts/uninstall.sh" --target "$TMP3" --apply --keep-data >/dev/null 2>&1
 chk "keep-data preserves tasks" "ls '$TMP3/.claude/tasks/backlog/'*.md >/dev/null 2>&1"
+chk "keep-data removes active config marker" "[ ! -f '$TMP3/.workbench/config.json' ]"
 chk "keep-data preserves manifest" "[ -f '$TMP3/.workbench/manifest.json' ]"
 
 TMP4="$(mktemp -d)"

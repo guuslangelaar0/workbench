@@ -27,6 +27,8 @@ chk "brief points to SOUL"     "printf '%s' \"\$BRIEF\" | grep -q 'SOUL.md'"
 chk "brief injects prime directive"      "printf '%s' \"\$BRIEF\" | grep -q 'prime directive: forward motion'"
 chk "prime directive bans permission-asking" "printf '%s' \"\$BRIEF\" | grep -qi 'do not ask permission'"
 chk "brief re-injects the loop charter"  "printf '%s' \"\$BRIEF\" | grep -q 'loop charter'"
+chk "brief treats SESSION_STATE as authoritative" "printf '%s' \"\$BRIEF\" | grep -q 'SESSION_STATE is the authoritative volatile state'"
+chk "brief makes catchups read-only" "printf '%s' \"\$BRIEF\" | grep -qi 'catch-up questions are read-only'"
 NOOP="$(CLAUDE_PROJECT_DIR="$(mktemp -d)" bash "$HERE/hooks/bin/ground-session.sh" </dev/null 2>/dev/null; echo "rc=$?")"
 chk "no-op in non-workbench dir"  "[ \"\$NOOP\" = 'rc=0' ]"
 
