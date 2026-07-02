@@ -88,3 +88,26 @@ el_count_unblocked_backlog() {
   done
   echo "$n"
 }
+
+# el_fill_task <path> <why> <criteria_block> <scenarios_block> — the ONE part of a
+# summit no offline harness can drive for real: the persona-panel LLM's prose. Every
+# other step (scaffolding via task-new.sh, ledger entries via evolve.sh log, the
+# trigger via evolve.sh check, retro selection via evolve.sh retro-candidates) is
+# exercised for real against evolve.sh; only this content-authoring step is a
+# necessary stand-in, and it is isolated to this one helper so it's auditable as
+# exactly the gap the review called out (case-by-case content, not the mechanism).
+el_fill_task() { # <path> <why-paragraph> <criteria-lines> <scenario-lines>
+  local f="$1" why="$2" criteria="$3" scenarios="$4"
+  python3 - "$f" "$why" "$criteria" "$scenarios" <<'PYEOF'
+import sys
+p, why, criteria, scenarios = sys.argv[1:5]
+s = open(p).read()
+s = s.replace("(one paragraph: the user-facing reason this exists)", why)
+s = s.replace(
+    "<!-- the checkable definition of done, written BEFORE dispatch. Replace the placeholder. -->\n- [ ] ...",
+    "<!-- the checkable definition of done, written BEFORE dispatch. Replace the placeholder. -->\n" + criteria,
+)
+s = s.replace("- Happy path: ...\n- Edge / negative: ...", scenarios)
+open(p, "w").write(s)
+PYEOF
+}

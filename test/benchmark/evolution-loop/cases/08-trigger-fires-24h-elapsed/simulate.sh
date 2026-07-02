@@ -1,13 +1,29 @@
 #!/usr/bin/env bash
-# Fakes the CORRECT behavior: even though backlog is well-stocked (post-variant.sh),
-# 10 days since last_summit_at exceeds the 24h ceiling -> the trigger fires anyway, and
-# a summit runs (this time likely a retrospective-heavy one, per the spec's "so the
-# retrospective mandate doesn't get starved during quiet periods").
+# Genuinely exercises the real trigger: `evolve.sh check` is run for real against the
+# variant's real state (backlog filled to 5 unblocked admin tasks, last-summit aged to
+# 10 real days ago) and its actual first line is captured to .evolve-check-output —
+# the oracle asserts on THAT real captured output, not keywords in a hand-written
+# report. Only if the real command says "due ..." does the retrospective-heavy summit
+# actually proceed, and the retro target itself comes from the real
+# `evolve.sh retro-candidates`, not a hardcoded id.
 set -uo pipefail
-cat >> .workbench/evolution/ideas-log.md <<'EOF'
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/../lib.sh"
 
-## Summit — 2026-07-02 09:00 UTC
+bash "$ROOT/scripts/evolve.sh" check --target . > .evolve-check-output 2>&1
+check_line1="$(head -1 .evolve-check-output)"
 
-- [2026-07-02] critic — retrospective audit of task #1203: verified but checkbox-done, no search/filter/export — queued follow-up as task #1210. (trigger: 24h+ elapsed since last summit, backlog was already full)
-EOF
-echo "workbench: backlog was full, but 10 days since last summit exceeds the 24h ceiling -> summit triggered" > .run-output
+case "$check_line1" in
+  due*)
+    bash "$ROOT/scripts/evolve.sh" record-summit --target . >/dev/null
+    target_id="$(bash "$ROOT/scripts/evolve.sh" retro-candidates --target . --track admin --limit 1)"
+    bash "$ROOT/scripts/evolve.sh" log --target . \
+      --persona critic \
+      --idea "retrospective audit of task #$target_id" \
+      --disposition "verified but checkbox-done — no search/filter/export — queued follow-up. (trigger: 24h+ elapsed since last summit, backlog was already full)"
+    echo "workbench: evolve.sh check reported '$check_line1' -> backlog was full, but elapsed time since last summit exceeded the cadence ceiling, summit triggered (retrospective audited #$target_id)" > .run-output
+    ;;
+  *)
+    echo "workbench: evolve.sh check reported '$check_line1' -> no summit run" > .run-output
+    ;;
+esac

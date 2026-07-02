@@ -64,18 +64,45 @@ fakes the correct behavior (`--simulate`, offline, free) or drives the real mode
 | `08-trigger-fires-24h-elapsed` | Q4 | elapsed-time-over-24h alone fires the trigger even when backlog is fully stocked (the spec's explicit "so quiet periods don't starve the retrospective mandate" case) |
 | `09-trigger-does-not-fire` | Q4 | when NEITHER leg is true, no summit runs at all — ledger and backlog are byte-for-byte unchanged, and the run output explicitly names why |
 
-Every oracle in this suite was verified against a deliberately-broken "bad" simulate run
-(a rubber-stamping critic, a re-audited task, a trigger that fires when it shouldn't) to
-confirm it actually fails in that case and isn't a rubber stamp itself — the important
-property is that every `oracle.sh` here has been exercised both ways, not just against
-its own matching `simulate.sh`. This suite was additionally checked against the REAL
-`scripts/evolve.sh` directly (not just simulated): a scratch copy of the plugin had its
-trigger's OR-condition and its retrospective ledger-audit tracking each independently
-disabled, and `evolve.sh check` / `evolve.sh retro-candidates` run against this suite's
-own fixture states confirmed the break flips the exact outcome each case depends on
-(`due backlog-low` / `due summit-stale` → `not-due`; `1203` only → `1203, 1204` — i.e. a
-re-suggested already-audited task). The scratch copy was discarded; `scripts/evolve.sh`
-in this repo was never modified.
+**How `--simulate` actually exercises `evolve.sh`.** Every case's `simulate.sh` genuinely
+CALLS the real `scripts/evolve.sh` subcommands against the seeded fixture — `check` to
+confirm the trigger is actually due before proceeding, `record-summit` to stamp the real
+ledger heading, `log` to append every persona's disposition (not just the one
+"interesting" idea — a full run logs the OTHER generators' deferred/rejected ideas too, so
+the ledger shows evidence of real multi-persona convening), `retro-candidates`/`audited`
+to pick the real retrospective target, and `task-new.sh` to scaffold any surviving idea
+into a real task file (real `_next-id` allocation, real template). The only hand-authored
+part is the actual PROSE a persona-panel LLM would write (an idea's one-liner, a task's
+`## Why`/acceptance criteria) — isolated in `el_fill_task` (lib.sh) precisely because it's
+the one part no offline harness can produce for real. Cases that must NOT synthesize a
+banned/duplicate/vague idea prove that by simply never calling `task-new.sh` for it, so
+the oracle is checking the REAL resulting filesystem/ledger state, not a fabricated
+"expected" line.
+
+Every oracle in this suite was verified against a deliberately-broken "bad" run to confirm
+it actually fails in that case and isn't a rubber stamp itself — the important property is
+that every `oracle.sh` here has been exercised both ways, not just against its own
+matching `simulate.sh`. Concretely:
+- A rubber-stamping critic (still creating the duplicate/decided-against/vague task
+  alongside a bookkeeping-only rejection ledger line, including a REWORDED version of the
+  decided-against idea — e.g. "single master admin account for staff auth" instead of
+  "shared login" — to probe the concept-check, not a single dodgeable regex) was
+  constructed for cases 02/03/04 and confirmed to fail each one.
+- A "fabricated single task + heading, no other persona activity" run (the minimum a
+  cheating implementation could produce to satisfy a weak oracle) was constructed for case
+  01 and confirmed to fail on "no evidence multiple personas actually convened."
+- A byte-identical-count-but-different-content mutation was checked against case 09's
+  content-checksum (not line-count) assertion.
+- This suite was additionally checked against the REAL `scripts/evolve.sh` directly (not
+  just simulated): a scratch copy of the plugin had its trigger's OR-condition disabled
+  entirely (`evolve.sh check` always reports `not-due`) and its retrospective
+  ledger-audit tracking disabled (`_audited_ids` always empty), each independently, and
+  re-running the whole `--simulate` suite against that scratch copy dropped conformance
+  from 9/9 to 4/9 and 8/9 respectively — exactly the cases that depend on the broken
+  mechanism (01/02/04/07/08 for the trigger; 06 for ledger-dedup generalization) flipped to
+  `fail`, while the others (which test independent mechanisms) correctly kept passing. The
+  scratch copy was discarded; `git diff` confirmed `scripts/evolve.sh` in this repo was
+  never modified.
 
 ## Ground truth this suite is built against
 

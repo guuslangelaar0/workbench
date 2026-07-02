@@ -11,7 +11,12 @@ done
 # 2026-07-02T07:00:00Z, 2h before fixture NOW (2026-07-02T09:00:00Z)
 echo 1782975600 > .workbench/evolution/last-summit
 
-# snapshot post-variant state so the oracle can assert NOTHING changed, without
-# hardcoding a specific file count that would silently drift if the variant above changes
-ls .claude/tasks/backlog/*.md 2>/dev/null | wc -l | tr -d ' ' > .workbench/evolution/.snapshot-backlog-count
-wc -l < .workbench/evolution/ideas-log.md | tr -d ' ' > .workbench/evolution/.snapshot-ledger-lines
+# snapshot post-variant state so the oracle can assert NOTHING changed — a genuine
+# content checksum (not just file/line COUNTS, which a mutation that changes content
+# while preserving counts would slip past). sha256 the full byte content of the ledger
+# and of every backlog task file (name + content, so a rename or a content edit that
+# keeps the same byte count both still show up as a diff).
+sha256sum .workbench/evolution/ideas-log.md 2>/dev/null | awk '{print $1}' > .workbench/evolution/.snapshot-ledger-sha256
+{ for f in .claude/tasks/backlog/*.md; do [ -f "$f" ] || continue; sha256sum "$f"; done; } \
+  | sort -k2 > .workbench/evolution/.snapshot-backlog-sha256
+cp .workbench/evolution/ideas-log.md .workbench/evolution/.snapshot-ledger-content
