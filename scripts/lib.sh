@@ -9,6 +9,29 @@ il_cfg_dir() { # <project_root>
   else printf '%s\n' "$1/.workbench"; fi
 }
 
+# Resolve a project root from a launch directory. Claude hooks may start from a
+# repo subdirectory, but Workbench state belongs to the nearest configured root.
+il_project_root() { # <path>
+  local p="${1:-$PWD}" cur parent
+  [ -n "$p" ] || p="$PWD"
+  [ -f "$p" ] && p="$(dirname "$p")"
+
+  if cur="$(cd "$p" 2>/dev/null && pwd -P)"; then
+    while :; do
+      if [ -f "$cur/.workbench/config.json" ] || [ -f "$cur/.initlab/config.json" ]; then
+        printf '%s\n' "$cur"
+        return 0
+      fi
+      [ "$cur" = "/" ] && break
+      parent="$(dirname "$cur")"
+      [ "$parent" = "$cur" ] && break
+      cur="$parent"
+    done
+  fi
+
+  printf '%s\n' "$p"
+}
+
 # True when Workbench hooks should run for this project. Missing hook preference
 # is treated as enabled for backward compatibility with pre-hook-choice configs.
 il_hooks_enabled() { # <project_root>

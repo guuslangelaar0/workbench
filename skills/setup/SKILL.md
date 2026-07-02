@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Use when running /workbench:setup, when bare /workbench finds no .workbench/config.json, or when any /workbench command is invoked in an unconfigured project. Runs the level-aware adoption wizard: assesses existing repo signals, gives positive feedback, infers and recommends a maturity level, then runs the guided per-axis configuration wizard, writes .workbench/config.json, and scaffolds the project.
+description: Use when running /workbench:setup, when /workbench:workbench finds no .workbench/config.json, or when any /workbench command is invoked in an unconfigured project. Runs the level-aware adoption wizard: assesses existing repo signals, gives positive feedback, infers and recommends a maturity level, then runs the guided per-axis configuration wizard, writes .workbench/config.json, and scaffolds the project.
 ---
 
 # workbench setup wizard

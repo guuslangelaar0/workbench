@@ -13,7 +13,7 @@ tp="$(get transcript_path)"
 sid="$(get session_id)"
 [ -n "$tp" ] && [ -f "$tp" ] || exit 0
 
-P="${CLAUDE_PROJECT_DIR:-$PWD}"
+P="$(il_project_root "${CLAUDE_PROJECT_DIR:-$PWD}")"
 _cfg="$(il_cfg_dir "$P")"
 [ -f "$_cfg/config.json" ] || exit 0
 il_hooks_enabled "$P" || exit 0

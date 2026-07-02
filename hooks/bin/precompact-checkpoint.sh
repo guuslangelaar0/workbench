@@ -5,7 +5,7 @@
 set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SELF_DIR/../../scripts/lib.sh" 2>/dev/null || exit 0
-P="${CLAUDE_PROJECT_DIR:-$PWD}"
+P="$(il_project_root "${CLAUDE_PROJECT_DIR:-$PWD}")"
 _cfg_dir="$(il_cfg_dir "$P")"
 [ -f "$_cfg_dir/config.json" ] || exit 0
 il_hooks_enabled "$P" || exit 0

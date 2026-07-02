@@ -6,7 +6,7 @@ set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SELF_DIR/../../scripts/lib.sh" 2>/dev/null || exit 0
 
-PROJECT="${CLAUDE_PROJECT_DIR:-$PWD}"
+PROJECT="$(il_project_root "${CLAUDE_PROJECT_DIR:-$PWD}")"
 [ -f "$(il_cfg_dir "$PROJECT")/config.json" ] || exit 0
 il_hooks_enabled "$PROJECT" || exit 0
 input="$(cat)"
@@ -28,7 +28,8 @@ json_escape() {
 }
 
 level() {
-  local cfg="$PROJECT/.workbench/config.json" lvl
+  local cfg lvl
+  cfg="$(il_cfg_dir "$PROJECT")/config.json"
   [ -f "$cfg" ] || return 0
   lvl="$(sed -n 's/.*"level"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$cfg" | head -1)"
   printf '%s' "$lvl"

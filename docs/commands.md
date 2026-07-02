@@ -1,6 +1,6 @@
 # Command reference
 
-All commands are namespaced `/workbench:*`. The bare `/workbench` is the front door — if you only remember one, remember that.
+All commands are namespaced `/workbench:*`. Type `/workbench` to filter the command menu; run `/workbench:workbench` as the front door — if you only remember one, remember that.
 
 Every command defers to setup when the project is unconfigured, so running anything on a fresh project guides you into configuration first.
 
@@ -15,7 +15,7 @@ Context-aware entry point (the front door). On an **unconfigured** project it ru
 The guided, per-axis setup wizard. Walks each configuration choice as a card with *leaner / recommended / better* options and a plain-language cost note, writes `.workbench/config.json`, then scaffolds. This is what `/workbench:workbench` calls on a fresh project.
 
 ### `/workbench:init`
-Non-interactive scaffold. Renders templates + manifest into the project. Preserves an existing `.workbench/config.json` (the wizard owns it). Useful for re-scaffolding or scripted setup. Accepts `--name`, `--level`, `--profile minimal|full`, `--target <dir>`.
+Non-interactive scaffold. Renders templates + manifest into the project. Preserves an existing `.workbench/config.json` (the wizard owns it). Useful for re-scaffolding or scripted setup. Accepts `--name`, `--level`, `--profile minimal|full`, `--hooks enabled|disabled`, `--target <dir>`. Direct init defaults hooks to enabled; choose `--hooks disabled` intentionally if you want slash-command-only Workbench.
 
 ### `/workbench:uninstall`
 Project-level uninstall. Reads `.workbench/manifest.json`, dry-runs by default, and removes only unchanged workbench-owned `managed` files plus recorded side-effect blocks such as `.gitignore` and pre-commit hook snippets. It preserves `merge`, `once`, pre-existing, edited, and data files unless you explicitly apply a more destructive mode. This is separate from `/plugin uninstall workbench@workbench`, which only removes the Claude plugin from Claude Code.

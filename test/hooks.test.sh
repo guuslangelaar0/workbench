@@ -68,6 +68,13 @@ OUTF="$(mktemp)"
 ( cd "$OTHER" && NO_COLOR=1 CLAUDE_PROJECT_DIR="$PROJ" bash "$HERE/hooks/bin/ground-session.sh" ) >"$OUTF" 2>/dev/null
 chk "ground brief shows this project's session" "grep -q sidProjAAA '$OUTF'"
 chk "ground brief hides other project's session" "! grep -q sidOtherBBB '$OUTF'"
+SUB="$PROJ/packages/api"
+mkdir -p "$SUB"
+( cd "$OTHER" && NO_COLOR=1 CLAUDE_PROJECT_DIR="$SUB" bash "$HERE/hooks/bin/ground-session.sh" ) >"$OUTF" 2>/dev/null
+chk "ground brief resolves project root from subdir" "grep -q sidProjAAA '$OUTF'"
+printf '{"hook_event_name":"UserPromptSubmit","session_id":"s","prompt":"Let'\''s grab the next feature from the backlog."}' \
+  | CLAUDE_PROJECT_DIR="$SUB" CLAUDE_PLUGIN_ROOT="$HERE" bash "$HERE/hooks/bin/intent-router.sh" > "$PROJ/subdir-intent.json"
+chk "intent router resolves project root from subdir" "grep -q '/workbench:next' '$PROJ/subdir-intent.json'"
 rm -rf "$PROJ" "$OTHER" "$OUTF"
 
 # UserPromptSubmit purpose hook injects current lead purpose as additional context.

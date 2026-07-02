@@ -18,8 +18,8 @@ cat >/dev/null 2>&1 || true   # drain the hook's stdin payload; we judge from di
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$SELF_DIR/../.." && pwd)"
 GATE="$PLUGIN_ROOT/scripts/verify-gate.sh"
-PROJECT="${CLAUDE_PROJECT_DIR:-$PWD}"
 . "$PLUGIN_ROOT/scripts/lib.sh" 2>/dev/null || exit 0
+PROJECT="$(il_project_root "${CLAUDE_PROJECT_DIR:-$PWD}")"
 [ -f "$(il_cfg_dir "$PROJECT")/config.json" ] || exit 0
 il_hooks_enabled "$PROJECT" || exit 0
 REVIEW="$PROJECT/.claude/tasks/in-review"

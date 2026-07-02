@@ -18,6 +18,9 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SELF_DIR/../../scripts/lib.sh" 2>/dev/null || true
 
 P="${CLAUDE_PROJECT_DIR:-$PWD}"
+if command -v il_project_root >/dev/null 2>&1; then
+  P="$(il_project_root "$P")"
+fi
 
 # Resolve the config dir. If lib.sh failed to source for any reason, degrade to a
 # sane default so we still fail open rather than erroring.
