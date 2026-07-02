@@ -6,6 +6,12 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-07-02
+
+The dependency-resolution fix release. Workbench failed to load for anyone
+who already had the official `superpowers` plugin installed — this release
+fixes that without changing any other behavior.
+
 ### Fixed
 - The superpowers dependency is now marketplace-qualified (`superpowers@claude-plugins-official`) and the workbench marketplace allowlists `claude-plugins-official` for dependency auto-install. Previously the unqualified dependency was resolved against workbench's own marketplace, so workbench failed to load (`Dependency "superpowers@workbench" is not installed`) even when the official superpowers plugin was installed and enabled.
 
