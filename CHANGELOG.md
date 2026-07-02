@@ -6,6 +6,9 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- The superpowers dependency is now marketplace-qualified (`superpowers@claude-plugins-official`) and the workbench marketplace allowlists `claude-plugins-official` for dependency auto-install. Previously the unqualified dependency was resolved against workbench's own marketplace, so workbench failed to load (`Dependency "superpowers@workbench" is not installed`) even when the official superpowers plugin was installed and enabled.
+
 ## [0.8.0] - 2026-07-02
 
 The Codex lane observability release. Workbench now tracks Codex engineer lanes as durable jobs on disk, so a lead can recover from dropped callbacks, see active Codex work in Mission Control and Mesh, and close jobs when verification finishes.

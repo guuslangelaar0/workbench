@@ -22,6 +22,6 @@
     "claude-code"
   ],
   "dependencies": [
-    { "name": "superpowers", "version": ">=6.1.0" }
+    { "name": "superpowers", "marketplace": "claude-plugins-official", "version": ">=6.1.0" }
   ]
 }

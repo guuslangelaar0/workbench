@@ -6,6 +6,7 @@
     "name": "Guus Langelaar",
     "email": "guus@devidee.nl"
   },
+  "allowCrossMarketplaceDependenciesOn": ["claude-plugins-official"],
   "plugins": [
     {
       "name": "workbench",
