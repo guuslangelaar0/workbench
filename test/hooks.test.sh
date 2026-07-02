@@ -22,6 +22,18 @@ ND="$(mktemp -d)"; printf '{}' | CLAUDE_PROJECT_DIR="$ND" bash "$HERE/hooks/bin/
 chk "precompact no-op elsewhere" "[ \"\$(cat /tmp/pc.$$)\" = 'rc=0' ] && ! ls '$ND/.workbench' >/dev/null 2>&1"
 DIS="$(mktemp -d)"
 bash "$HERE/scripts/init.sh" --profile full --name "HooksOff" --mission m --target "$DIS" --hooks disabled >/dev/null 2>&1
+mkdir -p "$DIS/.workbench"
+python3 - <<PY
+import json
+p = "$DIS/.workbench/config.json"
+try:
+    d = json.load(open(p))
+except Exception:
+    d = {}
+d.setdefault("workbench", {})["hooks"] = {"mode": "disabled", "version": "test"}
+d.setdefault("project", {})["name"] = "HooksOff"
+open(p, "w").write(json.dumps(d, indent=2) + "\n")
+PY
 disabled_brief="$(CLAUDE_PROJECT_DIR="$DIS" CLAUDE_PLUGIN_ROOT="$HERE" bash "$HERE/hooks/bin/ground-session.sh" </dev/null 2>/dev/null || true)"
 chk "disabled hooks suppress SessionStart brief" "[ -z \"\$disabled_brief\" ]"
 printf '{"trigger":"manual","session_id":"s1"}' | CLAUDE_PROJECT_DIR="$DIS" CLAUDE_PLUGIN_ROOT="$HERE" bash "$HERE/hooks/bin/precompact-checkpoint.sh" >/dev/null 2>&1
@@ -29,6 +41,20 @@ chk "disabled hooks suppress precompact checkpoint" "! ls '$DIS/.workbench/check
 printf '{"hook_event_name":"UserPromptSubmit","session_id":"s","prompt":"Let'\''s grab the next feature from the backlog."}' \
   | CLAUDE_PROJECT_DIR="$DIS" CLAUDE_PLUGIN_ROOT="$HERE" bash "$HERE/hooks/bin/intent-router.sh" > "$DIS/disabled-intent.json"
 chk "disabled hooks suppress intent router" "[ ! -s '$DIS/disabled-intent.json' ]"
+cat > "$DIS/disabled-transcript.jsonl" <<'EOF'
+{"type":"assistant","message":{"role":"assistant","usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}
+EOF
+printf '{"hook_event_name":"Stop","session_id":"s","transcript_path":"%s"}' "$DIS/disabled-transcript.jsonl" \
+  | CLAUDE_PROJECT_DIR="$DIS" CLAUDE_PLUGIN_ROOT="$HERE" bash "$HERE/hooks/bin/usage-meter.sh" >/dev/null 2>&1
+chk "disabled hooks suppress usage meter" "[ ! -f '$DIS/.workbench/usage/current.tsv' ]"
+DIS_HOME="$(mktemp -d)"
+mkdir -p "$DIS_HOME/mesh/statusline"
+cat > "$DIS_HOME/mesh/statusline/hooksoff.json" <<'JSON'
+{"project":"HooksOff","current_actor":"disabled actor","availability":"busy","doing":"disabled project pulse","active_count":1,"stale_count":0}
+JSON
+disabled_statusline="$(WORKBENCH_HOME="$DIS_HOME" CLAUDE_PROJECT_DIR="$DIS" CLAUDE_PLUGIN_ROOT="$HERE" bash "$HERE/hooks/bin/mesh-statusline.sh" 2>/dev/null || true)"
+chk "disabled hooks suppress mesh statusline" "[ -z \"\$disabled_statusline\" ]"
+rm -rf "$DIS_HOME"
 rm -rf "$DIS"
 rm -rf "$TMP" "$ND" /tmp/pc.$$
 
