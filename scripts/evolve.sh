@@ -21,12 +21,21 @@
 #                                2-persona solo preset; pair/crew/fleet -> the 3+1 crew preset.
 #                                admin-example is the worked 4-generator internal-admin panel.
 #   evolve.sh validate         [--target DIR]              check the roster (exit 2 on invalid)
-#   evolve.sh roster           [--target DIR]              TSV: name<TAB>role<TAB>prompt
-#   evolve.sh check            [--target DIR] [--track T]  first line: disabled | due <reason> | not-due
-#   evolve.sh record-summit    [--target DIR]              stamp last-summit + ledger heading
-#   evolve.sh log --persona P --idea I --disposition D [--target DIR]   append a ledger entry
+#   evolve.sh roster           [--target DIR]              TSV: name<TAB>role<TAB>prompt (exit 2 if invalid)
+#   evolve.sh check            [--target DIR] [--track T]  first line: disabled | invalid | due <reason> | not-due
+#   evolve.sh record-summit    [--target DIR] [--force]    stamp last-summit + ledger heading; the ATOMIC
+#                                claim of a due summit — refuses (exit 75) if another session recorded
+#                                one under EVOLVE_SUMMIT_GUARD_SECONDS (default 600) ago. --force overrides.
+#   evolve.sh log --persona P --idea I --disposition D [--audit-of NNNN] [--target DIR]
+#                                append a ledger entry. --audit-of writes the structural retrospective-
+#                                audit marker for task NNNN (the ONLY thing rotation tracking counts —
+#                                free text mentioning a task id is never treated as coverage).
 #   evolve.sh audited          [--target DIR]              task ids already retrospectively audited
 #   evolve.sh retro-candidates [--target DIR] [--track T] [--limit N]   oldest un-audited verified/shipped ids
+#
+# Concurrency: check/record-summit/log serialize under an advisory lock at
+# .claude/locks/evolution.lock (il_lock in lib.sh — same discipline/location as the
+# coord tooling's with-lock.sh). A held lock -> exit 75: skip and retry, don't crash.
 set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"   # workbench/scripts
 PLUGIN_ROOT="$(cd "$SELF_DIR/.." && pwd)"                  # workbench
@@ -38,7 +47,7 @@ evo_ledger() { printf '%s\n' "$(evo_dir "$1")/ideas-log.md"; }
 evo_stamp()  { printf '%s\n' "$(evo_dir "$1")/last-summit"; }
 
 CMD="${1:-}"; [ "$#" -gt 0 ] && shift
-TARGET="$PWD" TRACK="" LIMIT="" PERSONA="" IDEA="" DISPOSITION="" PRESET=""
+TARGET="$PWD" TRACK="" LIMIT="" PERSONA="" IDEA="" DISPOSITION="" PRESET="" AUDIT_OF="" FORCE=0
 need_arg() { [ "$#" -ge 2 ] || { echo "evolve.sh: $1 requires a value" >&2; exit 64; }; }
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -49,12 +58,19 @@ while [ "$#" -gt 0 ]; do
     --persona)     need_arg "$@"; PERSONA="$2"; shift 2 ;;
     --idea)        need_arg "$@"; IDEA="$2"; shift 2 ;;
     --disposition) need_arg "$@"; DISPOSITION="$2"; shift 2 ;;
+    --audit-of)    need_arg "$@"; AUDIT_OF="$2"; shift 2 ;;
+    --force)       FORCE=1; shift ;;
     *) echo "evolve.sh: unknown arg '$1'" >&2; exit 64 ;;
   esac
 done
 TARGET="${TARGET%/}"; [ -n "$TARGET" ] || TARGET="/"
 
-# one-line sanitize (ledger entries must stay one entry = one line)
+_die() { echo "evolve.sh: $*" >&2; exit 1; }
+
+# one-line sanitize (ledger entries must stay one entry = one line). Removing
+# TABS here is load-bearing: the retrospective-audit marker is a tab-delimited
+# column only the `log --audit-of` code path can emit, so no persona/idea/
+# disposition text (including AI-generated summit output) can forge it.
 _clean() { printf '%s' "$1" | tr '\n\t' '  '; }
 
 # --- roster parsing -----------------------------------------------------------
@@ -95,6 +111,7 @@ evo_parse() { # <personas.json>
         else if (c == ",")  { flush() }
         else if (c == "[" || c == "]") { flush() }
       }
+      printf "meta\tpcount\t%d\n", pidx   # objects SEEN (even empty {}), for validation
     }
   ' "$1"
 }
@@ -116,33 +133,70 @@ _knob() { # <personas.json> <key> <default>
   printf '%s\n' "${v:-$3}"
 }
 
+# caps — mirrored in templates/schemas/personas.schema.json; enforced HERE because
+# nothing else enforces the schema at runtime. They bound what a misconfigured or
+# oversized roster can spawn/spend (personas = parallel agents, prompts = tokens,
+# retro_slice = audited tasks per summit).
+EVO_MAX_PERSONAS=10
+EVO_MAX_PROMPT_CHARS=2000
+EVO_MAX_RETRO_SLICE=20
+
 _validate() { # <personas.json> -> problem lines on stdout; return 0 iff clean
-  local tsv gens=0 crits=0 total=0 bad=0 name role prompt dups
+  local tsv gens=0 crits=0 total=0 bad=0 line name role prompt rest dups pcount k v
   tsv="$(_roster_tsv "$1")"
   [ -n "$tsv" ] || { echo "no personas found (expected a 'personas' array of {name, role, prompt} objects)"; return 1; }
-  while IFS=$'\t' read -r name role prompt; do
-    [ -n "$name" ] || continue
+  # EVERY parsed object is validated — a nameless row is rejected outright, never
+  # skipped (a skipped nameless critic used to bypass the exactly-one-critic check
+  # while still reaching the roster downstream). Split fields manually: tab is IFS
+  # whitespace, so `IFS=$'\t' read a b c` would silently swallow a LEADING empty
+  # name field and shift role into name — exactly the row we must not misread.
+  while IFS= read -r line; do
     total=$((total + 1))
+    name="${line%%$'\t'*}"; rest="${line#*$'\t'}"
+    role="${rest%%$'\t'*}"; prompt="${rest#*$'\t'}"
+    [ -n "$name" ] || { echo "persona #$total has no name (every persona requires a name)"; bad=1; name="#$total"; }
     [ -n "$prompt" ] || { echo "persona '$name' has an empty prompt"; bad=1; }
+    [ "${#prompt}" -le "$EVO_MAX_PROMPT_CHARS" ] || { echo "persona '$name' prompt is ${#prompt} chars (max $EVO_MAX_PROMPT_CHARS)"; bad=1; }
     case "$role" in
       generator) gens=$((gens + 1)) ;;
       critic)    crits=$((crits + 1)) ;;
       *) echo "persona '$name' has invalid role '$role' (must be generator|critic)"; bad=1 ;;
     esac
   done <<< "$tsv"
-  dups="$(printf '%s\n' "$tsv" | cut -f1 | sort | uniq -d)"
+  # objects with no fields at all ({}) emit no TSV row — catch them by comparing
+  # the parser's SEEN-object count (meta row) against the validated row count
+  pcount="$(evo_parse "$1" | awk -F'\t' '$1 == "meta" && $2 == "pcount" { print $3; exit }')"
+  pcount="${pcount:-$total}"
+  [ "$pcount" -eq "$total" ] || { echo "personas array contains $(( pcount - total )) empty object(s) (every persona requires name, role, prompt)"; bad=1; }
+  [ "$total" -le "$EVO_MAX_PERSONAS" ] || { echo "too many personas ($total > $EVO_MAX_PERSONAS) — each persona is a parallel agent; a panel this large dilutes every voice and inflates cost"; bad=1; }
+  dups="$(printf '%s\n' "$tsv" | cut -f1 | awk 'NF' | sort | uniq -d)"
   [ -z "$dups" ] || { echo "duplicate persona name(s): $(printf '%s' "$dups" | tr '\n' ' ')"; bad=1; }
   [ "$gens" -ge 1 ]  || { echo "roster needs at least one generator persona (found $gens)"; bad=1; }
   [ "$crits" -eq 1 ] || { echo "roster needs exactly ONE critic persona (found $crits)"; bad=1; }
+  # knobs: check's bash arithmetic needs integers — fail HERE at validate time,
+  # not with a cryptic arithmetic error at check time
+  while IFS=$'\t' read -r _ k v; do
+    case "$k" in
+      cadence_hours)
+        case "$v" in ''|*[!0-9]*) echo "knob cadence_hours must be a positive integer (got '$v')"; bad=1 ;;
+          *) [ "$v" -ge 1 ] || { echo "knob cadence_hours must be >= 1 (got $v)"; bad=1; } ;; esac ;;
+      queue_low_water)
+        case "$v" in ''|*[!0-9]*) echo "knob queue_low_water must be a non-negative integer (got '$v')"; bad=1 ;; esac ;;
+      retro_slice)
+        case "$v" in ''|*[!0-9]*) echo "knob retro_slice must be a non-negative integer (got '$v')"; bad=1 ;;
+          *) [ "$v" -le "$EVO_MAX_RETRO_SLICE" ] || { echo "knob retro_slice must be <= $EVO_MAX_RETRO_SLICE (got $v)"; bad=1; } ;; esac ;;
+    esac
+  done < <(evo_parse "$1" | awk -F'\t' '$1 == "knob"')
   return "$bad"
 }
 
-_ensure_ledger() { # <target>
+_ensure_ledger() { # <target>; returns non-zero if the ledger cannot be created
   local led; led="$(evo_ledger "$1")"
   [ -f "$led" ] && return 0
-  mkdir -p "$(evo_dir "$1")"
+  mkdir -p "$(evo_dir "$1")" || return 1
   il_render "$PLUGIN_ROOT/templates/evolution/ideas-log.md.tmpl" "$led" \
-    "CREATED=$(date -u +%Y-%m-%d)"
+    "CREATED=$(date -u +%Y-%m-%d)" || return 1
+  [ -f "$led" ]
 }
 
 # ready backlog ids, optionally filtered to one **Track:** value
@@ -160,16 +214,27 @@ _ready_ids() { # <target> <track>
   done
 }
 
-_audited_ids() { # <target> -> numeric ids (as written in the ledger) already covered
+# Retrospective coverage is tracked by a STRUCTURAL marker, not free text: an
+# audit entry is "- [YYYY-MM-DD]<TAB>[audit:#NNNN]<TAB>...", and only the
+# `log --audit-of` code path can produce that shape (persona/idea/disposition
+# text is tab-stripped by _clean, and record-summit/log are the only writers).
+# A free-text "retrospective audit of task #7" inside an idea — including
+# adversarial AI-generated summit output — can therefore never mark a task
+# as covered.
+_audited_ids() { # <target> -> ids (as written in the ledger) already covered
   local led; led="$(evo_ledger "$1")"
   [ -f "$led" ] || return 0
-  grep -oE 'retrospective audit of task #[0-9]+' "$led" 2>/dev/null \
-    | grep -oE '[0-9]+$' | sort -u
+  awk -F'\t' '
+    $1 ~ /^- \[[0-9]{4}-[0-9]{2}-[0-9]{2}\]$/ && $2 ~ /^\[audit:#[0-9]+\]$/ {
+      id = $2; sub(/^\[audit:#/, "", id); sub(/\]$/, "", id); print id
+    }
+  ' "$led" 2>/dev/null | sort -u
 }
 
 case "$CMD" in
   init)
-    dir="$(evo_dir "$TARGET")"; mkdir -p "$dir"
+    dir="$(evo_dir "$TARGET")"
+    mkdir -p "$dir" || _die "cannot create $dir"
     if [ -f "$dir/personas.json" ]; then
       echo "evolve: roster already exists at $dir/personas.json (left untouched)"
     else
@@ -184,10 +249,10 @@ case "$CMD" in
       fi
       src="$PLUGIN_ROOT/templates/evolution/personas.$PRESET.json"
       [ -f "$src" ] || { echo "evolve.sh: unknown preset '$PRESET' (solo|crew|admin-example)" >&2; exit 64; }
-      cp "$src" "$dir/personas.json"
+      cp "$src" "$dir/personas.json" || _die "cannot write $dir/personas.json"
       echo "evolve: scaffolded '$PRESET' roster at $dir/personas.json — rewrite the generators for YOUR domain"
     fi
-    _ensure_ledger "$TARGET"
+    _ensure_ledger "$TARGET" || _die "cannot create ledger at $(evo_ledger "$TARGET")"
     echo "evolve: ledger at $(evo_ledger "$TARGET")"
     echo "schema: templates/schemas/personas.schema.json (in the workbench plugin)"
     ;;
@@ -207,6 +272,13 @@ case "$CMD" in
   roster)
     f="$(evo_roster "$TARGET")"
     [ -f "$f" ] || { echo "evolve: no roster at $f (run 'evolve.sh init' first)" >&2; exit 2; }
+    # never emit a panel from an invalid roster — an unvalidated roster could
+    # smuggle e.g. a second (nameless) critic past the exactly-one-critic rule
+    if ! problems="$(_validate "$f")"; then
+      echo "evolve: roster INVALID — refusing to emit a panel:" >&2
+      printf '%s\n' "$problems" | sed 's/^/  - /' >&2
+      exit 2
+    fi
     _roster_tsv "$f"
     ;;
 
@@ -222,6 +294,8 @@ case "$CMD" in
       printf '%s\n' "$problems" | sed 's/^/  - /'
       exit 2
     fi
+    # serialize with record-summit so a stamp mid-write can't be misread
+    il_lock "$TARGET" evolution || exit 75
     low="$(_knob "$f" queue_low_water 2)"
     cad="$(_knob "$f" cadence_hours 24)"
     trk="${TRACK:-$(_knob "$f" track "")}"
@@ -237,7 +311,8 @@ case "$CMD" in
       age_h=$(( (now - last) / 3600 ))
       if [ "$ready" -lt "$low" ]; then
         reason="backlog-low"
-      elif [ $(( now - last )) -ge $(( cad * 3600 )) ]; then
+      elif [ $(( now - last )) -gt $(( cad * 3600 )) ]; then
+        # strictly MORE than cadence_hours, per the spec — not at-exactly
         reason="summit-stale"
       fi
     fi
@@ -246,10 +321,26 @@ case "$CMD" in
     ;;
 
   record-summit)
-    mkdir -p "$(evo_dir "$TARGET")"
-    _ensure_ledger "$TARGET"
-    date +%s > "$(evo_stamp "$TARGET")"
-    printf '\n## Summit — %s\n' "$(date -u +'%Y-%m-%d %H:%M UTC')" >> "$(evo_ledger "$TARGET")"
+    # THE atomic claim of a due summit. Two leads can both observe `check` = due;
+    # only the first record-summit wins — the second is refused by the duplicate
+    # guard below (exit 75) and must skip its summit.
+    il_lock "$TARGET" evolution || exit 75
+    stamp="$(evo_stamp "$TARGET")"
+    if [ "$FORCE" != 1 ] && [ -f "$stamp" ]; then
+      last="$(tr -d ' \n' < "$stamp")"
+      case "$last" in ''|*[!0-9]*) last=0 ;; esac
+      gap="${EVOLVE_SUMMIT_GUARD_SECONDS:-600}"
+      age=$(( $(date +%s) - last ))
+      if [ "$age" -ge 0 ] && [ "$age" -lt "$gap" ]; then
+        echo "evolve: a summit was recorded ${age}s ago (< ${gap}s guard) — refusing a duplicate; another session likely claimed this summit (--force to override)" >&2
+        exit 75
+      fi
+    fi
+    mkdir -p "$(evo_dir "$TARGET")" || _die "cannot create $(evo_dir "$TARGET")"
+    _ensure_ledger "$TARGET" || _die "cannot create ledger at $(evo_ledger "$TARGET")"
+    date +%s > "$stamp" || _die "cannot write summit stamp $stamp"
+    printf '\n## Summit — %s\n' "$(date -u +'%Y-%m-%d %H:%M UTC')" >> "$(evo_ledger "$TARGET")" \
+      || _die "cannot append to ledger $(evo_ledger "$TARGET")"
     echo "evolve: summit recorded ($(date -u +'%Y-%m-%d %H:%M UTC'))"
     ;;
 
@@ -257,10 +348,22 @@ case "$CMD" in
     [ -n "$PERSONA" ]     || { echo "evolve.sh: log requires --persona" >&2; exit 64; }
     [ -n "$IDEA" ]        || { echo "evolve.sh: log requires --idea" >&2; exit 64; }
     [ -n "$DISPOSITION" ] || { echo "evolve.sh: log requires --disposition" >&2; exit 64; }
-    _ensure_ledger "$TARGET"
-    printf -- '- [%s] %s — %s — %s\n' \
-      "$(date -u +%Y-%m-%d)" "$(_clean "$PERSONA")" "$(_clean "$IDEA")" "$(_clean "$DISPOSITION")" \
-      >> "$(evo_ledger "$TARGET")"
+    if [ -n "$AUDIT_OF" ]; then
+      case "$AUDIT_OF" in ''|*[!0-9]*) echo "evolve.sh: --audit-of must be a numeric task id (got '$AUDIT_OF')" >&2; exit 64 ;; esac
+    fi
+    il_lock "$TARGET" evolution || exit 75
+    _ensure_ledger "$TARGET" || _die "cannot create ledger at $(evo_ledger "$TARGET")"
+    if [ -n "$AUDIT_OF" ]; then
+      # tab-delimited marker column — see _audited_ids for why this shape is
+      # the only thing retrospective-coverage tracking will count
+      printf -- '- [%s]\t[audit:#%s]\t%s — %s — %s\n' \
+        "$(date -u +%Y-%m-%d)" "$AUDIT_OF" "$(_clean "$PERSONA")" "$(_clean "$IDEA")" "$(_clean "$DISPOSITION")" \
+        >> "$(evo_ledger "$TARGET")" || _die "cannot append to ledger $(evo_ledger "$TARGET")"
+    else
+      printf -- '- [%s] %s — %s — %s\n' \
+        "$(date -u +%Y-%m-%d)" "$(_clean "$PERSONA")" "$(_clean "$IDEA")" "$(_clean "$DISPOSITION")" \
+        >> "$(evo_ledger "$TARGET")" || _die "cannot append to ledger $(evo_ledger "$TARGET")"
+    fi
     echo "evolve: logged"
     ;;
 
@@ -274,6 +377,7 @@ case "$CMD" in
     if [ -z "$limit" ] && [ -f "$f" ]; then limit="$(_knob "$f" retro_slice 3)"; fi
     [ -n "$limit" ] || limit=3
     case "$limit" in ''|*[!0-9]*) echo "evolve.sh: --limit must be numeric" >&2; exit 64 ;; esac
+    [ "$limit" -le "$EVO_MAX_RETRO_SLICE" ] || { echo "evolve.sh: --limit must be <= $EVO_MAX_RETRO_SLICE (got $limit)" >&2; exit 64; }
     trk="$TRACK"
     if [ -z "$trk" ] && [ -f "$f" ]; then trk="$(_knob "$f" track "")"; fi
     T="$TARGET/.claude/tasks"
@@ -293,7 +397,7 @@ case "$CMD" in
     ;;
 
   ''|help|--help|-h)
-    sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'
     ;;
 
   *)

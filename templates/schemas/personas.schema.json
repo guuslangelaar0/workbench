@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "workbench evolution persona roster (.workbench/evolution/personas.json)",
-  "description": "Project-configurable persona panel for /workbench:evolve summits. Flat object: scalar knobs plus one 'personas' array of flat objects (string values only) — the shape scripts/evolve.sh's dependency-free parser understands. Exactly one persona must have role 'critic'.",
+  "description": "Project-configurable persona panel for /workbench:evolve summits. Flat object: scalar knobs plus one 'personas' array of flat objects (string values only) — the shape scripts/evolve.sh's dependency-free parser understands. Exactly one persona must have role 'critic'. All constraints here (types, exactly-one-critic, and the caps on panel size / prompt length / retro_slice) are enforced at runtime by `evolve.sh validate` — the schema alone gates nothing. Trust model: this file is checked-in project configuration — persona prompts are trusted the same as any other config (whoever can edit it already has repo write access), not attacker-controlled input.",
   "type": "object",
   "required": ["personas"],
   "properties": {
@@ -10,10 +10,10 @@
       "description": "Human-readable note about this panel (presets use it to say which tier/domain they fit)."
     },
     "cadence_hours": {
-      "type": "number",
+      "type": "integer",
       "minimum": 1,
       "default": 24,
-      "description": "A summit is due when more than this many hours have passed since the last one, regardless of backlog depth (keeps the retrospective mandate from starving)."
+      "description": "A summit is due when STRICTLY more than this many hours have passed since the last one, regardless of backlog depth (keeps the retrospective mandate from starving). Integer — evolve.sh's bash arithmetic rejects floats at validate time."
     },
     "queue_low_water": {
       "type": "integer",
@@ -24,8 +24,9 @@
     "retro_slice": {
       "type": "integer",
       "minimum": 0,
+      "maximum": 20,
       "default": 3,
-      "description": "How many not-yet-audited verified/shipped tasks each summit re-examines (oldest-by-ID first)."
+      "description": "How many not-yet-audited verified/shipped tasks each summit re-examines (oldest-by-ID first). Capped at 20 so a misconfigured roster can't make every summit re-audit the whole archive."
     },
     "track": {
       "type": "string",
@@ -35,6 +36,8 @@
     "personas": {
       "type": "array",
       "minItems": 2,
+      "maxItems": 10,
+      "description": "Max 10 — each persona is a parallel agent per summit; an unbounded roster is an unbounded cost knob.",
       "items": {
         "type": "object",
         "required": ["name", "role", "prompt"],
@@ -44,7 +47,8 @@
           "prompt": {
             "type": "string",
             "minLength": 1,
-            "description": "The persona's role description, used verbatim as its agent-panel prompt."
+            "maxLength": 2000,
+            "description": "The persona's role description, used verbatim as its agent-panel prompt. Trusted project configuration (see the top-level trust-model note), capped at 2000 chars to bound per-summit prompt cost."
           }
         },
         "additionalProperties": false

@@ -62,6 +62,56 @@ il_json_escape() {
   printf '%s' "$s"
 }
 
+# --- advisory lock --------------------------------------------------------------
+# il_lock <project_root> <name> — serialize a read-modify-write sequence across
+# concurrent sessions on this machine (same class of problem the coord tooling's
+# scripts/coord/with-lock.sh solves for deploys; same lock location and JSON shape
+# — a heartbeat_epoch-bearing file at .claude/locks/<name>.lock — so the two
+# disciplines respect each other's locks).
+#
+# Claim is atomic (noclobber create). A lock whose heartbeat is older than
+# IL_LOCK_TTL (default 60s) is stale — the holder died — and is reclaimed.
+# Waits up to IL_LOCK_WAIT seconds (default 10) for a fresh lock to clear,
+# then fails with 75 (EX_TEMPFAIL): the caller should skip, not crash.
+# Released by il_unlock, installed on EXIT (and INT/TERM route through EXIT).
+IL_LOCK_FILE=""
+il_lock() { # <project_root> <name>
+  local root="$1" name="$2" dir lock now hb waited=0
+  dir="$root/.claude/locks"
+  mkdir -p "$dir" 2>/dev/null || { echo "il_lock: cannot create $dir" >&2; return 1; }
+  lock="$dir/$name.lock"
+  while :; do
+    if ( set -o noclobber; printf '{"name":"%s","holder":"pid-%s@%s","pid":%s,"heartbeat_epoch":%s,"action":"%s"}\n' \
+          "$name" "$$" "${HOSTNAME:-host}" "$$" "$(date +%s)" "${0##*/}" > "$lock" ) 2>/dev/null; then
+      IL_LOCK_FILE="$lock"
+      trap 'il_unlock' EXIT
+      trap 'exit 130' INT
+      trap 'exit 143' TERM
+      return 0
+    fi
+    hb="$(sed -n 's/.*"heartbeat_epoch":[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$lock" 2>/dev/null | head -1 || true)"
+    # unreadable/mid-write lock: judge freshness by file mtime instead
+    if [ -z "$hb" ]; then
+      hb="$(stat -c %Y "$lock" 2>/dev/null || stat -f %m "$lock" 2>/dev/null || echo 0)"
+    fi
+    now="$(date +%s)"
+    if [ $(( now - hb )) -le "${IL_LOCK_TTL:-60}" ]; then
+      if [ "$waited" -ge "${IL_LOCK_WAIT:-10}" ]; then
+        echo "il_lock: '$name' is held by another session (heartbeat $(( now - hb ))s ago, $lock) — try again shortly" >&2
+        return 75
+      fi
+      sleep 1; waited=$(( waited + 1 ))
+    else
+      rm -f "$lock" 2>/dev/null || true   # stale (holder died) — reclaim and retry
+    fi
+  done
+}
+il_unlock() {
+  [ -n "${IL_LOCK_FILE:-}" ] && rm -f "$IL_LOCK_FILE" 2>/dev/null
+  IL_LOCK_FILE=""
+  return 0
+}
+
 # Render a .tmpl file by substituting {{KEY}} tokens. Args: <tmpl> <out> then KEY=VALUE pairs.
 # Two-phase (template tokens -> sentinels -> values) so a value that itself contains a
 # {{KEY}} substring is never re-scanned and clobbered. Values may contain any chars (incl. &, \).
