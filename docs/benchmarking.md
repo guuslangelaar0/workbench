@@ -62,6 +62,26 @@ with hidden oracles and score outcomes against **ground truth, not self-report**
 overclaiming and regressions get caught — the scorecard can't see them. Gated by `WB_BENCH=1`;
 `--simulate [honest|sloppy]` exercises the harness offline.
 
+### Evolution-loop conformance — same shape, deeper content-quality checks
+`scripts/bench-evolution-loop.sh` + `test/benchmark/evolution-loop/` tests the
+evolution-loop "summit" mechanism (persona panel, dual generate+retrospect mandate,
+ideas ledger, synthesis into task files — see
+`docs/superpowers/specs/2026-07-02-admin-evolution-loop-design.md`) with the same
+prompt+effect-oracle shape as the intent harness above, but oracles that check OUTPUT
+QUALITY against ground truth (well-formed task files with placeholders actually
+replaced, a planted bad idea actually rejected not rubber-stamped, ledger-dedup actually
+respected, the two-leg trigger actually evaluated correctly) rather than just "did the
+right command fire." **Not yet wired into `scripts/bench.sh`'s default cadence** — the
+generalized evolution-loop implementation this suite targets was still landing in
+`feat/evolution-loop` as of authoring; wire it in once that merges. See
+`test/benchmark/evolution-loop/cases/README.md` for the case index and the assumptions
+this suite had to make about not-yet-final file paths/config shape.
+
+```sh
+bash scripts/bench-evolution-loop.sh --simulate          # free offline harness check
+WB_BENCH=1 bash scripts/bench-evolution-loop.sh           # live (costs tokens)
+```
+
 ## The optimizer — `scripts/knob-search.sh` (BM-6)
 
 Once there's a number, improving workbench is a loop: change a knob → re-measure → keep iff
