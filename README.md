@@ -93,7 +93,7 @@ That's the whole rhythm: pick a level, capture work as tasks, let the loop drive
 | `/workbench:codex-engineer <id>` | Dispatch a task to Codex through the OpenAI Codex plugin while Workbench keeps lifecycle and verification ownership; `--reconcile`, `/workbench:mc`, and `/workbench:mesh jobs` show callback-less Codex lane status. |
 | `/workbench:verify <id>` | Run a task's verification and gate it to `verified/` (or back) |
 | `/workbench:mc` | Mission Control: a text dashboard of tasks, cap, build, and prod |
-| `/workbench:evolve` | Opt-in evolution summit: a project-configurable persona panel that generates ideas, retrospectively audits shipped work, and synthesizes critic-approved survivors into backlog tasks |
+| `/workbench:evolve` | Opt-in evolution summit: a project-configurable persona panel that generates ideas, retrospectively audits verified and shipped work, and synthesizes critic-approved survivors into backlog tasks |
 | `/workbench:teamlead <topic>` | Scope this session to one track and lock tasks so leads don't collide |
 | `/workbench:inception` | Scope-controlled product genesis: an idea → a v1 spec + seeded backlog |
 | `/workbench:architecture` | View or reconcile the C4 context backbone (authored intent ↔ graphify-extracted reality, drift) |

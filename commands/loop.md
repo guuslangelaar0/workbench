@@ -27,7 +27,7 @@ Keep 2–3 tasks queued per lane. Surface decisions to `.claude/tasks/decisions/
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/evolve.sh" check --target "${CLAUDE_PROJECT_DIR}"
 ```
 
-On `due <reason>`, run `/workbench:evolve` (the `evolution` skill) to convene the persona panel and synthesize new backlog tasks, then resume dispatch immediately. On `disabled` or `not-due`, carry on — never scaffold evolution unasked.
+On `due <reason>`, run `/workbench:evolve` (the `evolution` skill) to convene the persona panel and synthesize new backlog tasks, then resume dispatch immediately. On `disabled` or `not-due`, carry on — never scaffold evolution unasked. On `invalid` (the command prints the roster problems and exits 2), this is **not** a hard command failure: surface the roster problem to the human, skip this summit, and continue looping normally. If `record-summit` refuses with exit 75, another session just claimed this summit — skip it and carry on.
 
 **When the backlog drains** (and evolution is disabled or not-due), read the autonomy mode before deciding what to do next:
 
