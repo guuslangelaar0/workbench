@@ -4,7 +4,7 @@
 # (which was false this round) — proves the model evaluated BOTH legs of the OR
 # independently rather than pattern-matching "backlog empty => summit".
 set -uo pipefail
-grep -q "Summit 2026-07-02" .claude/admin-evolution/ideas-log.md 2>/dev/null || {
+grep -q "Summit — 2026-07-02" .workbench/evolution/ideas-log.md 2>/dev/null || {
   echo "no summit ran despite 24h+ elapsed since last summit" >&2
   exit 1
 }

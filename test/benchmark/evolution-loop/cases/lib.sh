@@ -3,12 +3,12 @@
 # simulate.sh / setup.sh with CASE_DIR, FIXTURE, and P (the seeded project dir) already
 # set by run.sh. No jq dependency (matches the rest of this repo's shell conventions).
 #
-# ASSUMPTION (see cases/README.md): the design spec never names where the persona-roster
-# / trigger config lives. EVOLUTION_CONFIG_PATH below is this suite's guess, modeled on
-# the existing .workbench/config.json dial_overrides convention. If the landed
-# implementation uses a different path, update this one constant.
-EVOLUTION_CONFIG_PATH=".workbench/config.json"
-IDEAS_LEDGER_PATH=".claude/admin-evolution/ideas-log.md"
+# These paths match the REAL implementation (scripts/evolve.sh, templates/schemas/
+# personas.schema.json): the persona roster + trigger knobs live in a dedicated
+# .workbench/evolution/personas.json (NOT .workbench/config.json), and the ledger is
+# a sibling file in that same directory.
+EVOLUTION_ROSTER_PATH=".workbench/evolution/personas.json"
+IDEAS_LEDGER_PATH=".workbench/evolution/ideas-log.md"
 
 # el_seed <fixture_dir> <dest_dir> — copy the synthetic project fixture into a scratch dir.
 el_seed() {

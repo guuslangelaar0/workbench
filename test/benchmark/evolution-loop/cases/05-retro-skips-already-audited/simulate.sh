@@ -4,14 +4,11 @@
 # UNAUDITED verified/shipped admin task is #1203, so the new retro entry targets #1203,
 # not #1204 again.
 set -uo pipefail
-cat >> .claude/admin-evolution/ideas-log.md <<'EOF'
+cat >> .workbench/evolution/ideas-log.md <<'EOF'
 
-## Summit 2026-07-02
+## Summit — 2026-07-02 09:00 UTC
 
-- 2026-07-02 — Completeness & Trust Critic — retrospective audit of task
-  #1203: verified but checkbox-done — no search, no date-range filter, no
-  export, no link from a support ticket. Deserves to be bigger; queued
-  follow-up as task #1206.
+- [2026-07-02] critic — retrospective audit of task #1203: verified but checkbox-done — no search, no date-range filter, no export, no link from a support ticket. Deserves to be bigger; queued follow-up as task #1206.
 EOF
 bash "$ROOT/scripts/task-new.sh" --target . --state backlog --track admin \
   --title "Expand invoice list view: search, filters, export" \

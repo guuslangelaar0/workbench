@@ -20,7 +20,7 @@ done
 [ "$new_count" -ge 1 ] || { echo "no new backlog task file was synthesized" >&2; exit 1; }
 
 # the ledger is append-only and must gain a NEW entry (not just already have old ones)
-grep -q "Summit 2026-07-02" .claude/admin-evolution/ideas-log.md 2>/dev/null || {
+grep -q "Summit — 2026-07-02" .workbench/evolution/ideas-log.md 2>/dev/null || {
   echo "ideas ledger has no new summit entry for this run" >&2
   exit 1
 }

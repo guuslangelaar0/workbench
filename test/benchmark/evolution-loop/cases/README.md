@@ -1,10 +1,12 @@
-# Evolution-loop conformance eval — case format + assumptions
+# Evolution-loop conformance eval — case format
 
 Same shape as `test/benchmark/intents/` (a natural-language prompt + an effect-based
 oracle reading real project-FS ground truth), applied to the evolution-loop "summit"
-mechanism described in `docs/superpowers/specs/2026-07-02-admin-evolution-loop-design.md`
-(written against a beebeeb.io-specific admin track; this suite tests the **generalized,
-project-configurable mechanism** a teammate is building in `feat/evolution-loop`).
+mechanism implemented in `scripts/evolve.sh` (deterministic plumbing: trigger, roster
+validation, ledger, retrospective rotation) and the `evolution` skill / `/workbench:evolve`
+command (the model-driven convening). The design origin was a beebeeb.io-specific admin
+track; the landed mechanism is generalized and project-configurable — this suite tests
+that generalized mechanism directly against its real implementation.
 
 Run via `scripts/bench-evolution-loop.sh` (see that script's header for full usage). Quick
 reference:
@@ -30,12 +32,18 @@ with:
   content, including a duplicate-bait backlog task (#1200), a rejected-decision (#1205),
   and two retrospective-audit candidates: #1204 (already audited, must NOT be re-audited)
   and #1203 (not yet audited, is the correct pick).
-- `.claude/admin-evolution/ideas-log.md` — a ledger with two prior summits' worth of
-  history, seeded so dedup/coverage checks have real precedent to grep against.
-- `.workbench/config.json` — see the `_ASSUMED_evolution_loop` ASSUMPTION note below.
-- `.claude/admin-evolution/NOW-for-eval-fixture-only` — a fixture-only "current time"
-  marker (`2026-07-02T09:00:00Z`) so elapsed-time cases have an unambiguous reference
-  point instead of relying on wall-clock guessing.
+- `.workbench/evolution/personas.json` — the real roster file (schema:
+  `templates/schemas/personas.schema.json`), a 4-generator + critic panel scoped
+  `"track": "admin"`, modeled on the shipped `personas.admin-example.json` preset.
+- `.workbench/evolution/ideas-log.md` — the real ledger (`evolve.sh log` / `record-summit`
+  format), with two prior summits' worth of history seeded so dedup/coverage checks have
+  real precedent to grep against.
+- `.workbench/evolution/last-summit` — the real stamp file (`evolve.sh record-summit`
+  writes it as epoch seconds), seeded 2 hours before the fixture's "now" so the base
+  fixture's only due leg is backlog-low, not staleness.
+- `.workbench/evolution/NOW-for-eval-fixture-only` — a fixture-only "current time" marker
+  (`2026-07-02T09:00:00Z`) so elapsed-time cases have an unambiguous reference point
+  instead of relying on wall-clock guessing.
 
 Each case copies this fixture fresh, optionally runs a `variant.sh` to mutate it for that
 specific scenario (e.g. raise/lower backlog count, age `last_summit_at`), then either
@@ -58,59 +66,55 @@ fakes the correct behavior (`--simulate`, offline, free) or drives the real mode
 
 Every oracle in this suite was verified against a deliberately-broken "bad" simulate run
 (a rubber-stamping critic, a re-audited task, a trigger that fires when it shouldn't) to
-confirm it actually fails in that case and isn't a rubber stamp itself. See the session
-notes / eval-authoring report for the specific bad-run transcripts; the important property
-is that every `oracle.sh` here has been exercised both ways, not just against its own
-matching `simulate.sh`.
+confirm it actually fails in that case and isn't a rubber stamp itself — the important
+property is that every `oracle.sh` here has been exercised both ways, not just against
+its own matching `simulate.sh`. This suite was additionally checked against the REAL
+`scripts/evolve.sh` directly (not just simulated): a scratch copy of the plugin had its
+trigger's OR-condition and its retrospective ledger-audit tracking each independently
+disabled, and `evolve.sh check` / `evolve.sh retro-candidates` run against this suite's
+own fixture states confirmed the break flips the exact outcome each case depends on
+(`due backlog-low` / `due summit-stale` → `not-due`; `1203` only → `1203, 1204` — i.e. a
+re-suggested already-audited task). The scratch copy was discarded; `scripts/evolve.sh`
+in this repo was never modified.
 
-## ASSUMPTIONS — read before trusting a failure
+## Ground truth this suite is built against
 
-The design spec (2026-07-02-admin-evolution-loop-design.md) is stable on the MECHANISM
-shape (5 personas, dual mandate, ideas ledger, synthesis into the existing task format,
-two-leg OR trigger) but says nothing about file paths, config schema, or command/skill
-names — because the generalized implementation didn't exist yet when this suite was
-written (per instructions, built test-first against the spec's CONTRACT). Concretely:
+This suite tests the LANDED implementation directly — no invented shapes remain.
+Concretely, per `scripts/evolve.sh`, `templates/schemas/personas.schema.json`, and
+`skills/evolution/SKILL.md`:
 
-1. **`.workbench/config.json` has no `_ASSUMED_evolution_loop` key upstream.** The current
-   `templates/schemas/config.schema.json` (checked as of this suite's authoring) has no
-   persona-roster or trigger-threshold fields at all. The block used here (`track`,
-   `summit_trigger.{backlog_below,max_hours_since_last_summit}`, `personas.{generators,
-   critic}`, `ideas_ledger_path`, `last_summit_at`) is this suite's own invented shape,
-   modeled on the existing `dial_overrides` convention. **If the landed implementation
-   uses a different path or key names, update `EVOLUTION_CONFIG_PATH` in `cases/lib.sh`**
-   and the `_ASSUMED_evolution_loop` block in the fixture + case `variant.sh`/`setup.sh`
-   files that touch it (currently: fixture `.workbench/config.json`, and
-   `08-trigger-fires-24h-elapsed/variant.sh`, `09-trigger-does-not-fire/variant.sh`).
-2. **The ledger path `.claude/admin-evolution/ideas-log.md` is taken verbatim from the
-   spec** (§"Ideas ledger") — this one should NOT need adjusting.
-3. **"Workflow" in the spec is read as a description of the SHAPE of the mechanism**
-   (a scheduled, non-interactive multi-`agent()`-call invocation), not a literal SDK
-   class — this project's existing adversarial-verifier pattern (`skills/orchestration/
-   SKILL.md`, `commands/verify.md`) already does "spawn several agents with an
-   adversarial framing, require majority/critic verdict" via ordinary Task-tool agent
-   dispatch, not a bespoke `Workflow()` primitive. The eval cases test OBSERVABLE
-   EFFECTS (files, ledger entries, run-output text) so they don't actually care how the
-   summit is implemented internally — this assumption only matters if you're trying to
-   unit-test an internal `Workflow` call directly, which none of these cases do.
-4. **No command/skill name is assumed.** The intent cases (`test/benchmark/intents/
-   cases/15-*`, `16-*`) deliberately phrase prompts as natural-language observations
-   ("backlog is thin", "go check what's already shipped") rather than naming a specific
-   slash command, so they test the mechanism's OWN description/trigger regardless of
-   what it ends up being called. If a specific command name lands (e.g.
-   `/workbench:evolve`), consider ALSO adding a case that invokes it directly by name —
-   that would be a stronger, more literal routing test than these two.
-5. **The retrospective "oldest unaudited task" ordering is assumed to be by numeric task
-   ID** (per the spec: "picks the oldest-by-task-ID verified/shipped admin tasks NOT yet
-   present"). Cases `05`/`06` test this directly, including the multi-hop case (`06`)
-   where the naive "first file alphabetically" heuristic and "lowest ID" heuristic
-   happen to agree — if you want to stress-test that distinction further (e.g. a task ID
-   that sorts differently alphabetically vs numerically, like `0099` vs `10001`), that's
-   a gap this suite does not yet cover.
-6. **Track filtering assumed to be `**Track:** admin`** (exact spec language: "Tasks land
-   in `backlog/` exactly like any other task... with `**Track:** admin`"). This part is
-   NOT an assumption — it's quoted directly from the spec — but note the fixture only
-   ever tests the `admin` track; a project configuring the evolution loop for a
-   DIFFERENT track name would need the fixture's `--track admin` calls updated to match.
+1. **Roster + trigger knobs live in `.workbench/evolution/personas.json`** — a dedicated
+   file, NOT a block inside `.workbench/config.json`. Top-level scalar knobs are
+   `cadence_hours` (default 24), `queue_low_water` (default 2), `retro_slice` (default 3),
+   `track` (default all); `personas` is a flat array of `{name, role: "generator"|
+   "critic", prompt}` objects — exactly one `critic`, at least one `generator`. This
+   suite's fixture roster is `queue_low_water: 3` (to preserve the "keep 3 queued"
+   framing the trigger cases were written against) and `track: "admin"`, modeled on the
+   shipped `templates/evolution/personas.admin-example.json` preset.
+2. **The ledger lives at `.workbench/evolution/ideas-log.md`**, a sibling of the roster —
+   not under `.claude/admin-evolution/`. Entry format (written by `evolve.sh log`, one
+   line, no wrapping): `- [YYYY-MM-DD] <persona> — <idea one-liner> — <disposition>`.
+   `record-summit` heads each summit with `## Summit — <UTC date HH:MM>` (an em dash, not
+   a bare date). Retrospective coverage is tracked by grepping the ledger for the literal
+   phrase `retrospective audit of task #NNNN` — there is no separate tracking file.
+3. **The "last summit ran at" stamp is `.workbench/evolution/last-summit`** — a plain
+   epoch-seconds integer file written by `evolve.sh record-summit`, not an ISO string
+   inside a config JSON. `evolve.sh check` computes `age_hours` from it directly.
+4. **The trigger is `evolve.sh check`'s own OR condition**: due when unblocked backlog
+   (via `deps.sh ready`, filtered to the roster's `track`) drops below `queue_low_water`,
+   OR more than `cadence_hours` have elapsed since `last-summit`. Cases `07`–`09` exercise
+   this directly against the real fixture states (verified independently of the offline
+   `--simulate` harness — see the rigor-check paragraph above).
+5. **Retrospective ordering is oldest-by-numeric-task-ID**, computed by `evolve.sh
+   retro-candidates` scanning `.claude/tasks/{verified,shipped}/*.md` filenames and
+   excluding whatever `evolve.sh audited` extracts from the ledger. Cases `05`/`06` test
+   this directly; case `06`'s multi-hop scenario (both pre-existing candidates covered,
+   a third newer task picked up) was independently confirmed against the real
+   `retro-candidates` command (see rigor-check paragraph).
+6. **Track filtering is `**Track:** admin`** on task files, matched via `evolve.sh
+   check`/`retro-candidates --track` — the fixture only ever tests the `admin` track; a
+   project configuring the evolution loop for a different track would need the
+   `--track admin` calls throughout this suite updated to match.
 
 ## Known limitation of this suite (be honest about it)
 

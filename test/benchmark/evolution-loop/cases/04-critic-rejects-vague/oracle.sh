@@ -15,7 +15,7 @@ for f in .claude/tasks/backlog/*.md .claude/tasks/in-development/*.md; do
   }
 done
 
-el_ledger_flat .claude/admin-evolution/ideas-log.md | grep -iE 'reject' | grep -qiE 'vague|not actionable|unscoped|too broad' || {
+el_ledger_flat .workbench/evolution/ideas-log.md | grep -iE 'reject' | grep -qiE 'vague|not actionable|unscoped|too broad' || {
   echo "ledger does not record the vague idea's rejection with a quality reason" >&2
   exit 1
 }

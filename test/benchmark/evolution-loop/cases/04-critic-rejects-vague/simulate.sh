@@ -27,14 +27,11 @@ s = s.replace(
 open(p, "w").write(s)
 PYEOF
 
-cat >> .claude/admin-evolution/ideas-log.md <<'EOF'
+cat >> .workbench/evolution/ideas-log.md <<'EOF'
 
-## Summit 2026-07-02
+## Summit — 2026-07-02 09:00 UTC
 
-- 2026-07-02 — Visionary / Product Strategist — Make admin better and more
-  powerful in general — rejected by critic: not actionable, no checkable
-  acceptance criteria possible, too vague to scope.
-- 2026-07-02 — Customer Support Lead — Add CSV export to the invoice list
-  view — queued as task #1206.
+- [2026-07-02] product-visionary — Make admin better and more powerful in general — rejected by critic: not actionable, no checkable acceptance criteria possible, too vague to scope.
+- [2026-07-02] support-lead — Add CSV export to the invoice list view — queued as task #1206.
 EOF
 echo "workbench: 1 vague idea rejected, 1 concrete idea queued" > .run-output

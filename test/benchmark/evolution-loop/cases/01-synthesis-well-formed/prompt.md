@@ -3,4 +3,4 @@ met. Run an evolution-loop summit now: convene the persona panel, generate
 new ideas, run the retrospective mandate, have the critic review everything,
 and synthesize whatever survives into real task files in
 `.claude/tasks/backlog/` — same format as every other task in this project.
-Update the ideas ledger at `.claude/admin-evolution/ideas-log.md` too.
+Update the ideas ledger at `.workbench/evolution/ideas-log.md` too.

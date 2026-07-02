@@ -4,16 +4,16 @@
 # with no retro entry) is added. The correct pick this round is #1207 — proving the
 # mechanism actually greps the ledger and generalizes, rather than a hardcoded "#1203".
 set -uo pipefail
-cat >> .claude/admin-evolution/ideas-log.md <<'EOF'
+cat >> .workbench/evolution/ideas-log.md <<'EOF'
 
-## Summit 2026-06-28
+## Summit — 2026-06-28 09:00 UTC
 
-- 2026-06-28 — Completeness & Trust Critic — retrospective audit of task
-  #1203: verified but checkbox-done, no search/filter/export — queued
-  follow-up as task #1210 (fixture-only entry, no actual #1210 file needed
-  for this variant).
+- [2026-06-28] critic — retrospective audit of task #1203: verified but checkbox-done, no search/filter/export — queued follow-up as task #1210 (fixture-only entry, no actual #1210 file needed for this variant).
 EOF
 
+# bump _next-id past #1206 (reserved by other cases' synthesis output) so this
+# fixture-only verified task lands at the ID the case is written around: #1207
+echo "1207" > .claude/tasks/_next-id
 bash "$ROOT/scripts/task-new.sh" --target . --state verified --track admin \
   --title "Refund reason codes on the refund detail page" \
   --verification "Playwright screenshot of the refund detail page" >/dev/null 2>&1

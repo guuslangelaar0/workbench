@@ -9,7 +9,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 new_tasks="$(grep -rliE 'shared.{0,15}(login|credential)' .claude/tasks/backlog/ .claude/tasks/in-development/ 2>/dev/null | wc -l | tr -d ' ')"
 [ "$new_tasks" -eq 0 ] || { echo "a 'shared login' task was created despite standing decision #1205" >&2; exit 1; }
 
-el_ledger_has_disposition_for .claude/admin-evolution/ideas-log.md 1205 'reject' || {
+el_ledger_has_disposition_for .workbench/evolution/ideas-log.md 1205 'reject' || {
   echo "ledger does not record a rejection citing the standing decision #1205" >&2
   exit 1
 }

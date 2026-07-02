@@ -5,7 +5,7 @@
 # elapsed-time leg (proves the model reasoned about WHICH leg fired, not just that it
 # ran for an unrelated reason).
 set -uo pipefail
-grep -q "Summit 2026-07-02" .claude/admin-evolution/ideas-log.md 2>/dev/null || {
+grep -q "Summit — 2026-07-02" .workbench/evolution/ideas-log.md 2>/dev/null || {
   echo "no summit ran despite backlog (2) being below threshold (3)" >&2
   exit 1
 }

@@ -64,18 +64,17 @@ overclaiming and regressions get caught — the scorecard can't see them. Gated 
 
 ### Evolution-loop conformance — same shape, deeper content-quality checks
 `scripts/bench-evolution-loop.sh` + `test/benchmark/evolution-loop/` tests the
-evolution-loop "summit" mechanism (persona panel, dual generate+retrospect mandate,
-ideas ledger, synthesis into task files — see
-`docs/superpowers/specs/2026-07-02-admin-evolution-loop-design.md`) with the same
-prompt+effect-oracle shape as the intent harness above, but oracles that check OUTPUT
-QUALITY against ground truth (well-formed task files with placeholders actually
-replaced, a planted bad idea actually rejected not rubber-stamped, ledger-dedup actually
-respected, the two-leg trigger actually evaluated correctly) rather than just "did the
-right command fire." **Not yet wired into `scripts/bench.sh`'s default cadence** — the
-generalized evolution-loop implementation this suite targets was still landing in
-`feat/evolution-loop` as of authoring; wire it in once that merges. See
-`test/benchmark/evolution-loop/cases/README.md` for the case index and the assumptions
-this suite had to make about not-yet-final file paths/config shape.
+evolution-loop "summit" mechanism (`scripts/evolve.sh` + the `evolution` skill /
+`/workbench:evolve` command: persona panel, dual generate+retrospect mandate, ideas
+ledger, synthesis into task files) with the same prompt+effect-oracle shape as the
+intent harness above, but oracles that check OUTPUT QUALITY against ground truth
+(well-formed task files with placeholders actually replaced, a planted bad idea
+actually rejected not rubber-stamped, ledger-dedup actually respected, the two-leg
+trigger actually evaluated correctly) rather than just "did the right command fire."
+**Not yet wired into `scripts/bench.sh`'s default cadence** — wire it in as a deliberate
+follow-up. See `test/benchmark/evolution-loop/cases/README.md` for the case index and
+the real file paths/schema this suite is built against (`.workbench/evolution/
+personas.json` + `ideas-log.md` + `last-summit`).
 
 ```sh
 bash scripts/bench-evolution-loop.sh --simulate          # free offline harness check

@@ -24,24 +24,5 @@
   },
   "lifecycle": {
     "in_review_cap": 10
-  },
-  "_ASSUMED_evolution_loop": {
-    "_comment": "ASSUMPTION (workbench-evolution-loop-evals): the design spec (2026-07-02-admin-evolution-loop-design.md) never names a config file or schema for the persona roster / trigger thresholds. This block is a plausible shape modeled on the existing dial_overrides convention, invented for this eval suite so the trigger-condition and persona-roster cases have something concrete to seed. If the real implementation lands with a different file path or key names, update EVOLUTION_CONFIG_PATH in cases/lib.sh and this block's keys to match — the eval INTENT (roster of 5 personas, dual mandate, two trigger conditions) stays valid either way.",
-    "track": "admin",
-    "summit_trigger": {
-      "backlog_below": 3,
-      "max_hours_since_last_summit": 24
-    },
-    "personas": {
-      "generators": [
-        "visionary-product-strategist",
-        "customer-support-lead",
-        "infra-storage-ops",
-        "billing-finance-ops"
-      ],
-      "critic": "completeness-trust-critic"
-    },
-    "ideas_ledger_path": ".claude/admin-evolution/ideas-log.md",
-    "last_summit_at": "2026-06-25T09:00:00Z"
   }
 }

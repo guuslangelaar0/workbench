@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # Pre-seed a shipped admin task with no retrospective ledger entry, so the intent
 # ("go check what's already shipped") has a concrete, checkable target — plus the
-# ledger + ideas-log scaffolding evolution-loop needs to exist at all.
+# REAL evolution-loop scaffolding (scripts/evolve.sh init) so the roster + ledger
+# exist under .workbench/evolution/ before the prompt runs.
 set -uo pipefail
-mkdir -p .claude/admin-evolution .claude/tasks/shipped
+bash "$ROOT/scripts/evolve.sh" init --target . --preset admin-example >/dev/null 2>&1
+mkdir -p .claude/tasks/shipped
 bash "$ROOT/scripts/task-new.sh" --target . --state shipped --track admin \
   --title "Basic invoice list view" --verification "Playwright screenshot" >/dev/null 2>&1
-cat > .claude/admin-evolution/ideas-log.md <<'EOF'
-# Admin evolution — ideas ledger
+cat > .workbench/evolution/ideas-log.md <<'EOF'
+# Ideas ledger — evolution summits
 
-## Summit 2026-06-18
+Created: 2026-06-01
 
-- 2026-06-18 — Infrastructure & Storage Ops — Storage pool capacity dashboard — queued as task #0002.
+## Summit — 2026-06-18 09:00 UTC
+
+- [2026-06-18] storage-ops — Storage pool capacity dashboard — queued as task #0002.
 EOF

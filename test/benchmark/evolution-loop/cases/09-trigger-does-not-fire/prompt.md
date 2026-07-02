@@ -1,5 +1,5 @@
 Treat the current time as the timestamp in
-`.claude/admin-evolution/NOW-for-eval-fixture-only` (a fixture-only marker
+`.workbench/evolution/NOW-for-eval-fixture-only` (a fixture-only marker
 file — read it first). Check whether an evolution-loop summit should run
 right now. The admin track's unblocked backlog is fully stocked (well above
 the "keep 2-3 queued" threshold), AND the last summit ran recently (well

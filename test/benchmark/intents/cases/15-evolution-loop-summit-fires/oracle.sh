@@ -9,7 +9,7 @@
 # convention in docs/design/2026-06-29-self-benchmarking-expectancy-design.md §6c).
 set -uo pipefail
 grep -qiE 'summit|evolution.?loop|ideas.?log' "$RUN_OUTPUT" 2>/dev/null || exit 1
-grep -q "Summit 2026-07-02" .claude/admin-evolution/ideas-log.md 2>/dev/null || exit 1
+grep -q "Summit — 2026-07-02" .workbench/evolution/ideas-log.md 2>/dev/null || exit 1
 n="$(ls .claude/tasks/backlog/*.md 2>/dev/null | wc -l | tr -d ' ')"
 [ "$n" -ge 1 ] || exit 1
 exit 0

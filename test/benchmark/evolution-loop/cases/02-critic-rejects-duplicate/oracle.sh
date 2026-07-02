@@ -15,7 +15,7 @@ n="$(backlog_count)"
 dupes="$(grep -rliE 'bulk.?cancel|bulk.?refund' .claude/tasks/backlog/ 2>/dev/null | grep -v '1200-' | wc -l | tr -d ' ')"
 [ "$dupes" -eq 0 ] || { echo "a duplicate bulk-cancel task was created alongside #1200" >&2; exit 1; }
 
-el_ledger_has_disposition_for .claude/admin-evolution/ideas-log.md 1200 'reject|duplicate' || {
+el_ledger_has_disposition_for .workbench/evolution/ideas-log.md 1200 'reject|duplicate' || {
   echo "ledger does not record a rejection citing #1200 / duplicate" >&2
   exit 1
 }

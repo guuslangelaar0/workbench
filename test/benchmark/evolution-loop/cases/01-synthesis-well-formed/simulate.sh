@@ -36,11 +36,10 @@ s = s.replace(
 open(p, "w").write(s)
 PYEOF
 
-cat >> .claude/admin-evolution/ideas-log.md <<'EOF'
+cat >> .workbench/evolution/ideas-log.md <<'EOF'
 
-## Summit 2026-07-02
+## Summit — 2026-07-02 09:00 UTC
 
-- 2026-07-02 — Billing & Finance Ops — Refund cancellation audit log export
-  — queued as task #1206.
+- [2026-07-02] billing-ops — Refund cancellation audit log export — queued as task #1206.
 EOF
 echo "workbench: summit synthesized 1 task, updated ideas ledger" > .run-output
