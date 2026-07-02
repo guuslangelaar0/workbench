@@ -6,6 +6,11 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Evolution summits (opt-in): `/workbench:evolve` convenes a project-configurable persona panel — N generator personas + exactly one critic, defined in `.workbench/evolution/personas.json` — that generates new ideas, retrospectively audits a rotating slice of already-verified/shipped tasks, and synthesizes critic-approved survivors into normal backlog tasks via the existing task/epic scaffolders. Every raised idea is recorded in an append-only ideas ledger (`.workbench/evolution/ideas-log.md`), which also serves as the retrospective-coverage record (`retrospective audit of task #NNNN` entries).
+- `/workbench:loop` now consults the summit trigger (`scripts/evolve.sh check`) as part of its normal rotation — due when the unblocked backlog for the roster's track drops below `queue_low_water` or `cadence_hours` (default 24) have passed since the last summit, whichever comes first. No new scheduler; projects without a roster file are unaffected (`disabled`).
+- Persona-roster presets tied to the maturity ladder (`templates/evolution/`): `solo` (one broad generator + critic), `crew` (3 domain-placeholder generators + critic, the pair/crew/fleet default), and `admin-example` (a worked 4-generator panel for internal admin/ops surfaces, labeled as an example). `evolve.sh init` picks by level; `--preset` overrides. Roster schema at `templates/schemas/personas.schema.json`; `evolve.sh validate` enforces at-least-one-generator / exactly-one-critic / unique names / non-empty prompts.
+
 ## [0.8.1] - 2026-07-02
 
 The dependency-resolution fix release. Workbench failed to load for anyone

@@ -93,6 +93,7 @@ That's the whole rhythm: pick a level, capture work as tasks, let the loop drive
 | `/workbench:codex-engineer <id>` | Dispatch a task to Codex through the OpenAI Codex plugin while Workbench keeps lifecycle and verification ownership; `--reconcile`, `/workbench:mc`, and `/workbench:mesh jobs` show callback-less Codex lane status. |
 | `/workbench:verify <id>` | Run a task's verification and gate it to `verified/` (or back) |
 | `/workbench:mc` | Mission Control: a text dashboard of tasks, cap, build, and prod |
+| `/workbench:evolve` | Opt-in evolution summit: a project-configurable persona panel that generates ideas, retrospectively audits shipped work, and synthesizes critic-approved survivors into backlog tasks |
 | `/workbench:teamlead <topic>` | Scope this session to one track and lock tasks so leads don't collide |
 | `/workbench:inception` | Scope-controlled product genesis: an idea → a v1 spec + seeded backlog |
 | `/workbench:architecture` | View or reconcile the C4 context backbone (authored intent ↔ graphify-extracted reality, drift) |
@@ -166,6 +167,7 @@ Five capabilities, all configured from the level you pick:
 
 - **Task lifecycle** — tasks are markdown files under `.claude/tasks/`; their status *is* the subdirectory they live in (`backlog → in-development → in-review → verified → …`), and transitions are `git mv`. A bounded in-review cap forces verification to happen continuously instead of piling up. Higher levels add `staged`, `shipped`, and `release-candidate` stages.
 - **The orchestration loop** — a long-running teamlead loop that picks the highest-impact unblocked task, dispatches it, and gates it. The lead coordinates; engineers implement; nothing reaches *verified* without evidence. Universal rule: **bugs auto-file as tasks; new features are *suggested*, never auto-built.**
+- **Evolution summits (opt-in)** — a project-configurable persona panel (`.workbench/evolution/personas.json`, N generators + exactly one critic) the loop convenes when the unblocked backlog runs thin or 24h have passed: it generates new ideas, retrospectively audits a rotating slice of verified/shipped work ("is this actually excellent, or just checkbox-done?"), and synthesizes critic-approved survivors into normal backlog tasks — every idea recorded in an append-only ideas ledger you can skim at your own cadence. Creating the roster is your standing approval, so the suggest-only rule stays intact.
 - **Lead purpose + parking** — a lead session has a durable purpose (one task, one track, or a backlog-scouting pass). When unrelated work appears mid-feature, `/workbench:park` captures it as a backlog task with origin metadata instead of widening the active branch silently.
 - **Continuity** — `SessionStart` re-grounds each new session from disk, `PreCompact` checkpoints before context is compacted, and a `SESSION_STATE.md` handoff means the next session resumes from the file alone.
 - **Coordination** — multiple concurrent sessions register presence, claim tasks, and get warned before they collide; Claude Code native worktrees isolate parallel engineer/verifier lanes, with Workbench's legacy worktree helper as a fallback.
