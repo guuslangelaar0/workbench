@@ -23,12 +23,17 @@ The disk lease commands are `lane.sh start`, `lane.sh status`, and `lane.sh beat
    - if no task id is present, ask for the task id
 
 2. If `--reconcile` was passed:
+   - run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/job.sh" latest <id> --target "${CLAUDE_PROJECT_DIR}"` to find the newest Workbench job for the task
+   - run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/job.sh" show <job-id> --target "${CLAUDE_PROJECT_DIR}"` when a job exists
    - run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lane.sh" status <id> --target "${CLAUDE_PROJECT_DIR}"` when available
    - run `claude agents --cwd "${CLAUDE_PROJECT_DIR}" --json` if supported, otherwise `claude agents`, and check whether a Codex/Codex-rescue thread is still active
    - inspect `git -C "${CLAUDE_PROJECT_DIR}" status --short`, recent commits, and the task `## Notes`
+   - classify from job record, lane lease, `claude agents`, task notes, git status, and recent commits
+   - update the job with `bash "${CLAUDE_PLUGIN_ROOT}/scripts/job.sh" update <job-id> --target "${CLAUDE_PROJECT_DIR}" --status <running|returned|needs-review|failed|dead|verified> --summary "<evidence-based summary>" --output-ref "<task notes, snapshot, or empty>"`
    - if there is no active Codex thread and Codex left commits/edits/verification notes, report that the lane appears finished and run the normal Workbench gate/review flow; tell the user to run `/workbench:verify <id>`
    - if there is no active Codex thread and no artifacts, mark the lane dead with `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lane.sh" reap --mark --target "${CLAUDE_PROJECT_DIR}"` when available, append a task note, and ask whether to re-dispatch
    - if Codex is still active, report that it is still running and schedule/check again later; never wait only for a notification
+   - if no job exists, continue from lane/task/git evidence and say the task predates the job ledger
 
 3. Read the task file under `${CLAUDE_PROJECT_DIR}/.claude/tasks/` for that id. Capture:
    - task file path
@@ -60,12 +65,25 @@ The disk lease commands are `lane.sh start`, `lane.sh status`, and `lane.sh beat
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lane.sh" start <id> --owner codex --target "${CLAUDE_PROJECT_DIR}"`
    This is the fallback source of truth when Codex finishes without a callback. If `lane.sh` is unavailable, continue and note that the lane is untracked.
 
-9. Append a note to the task's `## Notes` section. Include UTC time, that Codex was assigned, the Agent runtime mode (`--background`, `--wait`, or default foreground behavior), the `runtime_flags` string, and the reconcile command: `/workbench:codex-engineer <id> --reconcile`. If there is no `## Notes` section, append one.
+9. Start a Workbench job record before invoking Codex:
+   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/job.sh" start codex-engineer <id> --target "${CLAUDE_PROJECT_DIR}" --owner codex --runtime-mode "<background|wait|foreground>" --runtime-flags "<runtime flags or empty>" --branch "<current branch>" --task-file "<task file path>" --summary "Codex dispatched; waiting for artifacts."`
+   Capture the printed job id. If job creation fails, stop before invoking Codex.
 
-10. Set this lead session's purpose to the Codex-dispatched task:
+   Tell the user:
+   ```text
+   Codex job <job-id> started.
+   Track it with:
+     /workbench:codex-engineer <id> --reconcile
+     /workbench:mc
+     /workbench:mesh jobs
+   ```
+
+10. Append a note to the task's `## Notes` section. Include UTC time, that Codex was assigned, the Agent runtime mode (`--background`, `--wait`, or default foreground behavior), the `runtime_flags` string, the Workbench job id, and the reconcile command: `/workbench:codex-engineer <id> --reconcile`. If there is no `## Notes` section, append one.
+
+11. Set this lead session's purpose to the Codex-dispatched task:
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lead.sh" set --target "${CLAUDE_PROJECT_DIR}" --session-id "<session-id>" --mode task --active-task "<id>" --track "<task Track field>" --purpose "<task title>"`
 
-11. Invoke the `Agent` tool with `subagent_type: "codex:codex-rescue"`. Set `run_in_background: true` when `--background` was passed and `run_in_background: false` when `--wait` was passed. Forward this prompt to Codex, preserving explicit runtime flags:
+12. Invoke the `Agent` tool with `subagent_type: "codex:codex-rescue"`. Set `run_in_background: true` when `--background` was passed and `run_in_background: false` when `--wait` was passed. Forward this prompt to Codex, preserving explicit runtime flags:
 
 ```text
 You are Codex acting as a Workbench engineer lane.
@@ -104,8 +122,12 @@ Workbench rules:
 - Do not mark the task verified. Workbench will run /workbench:verify after you return.
 ```
 
-12. If the `Agent` call fails after the task was claimed or moved, append a task note saying Codex launch failed and leave the task in `in-development` for the lead to re-dispatch or move back.
+13. If the `Agent` call fails after the Workbench job was created, run:
+`bash "${CLAUDE_PLUGIN_ROOT}/scripts/job.sh" update <job-id> --target "${CLAUDE_PROJECT_DIR}" --status failed --summary "Codex launch failed; see task notes."`
+Then append a task note saying Codex launch failed and leave the task in `in-development`.
 
-13. When Codex returns, report that the task is ready for Workbench verification. Do not claim it is done. Tell the user or lead to run `/workbench:verify <id>`.
+14. If the `Agent` call fails before the Workbench job was created but after the task was claimed or moved, append a task note saying Codex launch failed and leave the task in `in-development` for the lead to re-dispatch or move back.
 
-14. If Codex does not return but `claude agents` shows no active Codex thread anymore, immediately run `/workbench:codex-engineer <id> --reconcile`. Do not wait for a second notification.
+15. When Codex returns, report that the task is ready for Workbench verification. Do not claim it is done. Tell the user or lead to run `/workbench:verify <id>`.
+
+16. If Codex does not return but `claude agents` shows no active Codex thread anymore, immediately run `/workbench:codex-engineer <id> --reconcile`. Do not wait for a second notification.
