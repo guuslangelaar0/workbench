@@ -8,7 +8,7 @@
 #   owner=<name> started=<epoch> last_beat=<epoch> attempts=<n> status=running|done|dead
 #
 # Usage:
-#   lane.sh start <id> --owner NAME [--target DIR]   init/restart; bumps attempts (restart-intensity)
+#   lane.sh start <id> --as NAME [--target DIR]      init/restart (--owner NAME accepted as alias); bumps attempts (restart-intensity)
 #   lane.sh beat  <id> [--target DIR]                refresh last_beat (fail-soft: starts if absent)
 #   lane.sh status <id> [--target DIR]               print the lane record (exit 1 if absent)
 #   lane.sh list  [--target DIR]                     one line/lane: id status owner age attempts
@@ -38,11 +38,12 @@ _lane_write() { # <file> owner started last_beat attempts status
 }
 
 CMD="${1:-}"; [ "$#" -gt 0 ] && shift
-OWNER="" TARGET="$PWD" THRESHOLD=1800 MARK=0
+OWNER="" OWNER_AS="" TARGET="$PWD" THRESHOLD=1800 MARK=0
 POS=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --owner)     [ "$#" -ge 2 ] || { echo "lane.sh: --owner requires a value" >&2; exit 64; }; OWNER="$2"; shift 2 ;;
+    --as)        [ "$#" -ge 2 ] || { echo "lane.sh: --as requires a value" >&2; exit 64; }; OWNER_AS="$2"; shift 2 ;;
     --target)    [ "$#" -ge 2 ] || { echo "lane.sh: --target requires a value" >&2; exit 64; }; TARGET="$2"; shift 2 ;;
     --threshold) [ "$#" -ge 2 ] || { echo "lane.sh: --threshold requires a value" >&2; exit 64; }; THRESHOLD="$2"; shift 2 ;;
     --mark)      MARK=1; shift ;;
@@ -52,11 +53,14 @@ while [ "$#" -gt 0 ]; do
 done
 ID="${POS[0]:-}"
 TARGET="${TARGET%/}"; [ -n "$TARGET" ] || TARGET="/"
+# --as is the canonical actor-identity flag; --owner remains for backward compat.
+# If both are given, --as wins.
+[ -n "$OWNER_AS" ] && OWNER="$OWNER_AS"
 
 case "$CMD" in
   start)
     [ -n "$ID" ]    || { echo "lane.sh: start requires <task-id>" >&2; exit 64; }
-    [ -n "$OWNER" ] || { echo "lane.sh: start requires --owner NAME" >&2; exit 64; }
+    [ -n "$OWNER" ] || { echo "lane.sh: start requires --as NAME (or --owner NAME)" >&2; exit 64; }
     dir="$(lanes_dir "$TARGET")"; mkdir -p "$dir"
     f="$(lane_file "$TARGET" "$ID")"
     now="$(date +%s)"

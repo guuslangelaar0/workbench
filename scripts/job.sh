@@ -75,11 +75,12 @@ case "$CMD" in
   start)
     TYPE="${1:-}"; TASK_ID="${2:-}"; shift 2 || true
     [ -n "$TYPE" ] && [ -n "$TASK_ID" ] || { echo "job.sh: start requires <type> <task-id>" >&2; exit 64; }
-    OWNER="codex"; RUNTIME_MODE="foreground"; RUNTIME_FLAGS=""; BRANCH=""; SUMMARY="Codex dispatched; waiting for artifacts."; TASK_FILE=""; OUTPUT_REF=""
+    OWNER="codex"; OWNER_AS=""; RUNTIME_MODE="foreground"; RUNTIME_FLAGS=""; BRANCH=""; SUMMARY="Codex dispatched; waiting for artifacts."; TASK_FILE=""; OUTPUT_REF=""
     while [ "$#" -gt 0 ]; do
       case "$1" in
         --target) TARGET="${2:-}"; shift 2 ;;
         --owner) OWNER="${2:-}"; shift 2 ;;
+        --as) OWNER_AS="${2:-}"; shift 2 ;;   # canonical actor-identity flag; alias for --owner (wins if both given)
         --runtime-mode) RUNTIME_MODE="${2:-}"; shift 2 ;;
         --runtime-flags) RUNTIME_FLAGS="${2:-}"; shift 2 ;;
         --branch) BRANCH="${2:-}"; shift 2 ;;
@@ -89,6 +90,7 @@ case "$CMD" in
         *) echo "job.sh: unknown start arg '$1'" >&2; exit 64 ;;
       esac
     done
+    [ -n "$OWNER_AS" ] && OWNER="$OWNER_AS"
     dir="$(jobs_dir "$TARGET")"; mkdir -p "$dir"
     ts="$(now_utc)"; iso="$(now_iso)"
     base_job_id="${TYPE%%-*}-${TASK_ID}-${ts}"

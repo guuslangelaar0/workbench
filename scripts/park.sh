@@ -4,7 +4,7 @@
 set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-TYPE="follow-up" TITLE="" TARGET="$PWD" SESSION_ID="${CLAUDE_SESSION_ID:-}" ORIGIN_TASK="" ORIGIN_PURPOSE="" CONTEXT_FILE=""
+TYPE="follow-up" TITLE="" TARGET="$PWD" SESSION_ID="${CLAUDE_SESSION_ID:-}" SESSION_ID_AS="" ORIGIN_TASK="" ORIGIN_PURPOSE="" CONTEXT_FILE=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -12,6 +12,7 @@ while [ "$#" -gt 0 ]; do
     --title)          TITLE="${2:-}"; shift 2 ;;
     --target)         TARGET="${2:-}"; shift 2 ;;
     --session-id)     SESSION_ID="${2:-}"; shift 2 ;;
+    --as)             SESSION_ID_AS="${2:-}"; shift 2 ;;   # canonical actor-identity flag; alias for --session-id (wins if both given)
     --origin-task)    ORIGIN_TASK="${2:-}"; shift 2 ;;
     --origin-purpose) ORIGIN_PURPOSE="${2:-}"; shift 2 ;;
     --context-file)   CONTEXT_FILE="${2:-}"; shift 2 ;;
@@ -22,6 +23,7 @@ done
 
 case "$TYPE" in bug|feature|follow-up) ;; *) echo "park.sh: --type must be bug|feature|follow-up" >&2; exit 64 ;; esac
 [ -n "$TITLE" ] || { echo "park.sh: --title is required" >&2; exit 64; }
+[ -n "$SESSION_ID_AS" ] && SESSION_ID="$SESSION_ID_AS"
 TARGET="${TARGET%/}"; [ -n "$TARGET" ] || TARGET="/"
 [ -n "$SESSION_ID" ] || SESSION_ID="default"
 

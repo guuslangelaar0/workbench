@@ -62,11 +62,11 @@ The disk lease commands are `lane.sh start`, `lane.sh status`, and `lane.sh beat
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-move.sh" <id> in-development --target "${CLAUDE_PROJECT_DIR}"`
 
 8. Start a disk lane lease before invoking Codex, when `scripts/lane.sh` is available:
-   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lane.sh" start <id> --owner codex --target "${CLAUDE_PROJECT_DIR}"`
+   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lane.sh" start <id> --as codex --target "${CLAUDE_PROJECT_DIR}"`
    This is the fallback source of truth when Codex finishes without a callback. If `lane.sh` is unavailable, continue and note that the lane is untracked.
 
 9. Start a Workbench job record before invoking Codex:
-   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/job.sh" start codex-engineer <id> --target "${CLAUDE_PROJECT_DIR}" --owner codex --runtime-mode "<background|wait|foreground>" --runtime-flags "<runtime flags or empty>" --branch "<current branch>" --task-file "<task file path>" --summary "Codex dispatched; waiting for artifacts."`
+   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/job.sh" start codex-engineer <id> --target "${CLAUDE_PROJECT_DIR}" --as codex --runtime-mode "<background|wait|foreground>" --runtime-flags "<runtime flags or empty>" --branch "<current branch>" --task-file "<task file path>" --summary "Codex dispatched; waiting for artifacts."`
    Capture the printed job id. If job creation fails, stop before invoking Codex.
 
    Tell the user:
@@ -81,7 +81,7 @@ The disk lease commands are `lane.sh start`, `lane.sh status`, and `lane.sh beat
 10. Append a note to the task's `## Notes` section. Include UTC time, that Codex was assigned, the Agent runtime mode (`--background`, `--wait`, or default foreground behavior), the `runtime_flags` string, the Workbench job id, and the reconcile command: `/workbench:codex-engineer <id> --reconcile`. If there is no `## Notes` section, append one.
 
 11. Set this lead session's purpose to the Codex-dispatched task:
-   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lead.sh" set --target "${CLAUDE_PROJECT_DIR}" --session-id "<session-id>" --mode task --active-task "<id>" --track "<task Track field>" --purpose "<task title>"`
+   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lead.sh" set --target "${CLAUDE_PROJECT_DIR}" --as "<session-id>" --mode task --active-task "<id>" --track "<task Track field>" --purpose "<task title>"`
 
 12. Invoke the `Agent` tool with `subagent_type: "codex:codex-rescue"`. Set `run_in_background: true` when `--background` was passed and `run_in_background: false` when `--wait` was passed. Forward this prompt to Codex, preserving explicit runtime flags:
 
