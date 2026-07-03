@@ -232,6 +232,9 @@ struct ConnectUrl {
 #[derive(Debug, Deserialize)]
 struct EventsQuery {
     since: Option<u64>,
+    room: Option<String>,
+    before: Option<u64>,
+    limit: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -418,7 +421,13 @@ async fn api_events(
     Query(query): Query<EventsQuery>,
 ) -> Result<Json<Value>, ApiError> {
     require_bearer(&state, &headers)?;
-    let events = state.store.list_events_since(query.since.unwrap_or(0))?;
+    let events = if query.room.is_some() || query.before.is_some() || query.limit.is_some() {
+        state
+            .store
+            .list_events_page(query.room.as_deref(), query.before, query.limit.unwrap_or(50))?
+    } else {
+        state.store.list_events_since(query.since.unwrap_or(0))?
+    };
     Ok(Json(json!({ "events": events })))
 }
 
@@ -1304,6 +1313,58 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(worker_event_response.status(), reqwest::StatusCode::OK);
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn api_events_supports_room_before_limit_pagination() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Service");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let owner_token =
+            auth::local_project_token(project.path(), Some(home.path().to_path_buf())).unwrap();
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+            started_by: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+        let base = format!("http://{}:{}", metadata.host, metadata.port);
+        let client = Client::new();
+
+        for i in 0..5 {
+            client
+                .post(format!("{base}/api/events"))
+                .bearer_auth(&owner_token)
+                .json(&json!({ "type": "message.sent", "room": "repo:mesh-service", "from": "session:lead", "payload": { "idx": i } }))
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap();
+        }
+
+        let page: Value = client
+            .get(format!("{base}/api/events?room=repo:mesh-service&limit=2"))
+            .bearer_auth(&owner_token)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let events = page["events"].as_array().unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0]["payload"]["idx"], 4);
+        assert_eq!(events[1]["payload"]["idx"], 3);
 
         server.abort();
     }
