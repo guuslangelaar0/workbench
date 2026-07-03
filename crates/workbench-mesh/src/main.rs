@@ -39,6 +39,8 @@ enum Command {
     /// Publish a lightweight activity signal (reading/typing/idle) for
     /// live engagement indicators on the dashboard.
     Activity(ActivityArgs),
+    /// Post a message.delivered or message.read receipt.
+    Ack(AckArgs),
     Actor(ActorCommand),
     Snapshot(SnapshotCommand),
 }
@@ -398,6 +400,27 @@ struct ActivityArgs {
     state: String,
     #[arg(long = "as")]
     as_actor: Option<String>,
+    /// seq of the message this activity update acknowledges. When set,
+    /// posts a message.read receipt instead of a plain presence heartbeat.
+    #[arg(long = "ack-of")]
+    ack_of: Option<u64>,
+}
+
+#[derive(Debug, Args)]
+struct AckArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    /// message.delivered | message.read
+    #[arg(long = "type")]
+    event_type: String,
+    #[arg(long = "ack-of")]
+    ack_of: u64,
+    #[arg(long)]
+    room: String,
+    #[arg(long = "as")]
+    as_actor: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -522,7 +545,19 @@ async fn main() -> Result<()> {
             .await
         }
         Command::Activity(args) => {
-            client::set_activity(args.target, args.home, args.state, args.as_actor).await
+            client::set_activity(args.target, args.home, args.state, args.as_actor, args.ack_of)
+                .await
+        }
+        Command::Ack(args) => {
+            client::send_ack(
+                args.target,
+                args.home,
+                &args.event_type,
+                args.ack_of,
+                &args.room,
+                args.as_actor.as_deref(),
+            )
+            .await
         }
         Command::Actor(actor) => run_actor(actor).await,
         Command::Snapshot(snapshot) => run_snapshot(snapshot),

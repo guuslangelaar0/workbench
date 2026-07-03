@@ -539,26 +539,106 @@ pub async fn tail_stream(
 }
 
 /// Publish a lightweight activity signal (reading/typing/idle) so dashboards
-/// can show live engagement between full messages. Rides presence.heartbeat
-/// with a minimal payload — no platform/capability recomputation.
+/// can show live engagement between full messages. When `ack_of` is `Some`,
+/// posts a `message.read` receipt in the same room as the referenced event
+/// instead of a plain presence heartbeat.
 pub async fn set_activity(
     project_root: PathBuf,
     home: Option<PathBuf>,
     state: String,
     from: Option<String>,
+    ack_of: Option<u64>,
 ) -> Result<()> {
-    let event = append_or_post_event(
-        &project_root,
-        home,
-        "presence.heartbeat",
-        "presence",
-        &resolve_actor(from.as_deref()),
-        None,
-        json!({ "activity": state }),
-    )
-    .await?;
+    let actor = resolve_actor(from.as_deref());
+    let event = match ack_of {
+        Some(seq) => {
+            let referenced = referenced_event(&project_root, home.clone(), seq).await?;
+            append_or_post_ack(&project_root, home, "message.read", &referenced.room, &actor, seq)
+                .await?
+        }
+        None => {
+            append_or_post_event(
+                &project_root,
+                home,
+                "presence.heartbeat",
+                "presence",
+                &actor,
+                None,
+                json!({ "activity": state }),
+            )
+            .await?
+        }
+    };
     println!("activity: {} seq={}", state, event.seq);
     Ok(())
+}
+
+/// Emits a `message.delivered`/`message.read` receipt for `ack_of`, in the
+/// same room as the event it acknowledges — required by `validate_ack`.
+pub async fn send_ack(
+    project_root: PathBuf,
+    home: Option<PathBuf>,
+    event_type: &str,
+    ack_of: u64,
+    room: &str,
+    from: Option<&str>,
+) -> Result<()> {
+    let actor = resolve_actor(from);
+    let event =
+        append_or_post_ack(&project_root, home, event_type, room, &actor, ack_of).await?;
+    println!("ack: {event_type} seq={}", event.seq);
+    Ok(())
+}
+
+async fn referenced_event(
+    project_root: &std::path::Path,
+    home: Option<PathBuf>,
+    seq: u64,
+) -> Result<crate::protocol::EventEnvelope> {
+    auth::require_local_project_credential(project_root, home)?;
+    MeshStore::open(project_root)?
+        .get_event(seq)?
+        .ok_or_else(|| anyhow::anyhow!("no event with seq {seq}"))
+}
+
+async fn append_or_post_ack(
+    project_root: &std::path::Path,
+    home: Option<PathBuf>,
+    event_type: &str,
+    room: &str,
+    from: &str,
+    ack_of: u64,
+) -> Result<crate::protocol::EventEnvelope> {
+    auth::require_local_mutating_project_credential(project_root, home.clone())?;
+    if let Ok(metadata) = read_server_metadata(project_root) {
+        if metadata.mode == "remote" {
+            let token = auth::local_mutating_project_token(project_root, home)?;
+            let response = Client::new()
+                .post(format!("{}/api/events", base_url(&metadata)))
+                .bearer_auth(&token)
+                .json(&json!({
+                    "type": event_type,
+                    "room": room,
+                    "from": from,
+                    "ack_of": ack_of,
+                    "payload": {},
+                }))
+                .send()
+                .await
+                .context("post remote ack event")?
+                .error_for_status()
+                .context("remote ack event rejected")?;
+            return response.json().await.context("parse remote ack event");
+        }
+    }
+    MeshStore::open(project_root)?.append_event_with_ack(
+        event_type,
+        room,
+        from,
+        None,
+        json!({}),
+        Some(ack_of),
+    )
 }
 
 pub async fn watch_actor(
@@ -722,7 +802,7 @@ mod tests {
 
     use super::{
         default_capabilities, job_events, merge_capabilities, normalize_platform,
-        resolve_actor_from, send_message, set_doing, DEFAULT_ACTOR,
+        resolve_actor_from, send_message, set_activity, set_doing, DEFAULT_ACTOR,
     };
 
     #[test]
@@ -1054,5 +1134,84 @@ mod tests {
             ),
         )
         .unwrap();
+    }
+
+    #[tokio::test]
+    async fn activity_with_ack_of_emits_message_read() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "worker.cred", "mesh-client", "worker");
+
+        let sent = MeshStore::open(project.path())
+            .unwrap()
+            .append_event("message.sent", "repo:workbench", "session:lead", Some("session:worker"), json!({ "text": "hi" }))
+            .unwrap();
+
+        set_activity(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "reading".to_string(),
+            Some("session:worker".to_string()),
+            Some(sent.seq),
+        )
+        .await
+        .unwrap();
+
+        let events = MeshStore::open(project.path()).unwrap().list_events_since(0).unwrap();
+        let ack = events.iter().find(|e| e.event_type == "message.read").unwrap();
+        assert_eq!(ack.ack_of, Some(sent.seq));
+        assert_eq!(ack.room, "repo:workbench");
+        assert_eq!(ack.from, "session:worker");
+    }
+
+    #[tokio::test]
+    async fn activity_without_ack_of_still_emits_plain_heartbeat() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "worker.cred", "mesh-client", "worker");
+
+        set_activity(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "typing".to_string(),
+            Some("session:worker".to_string()),
+            None,
+        )
+        .await
+        .unwrap();
+
+        let events = MeshStore::open(project.path()).unwrap().list_events_since(0).unwrap();
+        assert_eq!(events[0].event_type, "presence.heartbeat");
+        assert_eq!(events[0].payload["activity"], "typing");
+    }
+
+    #[tokio::test]
+    async fn send_ack_emits_message_delivered_with_ack_of() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "worker.cred", "mesh-client", "worker");
+
+        let sent = MeshStore::open(project.path())
+            .unwrap()
+            .append_event("message.sent", "repo:workbench", "session:lead", Some("session:worker"), json!({ "text": "hi" }))
+            .unwrap();
+
+        super::send_ack(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "message.delivered",
+            sent.seq,
+            "repo:workbench",
+            Some("session:worker"),
+        )
+        .await
+        .unwrap();
+
+        let events = MeshStore::open(project.path()).unwrap().list_events_since(0).unwrap();
+        let ack = events.iter().find(|e| e.event_type == "message.delivered").unwrap();
+        assert_eq!(ack.ack_of, Some(sent.seq));
     }
 }
