@@ -126,6 +126,7 @@ window.WB = window.WB || {};
     }
     sl.appendChild(el('span', { class: 'sl-right' }, [
       el('span', { class: 'sl-item', html: 'seq <b id="sl-seq">#' + WB.sim.seq + '</b>' }),
+      el('span', { class: 'sl-item', id: 'sl-rtt', text: WB.RTT != null ? WB.RTT + 'ms' : '…' }),
       el('span', { class: 'sl-item', text: 'you: operator · token ok' }),
       el('span', { class: 'sl-item sl-dim', text: 'trusted LAN · plaintext HTTP' }),
     ]));
@@ -237,6 +238,10 @@ window.WB = window.WB || {};
   window.parent.postMessage({ type: '__edit_mode_available' }, '*');
 
   /* ── live chrome updates ── */
+  WB.sim.on('rtt', () => {
+    const r = document.getElementById('sl-rtt');
+    if (r) r.textContent = WB.RTT != null ? WB.RTT + 'ms' : '…';
+  });
   WB.sim.on('tick', () => {
     if (WB.state.hostState === 'down') return;
     const up = document.getElementById('sl-uptime');

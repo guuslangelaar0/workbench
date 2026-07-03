@@ -25,6 +25,7 @@ window.WB = window.WB || {};
   };
   WB.sim = sim;
   WB.RECEIPTS = WB.RECEIPTS || {};
+  WB.RTT = null;
 
   /* ── auth ── */
   const params = new URLSearchParams(window.location.search);
@@ -138,8 +139,16 @@ window.WB = window.WB || {};
 
   function handleControlFrame(payload) {
     // ack: no-op here — optimistic-send reconciliation (Task 14) consumes it
-    // pong: RTT measurement (Task 15) consumes it
+    if (payload.type === 'pong' && typeof payload.t === 'number') {
+      WB.RTT = Date.now() - payload.t;
+      sim.emit('rtt', WB.RTT);
+    }
   }
+  function sendPing() {
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({ v: 1, type: 'ping', t: Date.now() }));
+  }
+  setInterval(sendPing, 5000);
 
   let subscribedRooms = [];
   function sendSubscribe() {
@@ -243,6 +252,8 @@ window.WB = window.WB || {};
       const r = WB.RECEIPTS[ev.ack_of] = WB.RECEIPTS[ev.ack_of] || { deliveredBy: new Set(), seenBy: new Set() };
       if (type === 'message.delivered') r.deliveredBy.add(ev.from);
       else r.seenBy.add(ev.from);
+      const actor = WB.AGENTS.find((a) => a.id === ev.from);
+      if (actor) actor.lastSeen = Math.max(actor.lastSeen, when);
       if (!quiet) sim.emit('receipt', ev.ack_of);
     }
 
