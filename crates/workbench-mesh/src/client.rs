@@ -230,6 +230,8 @@ pub(crate) fn remote_metadata_from_url(url: &str) -> Result<ServerMetadata> {
         },
         lan_ips: Vec::new(),
         local_token: String::new(),
+        started_by: "unknown".to_string(),
+        started_at: String::new(),
     })
 }
 
@@ -366,6 +368,21 @@ pub async fn handoff_task(
     Ok(())
 }
 
+/// Provider ("claude"/"codex") and model ("sonnet"/"gpt-5"/…) cannot be
+/// auto-detected from inside a session, so they are always explicit:
+/// flag first, then env var, then "unknown".
+fn resolve_identity_field(explicit: Option<String>, env_var: &str) -> String {
+    explicit
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            std::env::var(env_var)
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        })
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+#[allow(clippy::too_many_arguments)]
 pub async fn set_availability(
     project_root: PathBuf,
     home: Option<PathBuf>,
@@ -374,9 +391,13 @@ pub async fn set_availability(
     from: Option<String>,
     platform: Option<String>,
     extra_capabilities: Vec<String>,
+    provider: Option<String>,
+    model: Option<String>,
 ) -> Result<()> {
     let platform = platform.unwrap_or_else(detect_platform);
     let capabilities = merge_capabilities(&platform, extra_capabilities);
+    let provider = resolve_identity_field(provider, "WORKBENCH_MESH_PROVIDER");
+    let model = resolve_identity_field(model, "WORKBENCH_MESH_MODEL");
     let event = append_or_post_event(
         &project_root,
         home,
@@ -389,6 +410,8 @@ pub async fn set_availability(
             "reason": reason,
             "platform": platform,
             "capabilities": capabilities,
+            "provider": provider,
+            "model": model,
         }),
     )
     .await?;
@@ -396,6 +419,7 @@ pub async fn set_availability(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn set_doing(
     project_root: PathBuf,
     home: Option<PathBuf>,
@@ -403,9 +427,13 @@ pub async fn set_doing(
     from: Option<String>,
     platform: Option<String>,
     extra_capabilities: Vec<String>,
+    provider: Option<String>,
+    model: Option<String>,
 ) -> Result<()> {
     let platform = platform.unwrap_or_else(detect_platform);
     let capabilities = merge_capabilities(&platform, extra_capabilities);
+    let provider = resolve_identity_field(provider, "WORKBENCH_MESH_PROVIDER");
+    let model = resolve_identity_field(model, "WORKBENCH_MESH_MODEL");
     let event = append_or_post_event(
         &project_root,
         home,
@@ -417,6 +445,8 @@ pub async fn set_doing(
             "current_step": text,
             "platform": platform,
             "capabilities": capabilities,
+            "provider": provider,
+            "model": model,
         }),
     )
     .await?;
@@ -827,6 +857,8 @@ mod tests {
             Some("actor:reviewer".to_string()),
             Some("linux".to_string()),
             vec!["docker".to_string()],
+            None,
+            None,
         )
         .await
         .unwrap();
@@ -842,6 +874,54 @@ mod tests {
         assert!(caps.contains(&"linux-native"));
         assert!(caps.contains(&"docker"));
         assert!(!caps.contains(&"ios-simulator"));
+        // No flag and no env var → explicit "unknown", never absent.
+        assert_eq!(events[0].payload["provider"], "unknown");
+        assert_eq!(events[0].payload["model"], "unknown");
+    }
+
+    #[tokio::test]
+    async fn doing_reports_provider_and_model_in_payload() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "worker.cred", "mesh-client", "worker");
+
+        set_doing(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "building the tailer".to_string(),
+            Some("generator-1".to_string()),
+            Some("linux".to_string()),
+            vec![],
+            Some("claude".to_string()),
+            Some("sonnet".to_string()),
+        )
+        .await
+        .unwrap();
+
+        let events = MeshStore::open(project.path())
+            .unwrap()
+            .list_events_since(0)
+            .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].payload["provider"], "claude");
+        assert_eq!(events[0].payload["model"], "sonnet");
+    }
+
+    #[test]
+    fn identity_field_prefers_flag_then_env_then_unknown() {
+        assert_eq!(
+            super::resolve_identity_field(Some("codex".to_string()), "WB_TEST_NO_SUCH_ENV"),
+            "codex"
+        );
+        assert_eq!(
+            super::resolve_identity_field(Some("  ".to_string()), "WB_TEST_NO_SUCH_ENV"),
+            "unknown"
+        );
+        assert_eq!(
+            super::resolve_identity_field(None, "WB_TEST_NO_SUCH_ENV"),
+            "unknown"
+        );
     }
 
     fn write_project_config(project: &std::path::Path, name: &str) {

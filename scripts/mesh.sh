@@ -21,7 +21,7 @@ usage() {
 usage: mesh.sh <operation> [args]
 
 operations:
-  start [--local|--lan] [--port N] [--pid-file PATH]
+  start [--local|--lan] [--port N] [--pid-file PATH] [--as ACTOR]
   stop [--pid-file PATH]
   status | who | jobs | open
   invite [--role ROLE] [--ttl-seconds N] [--max-uses N]
@@ -32,8 +32,8 @@ operations:
   message TARGET TEXT... [--as ACTOR]
   ask TARGET QUESTION... [--as ACTOR]
   handoff TASK_ID TARGET [--as ACTOR]
-  availability STATE [--reason TEXT] [--as ACTOR] [--platform NAME] [--capability VALUE]...
-  doing TEXT... [--as ACTOR] [--platform NAME] [--capability VALUE]...
+  availability STATE [--reason TEXT] [--as ACTOR] [--platform NAME] [--capability VALUE]... [--provider NAME] [--model NAME]
+  doing TEXT... [--as ACTOR] [--platform NAME] [--capability VALUE]... [--provider NAME] [--model NAME]
   watch ACTOR [--as ACTOR]
 
 --as ACTOR identifies this session/process as ACTOR in the posted event,
@@ -186,6 +186,8 @@ shift || true
 AS_ARGS=()
 PLATFORM_ARGS=()
 CAP_ARGS=()
+PROVIDER_ARGS=()
+MODEL_ARGS=()
 if [ "$#" -gt 0 ]; then
   rest=()
   i=1
@@ -203,6 +205,14 @@ if [ "$#" -gt 0 ]; then
       --capability)
         i=$((i + 1))
         CAP_ARGS+=(--capability "${!i:-}")
+        ;;
+      --provider)
+        i=$((i + 1))
+        PROVIDER_ARGS=(--provider "${!i:-}")
+        ;;
+      --model)
+        i=$((i + 1))
+        MODEL_ARGS=(--model "${!i:-}")
         ;;
       *)
         rest+=("$arg")
@@ -262,7 +272,7 @@ case "$cmd" in
     pass+=(--pid-file "$pidfile")
     "$BIN" auth bootstrap "${PROJECT_ARGS[@]}" >/dev/null
     print_start_info "$mode" "$port"
-    exec "$BIN" serve "${PROJECT_ARGS[@]}" --bind "$mode" "${pass[@]}"
+    exec "$BIN" serve "${PROJECT_ARGS[@]}" --bind "$mode" "${pass[@]}" "${AS_ARGS[@]}"
     ;;
   stop)
     pidfile=""
@@ -398,11 +408,11 @@ case "$cmd" in
     ;;
   availability)
     require_arg "availability state" "${1:-}"
-    exec "$BIN" availability "${PROJECT_ARGS[@]}" "$@" "${AS_ARGS[@]}" "${PLATFORM_ARGS[@]}" "${CAP_ARGS[@]}"
+    exec "$BIN" availability "${PROJECT_ARGS[@]}" "$@" "${AS_ARGS[@]}" "${PLATFORM_ARGS[@]}" "${CAP_ARGS[@]}" "${PROVIDER_ARGS[@]}" "${MODEL_ARGS[@]}"
     ;;
   doing)
     require_arg "doing text" "${1:-}"
-    exec "$BIN" doing "${PROJECT_ARGS[@]}" "$*" "${AS_ARGS[@]}" "${PLATFORM_ARGS[@]}" "${CAP_ARGS[@]}"
+    exec "$BIN" doing "${PROJECT_ARGS[@]}" "$*" "${AS_ARGS[@]}" "${PLATFORM_ARGS[@]}" "${CAP_ARGS[@]}" "${PROVIDER_ARGS[@]}" "${MODEL_ARGS[@]}"
     ;;
   watch)
     require_arg "actor" "${1:-}"

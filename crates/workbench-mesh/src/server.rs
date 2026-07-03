@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Query, State};
+use axum::extract::{Path as UrlPath, Query, State};
 use axum::http::{header, HeaderMap, HeaderName, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
@@ -27,8 +27,72 @@ use crate::protocol::EventEnvelope;
 use crate::store::MeshStore;
 
 const INDEX_HTML: &str = include_str!("../assets/index.html");
-const APP_JS: &str = include_str!("../assets/app.js");
-const STYLE_CSS: &str = include_str!("../assets/style.css");
+
+/// The command-center bundle, embedded so the binary stays self-contained.
+/// Served under /assets/command-center/<name>; tokenized_command_center_html
+/// rewrites each reference when the page is opened with a ?token= URL.
+const COMMAND_CENTER_ASSETS: &[(&str, &str, &str)] = &[
+    (
+        "style.css",
+        "text/css; charset=utf-8",
+        include_str!("../assets/command-center/style.css"),
+    ),
+    (
+        "style-surfaces.css",
+        "text/css; charset=utf-8",
+        include_str!("../assets/command-center/style-surfaces.css"),
+    ),
+    (
+        "icons.js",
+        "application/javascript; charset=utf-8",
+        include_str!("../assets/command-center/icons.js"),
+    ),
+    (
+        "data.js",
+        "application/javascript; charset=utf-8",
+        include_str!("../assets/command-center/data.js"),
+    ),
+    (
+        "ui.js",
+        "application/javascript; charset=utf-8",
+        include_str!("../assets/command-center/ui.js"),
+    ),
+    (
+        "live.js",
+        "application/javascript; charset=utf-8",
+        include_str!("../assets/command-center/live.js"),
+    ),
+    (
+        "bench.js",
+        "application/javascript; charset=utf-8",
+        include_str!("../assets/command-center/bench.js"),
+    ),
+    (
+        "board.js",
+        "application/javascript; charset=utf-8",
+        include_str!("../assets/command-center/board.js"),
+    ),
+    (
+        "host.js",
+        "application/javascript; charset=utf-8",
+        include_str!("../assets/command-center/host.js"),
+    ),
+    (
+        "ops.js",
+        "application/javascript; charset=utf-8",
+        include_str!("../assets/command-center/ops.js"),
+    ),
+    (
+        "docs.js",
+        "application/javascript; charset=utf-8",
+        include_str!("../assets/command-center/docs.js"),
+    ),
+    (
+        "app.js",
+        "application/javascript; charset=utf-8",
+        include_str!("../assets/command-center/app.js"),
+    ),
+];
 
 #[derive(Debug, Clone)]
 pub struct ServeOptions {
@@ -37,6 +101,7 @@ pub struct ServeOptions {
     pub bind: String,
     pub port: u16,
     pub pid_file: Option<PathBuf>,
+    pub started_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +113,14 @@ pub struct ServerMetadata {
     pub mdns: String,
     pub lan_ips: Vec<String>,
     pub local_token: String,
+    #[serde(default = "unknown_actor")]
+    pub started_by: String,
+    #[serde(default)]
+    pub started_at: String,
+}
+
+fn unknown_actor() -> String {
+    "unknown".to_string()
 }
 
 #[derive(Clone)]
@@ -61,6 +134,9 @@ struct AppState {
     tail_scan_seq: Arc<AtomicU64>,
     daemon_broadcast_seqs: Arc<Mutex<BTreeSet<u64>>>,
     connect_urls: Vec<ConnectUrl>,
+    // Named fields from server.json only — never the file wholesale, and
+    // never local_token (a live bearer secret).
+    host_meta: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,6 +219,10 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
         mdns: bind_info.mdns_name,
         lan_ips: bind_info.lan_ips,
         local_token: daemon_token,
+        started_by: opts.started_by.clone().unwrap_or_else(unknown_actor),
+        started_at: time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_default(),
     };
     let store = Arc::new(MeshStore::open(&opts.project_root)?);
     let tail_scan_seq = Arc::new(AtomicU64::new(current_store_seq(&store)?));
@@ -157,6 +237,15 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
         tail_scan_seq,
         daemon_broadcast_seqs: Arc::new(Mutex::new(BTreeSet::new())),
         connect_urls: connect_urls_from_metadata(&metadata),
+        host_meta: json!({
+            "mode": metadata.mode,
+            "host": metadata.host,
+            "port": metadata.port,
+            "hostname": metadata.hostname,
+            "lan_ips": metadata.lan_ips,
+            "started_by": metadata.started_by,
+            "started_at": metadata.started_at,
+        }),
     };
     write_server_metadata(&opts.project_root, &metadata)?;
     if let Some(pid_file) = opts.pid_file {
@@ -168,8 +257,7 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
 
     let app = Router::new()
         .route("/", get(command_center))
-        .route("/assets/app.js", get(command_center_js))
-        .route("/assets/style.css", get(command_center_css))
+        .route("/assets/command-center/:asset", get(command_center_asset))
         .route("/health", get(health))
         .route("/api/state", get(api_state))
         .route("/api/events", get(api_events).post(post_event))
@@ -209,25 +297,18 @@ async fn command_center(
     Ok((static_headers("text/html; charset=utf-8"), html))
 }
 
-async fn command_center_js(
+async fn command_center_asset(
     State(state): State<AppState>,
+    UrlPath(asset): UrlPath<String>,
     headers: HeaderMap,
     Query(query): Query<StaticQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
     static_auth(&state, &headers, &query)?;
-    Ok((
-        static_headers("application/javascript; charset=utf-8"),
-        APP_JS,
-    ))
-}
-
-async fn command_center_css(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Query(query): Query<StaticQuery>,
-) -> Result<impl IntoResponse, ApiError> {
-    static_auth(&state, &headers, &query)?;
-    Ok((static_headers("text/css; charset=utf-8"), STYLE_CSS))
+    let (_, content_type, body) = COMMAND_CENTER_ASSETS
+        .iter()
+        .find(|(name, _, _)| *name == asset)
+        .ok_or_else(|| ApiError::not_found("unknown asset"))?;
+    Ok((static_headers(content_type), *body))
 }
 
 async fn health(
@@ -530,12 +611,13 @@ fn static_auth(
 }
 
 fn tokenized_command_center_html(token: &str) -> String {
-    INDEX_HTML
-        .replace(
-            "/assets/style.css",
-            &format!("/assets/style.css?token={token}"),
-        )
-        .replace("/assets/app.js", &format!("/assets/app.js?token={token}"))
+    let mut html = INDEX_HTML.to_string();
+    for (name, _, _) in COMMAND_CENTER_ASSETS {
+        let plain = format!("/assets/command-center/{name}");
+        let tokenized = format!("/assets/command-center/{name}?token={token}");
+        html = html.replace(&plain, &tokenized);
+    }
+    html
 }
 
 fn static_headers(content_type: &'static str) -> [(HeaderName, &'static str); 3] {
@@ -568,6 +650,7 @@ fn state_json(state: &AppState, role: &str) -> Result<Value> {
         "devices": devices,
         "events": events,
         "last_seq": events.last().map(|event| event.seq).unwrap_or(0),
+        "host": state.host_meta.clone(),
     }))
 }
 
@@ -739,6 +822,13 @@ impl ApiError {
             message: message.to_string(),
         }
     }
+
+    fn not_found(message: &str) -> Self {
+        Self {
+            status: StatusCode::NOT_FOUND,
+            message: message.to_string(),
+        }
+    }
 }
 
 impl From<anyhow::Error> for ApiError {
@@ -805,6 +895,7 @@ mod tests {
             bind: "local".to_string(),
             port: 0,
             pid_file: None,
+            started_by: None,
         }));
 
         let metadata = wait_for_metadata(project.path()).await;
@@ -906,6 +997,7 @@ mod tests {
             bind: "local".to_string(),
             port: 0,
             pid_file: None,
+            started_by: None,
         }));
 
         let metadata = wait_for_metadata(project.path()).await;
@@ -955,6 +1047,7 @@ mod tests {
             bind: "local".to_string(),
             port: 0,
             pid_file: None,
+            started_by: None,
         }));
         let metadata = wait_for_metadata(project.path()).await;
         let client = Client::new();
@@ -1070,6 +1163,7 @@ mod tests {
             bind: "local".to_string(),
             port: 0,
             pid_file: None,
+            started_by: None,
         }));
         let metadata = wait_for_metadata(project.path()).await;
         let base = format!("http://{}:{}", metadata.host, metadata.port);
@@ -1119,6 +1213,7 @@ mod tests {
             bind: "local".to_string(),
             port: 0,
             pid_file: None,
+            started_by: None,
         }));
         let metadata = wait_for_metadata(project.path()).await;
 
@@ -1170,6 +1265,7 @@ mod tests {
             bind: "local".to_string(),
             port: 0,
             pid_file: None,
+            started_by: None,
         }));
         let metadata = wait_for_metadata(project.path()).await;
         let base = format!("http://{}:{}", metadata.host, metadata.port);
@@ -1271,6 +1367,7 @@ mod tests {
             tail_scan_seq: Arc::new(AtomicU64::new(last_seq)),
             daemon_broadcast_seqs: Arc::new(Mutex::new(BTreeSet::new())),
             connect_urls: Vec::new(),
+            host_meta: serde_json::json!({}),
         };
         let app = Router::new()
             .route("/ws", get(super::ws_handler))
@@ -1347,6 +1444,7 @@ mod tests {
             bind: "local".to_string(),
             port: 0,
             pid_file: None,
+            started_by: None,
         }));
         let metadata = wait_for_metadata(project.path()).await;
         let base = format!("http://{}:{}", metadata.host, metadata.port);
@@ -1407,6 +1505,7 @@ mod tests {
             bind: "local".to_string(),
             port: 0,
             pid_file: None,
+            started_by: None,
         }));
         let metadata = wait_for_metadata(project.path()).await;
         let base = format!("http://{}:{}", metadata.host, metadata.port);
@@ -1438,6 +1537,7 @@ mod tests {
             bind: "local".to_string(),
             port: 0,
             pid_file: None,
+            started_by: None,
         }));
         let metadata = wait_for_metadata(project.path()).await;
         let base = format!("http://{}:{}", metadata.host, metadata.port);
@@ -1481,6 +1581,8 @@ mod tests {
             mdns: "workstation.local".to_string(),
             lan_ips: vec!["192.168.1.8".to_string()],
             local_token: "local-token".to_string(),
+            started_by: "unknown".to_string(),
+            started_at: String::new(),
         };
 
         let urls = super::connect_urls_from_metadata(&metadata);
@@ -1500,6 +1602,8 @@ mod tests {
             mdns: "workstation.local".to_string(),
             lan_ips: vec!["192.168.1.8".to_string()],
             local_token: "local-token".to_string(),
+            started_by: "unknown".to_string(),
+            started_at: String::new(),
         };
 
         let urls = super::connect_urls_from_metadata(&metadata);
@@ -1527,6 +1631,7 @@ mod tests {
             bind: "local".to_string(),
             port: 0,
             pid_file: None,
+            started_by: None,
         }));
         let metadata = wait_for_metadata(project.path()).await;
         let base = format!("http://{}:{}", metadata.host, metadata.port);
@@ -1567,6 +1672,7 @@ mod tests {
             bind: "local".to_string(),
             port: 0,
             pid_file: None,
+            started_by: None,
         }));
         let metadata = wait_for_metadata(project.path()).await;
         let base = format!("http://{}:{}", metadata.host, metadata.port);
@@ -1627,6 +1733,7 @@ mod tests {
             bind: "local".to_string(),
             port: 0,
             pid_file: None,
+            started_by: None,
         }));
         let metadata = wait_for_metadata(project.path()).await;
         let base = format!("http://{}:{}", metadata.host, metadata.port);
@@ -1676,6 +1783,7 @@ mod tests {
             bind: "local".to_string(),
             port: 0,
             pid_file: None,
+            started_by: None,
         }));
         let metadata = wait_for_metadata(project.path()).await;
         let base = format!("http://{}:{}", metadata.host, metadata.port);
@@ -1730,6 +1838,7 @@ mod tests {
             bind: "local".to_string(),
             port: 0,
             pid_file: None,
+            started_by: None,
         }));
         let metadata = wait_for_metadata(project.path()).await;
         let (mut socket, _) = connect_async(format!(
@@ -1777,6 +1886,7 @@ mod tests {
             tail_scan_seq: Arc::new(AtomicU64::new(0)),
             daemon_broadcast_seqs: Arc::new(Mutex::new(BTreeSet::new())),
             connect_urls: Vec::new(),
+            host_meta: serde_json::json!({}),
         };
         let app = Router::new()
             .route("/api/events", post(super::post_event))

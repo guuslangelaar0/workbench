@@ -222,6 +222,10 @@ struct ServeArgs {
     port: u16,
     #[arg(long)]
     pid_file: Option<PathBuf>,
+    /// Actor identity of the session starting the daemon — stamped into
+    /// server.json as started_by so the dashboard can show who is hosting.
+    #[arg(long = "as")]
+    as_actor: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -332,6 +336,15 @@ struct AvailabilityArgs {
     /// box, a specific SDK). Repeatable.
     #[arg(long = "capability")]
     capabilities: Vec<String>,
+    /// Which CLI drives this session ("claude"/"codex"). Not auto-detectable
+    /// from inside a session; falls back to WORKBENCH_MESH_PROVIDER, then
+    /// "unknown".
+    #[arg(long)]
+    provider: Option<String>,
+    /// Which model drives this session ("sonnet"/"gpt-5"/…). Falls back to
+    /// WORKBENCH_MESH_MODEL, then "unknown".
+    #[arg(long)]
+    model: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -347,6 +360,10 @@ struct DoingArgs {
     platform: Option<String>,
     #[arg(long = "capability")]
     capabilities: Vec<String>,
+    #[arg(long)]
+    provider: Option<String>,
+    #[arg(long)]
+    model: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -391,6 +408,7 @@ async fn main() -> Result<()> {
                 bind: args.bind,
                 port: args.port,
                 pid_file: args.pid_file,
+                started_by: args.as_actor,
             })
             .await
         }
@@ -438,6 +456,8 @@ async fn main() -> Result<()> {
                 args.as_actor,
                 args.platform,
                 args.capabilities,
+                args.provider,
+                args.model,
             )
             .await
         }
@@ -449,6 +469,8 @@ async fn main() -> Result<()> {
                 args.as_actor,
                 args.platform,
                 args.capabilities,
+                args.provider,
+                args.model,
             )
             .await
         }

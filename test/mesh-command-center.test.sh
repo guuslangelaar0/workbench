@@ -29,54 +29,78 @@ bash "$HERE/scripts/init.sh" --name "MeshUI" --mission "Test." --target "$TMP" -
 cargo build -p workbench-mesh >/dev/null || exit 1
 BIN="$HERE/target/debug/workbench-mesh"
 "$BIN" auth bootstrap --target "$TMP" --home "$HOME_TMP" >/dev/null
-"$BIN" serve --target "$TMP" --home "$HOME_TMP" --bind local --port 0 --pid-file "$PIDF" > "$TMP/mesh.log" 2>&1 &
+"$BIN" serve --target "$TMP" --home "$HOME_TMP" --bind local --port 0 --pid-file "$PIDF" --as forge-lead > "$TMP/mesh.log" 2>&1 &
 for _ in $(seq 1 50); do [ -f "$TMP/.workbench/mesh/server.json" ] && break; sleep 0.1; done
 PORT="$(sed -n 's/.*"port":\([0-9][0-9]*\).*/\1/p' "$TMP/.workbench/mesh/server.json" | head -1)"
 TOKEN="$(sed -n 's/.*"local_token":"\([^"]*\)".*/\1/p' "$TMP/.workbench/mesh/server.json" | head -1)"
 
+# Host identity is stamped into server.json at start (never guessed).
+chk "server.json records started_by" "grep -q '\"started_by\":\"forge-lead\"' '$TMP/.workbench/mesh/server.json'"
+chk "server.json records started_at" "grep -q '\"started_at\":\"' '$TMP/.workbench/mesh/server.json'"
+
 HTML_HEADERS="$TMP/html.headers"
 HTML="$(curl -fsS -D "$HTML_HEADERS" "http://127.0.0.1:$PORT/" -H "Authorization: Bearer $TOKEN")"
 chk "html names command center" "printf '%s' \"\$HTML\" | grep -q 'Workbench Mesh'"
-chk "html includes leads view" "printf '%s' \"\$HTML\" | grep -q 'Leads'"
-chk "html includes workers view" "printf '%s' \"\$HTML\" | grep -q 'Workers'"
-chk "html includes rooms view" "printf '%s' \"\$HTML\" | grep -q 'Rooms'"
-chk "html includes jobs view" "printf '%s' \"\$HTML\" | grep -q 'Jobs'"
-chk "html includes tasks view" "printf '%s' \"\$HTML\" | grep -q 'Tasks'"
-chk "html includes decisions view" "printf '%s' \"\$HTML\" | grep -q 'Decisions'"
-chk "html includes invites view" "printf '%s' \"\$HTML\" | grep -q 'Invites'"
-chk "html includes audit view" "printf '%s' \"\$HTML\" | grep -q 'Audit'"
-chk "html includes devices view" "printf '%s' \"\$HTML\" | grep -q 'Devices'"
-chk "html uses observer backend role" "printf '%s' \"\$HTML\" | grep -q 'value=\"observer\"' && ! printf '%s' \"\$HTML\" | grep -q 'value=\"viewer\"'"
+chk "html carries the app shell" "printf '%s' \"\$HTML\" | grep -q 'id=\"surface\"'"
+chk "html loads the live data layer" "printf '%s' \"\$HTML\" | grep -q 'command-center/live.js'"
+chk "html loads every surface module" "for m in bench board host ops docs app; do printf '%s' \"\$HTML\" | grep -q \"command-center/\$m.js\" || exit 1; done"
 chk "html response is no-store" "grep -qi '^cache-control: no-store' '$HTML_HEADERS'"
 chk "html response has no referrer policy" "grep -qi '^referrer-policy: no-referrer' '$HTML_HEADERS'"
 
 HTML_QUERY="$(curl -fsS "http://127.0.0.1:$PORT/?token=$TOKEN")"
 chk "query token html names command center" "printf '%s' \"\$HTML_QUERY\" | grep -q 'Workbench Mesh'"
-chk "query token html links tokenized style" "printf '%s' \"\$HTML_QUERY\" | grep -q \"/assets/style.css?token=$TOKEN\""
-chk "query token html links tokenized app" "printf '%s' \"\$HTML_QUERY\" | grep -q \"/assets/app.js?token=$TOKEN\""
+chk "query token html links tokenized style" "printf '%s' \"\$HTML_QUERY\" | grep -q \"/assets/command-center/style.css?token=$TOKEN\""
+chk "query token html links tokenized live layer" "printf '%s' \"\$HTML_QUERY\" | grep -q \"/assets/command-center/live.js?token=$TOKEN\""
 
 CSS_HEADERS="$TMP/style.headers"
-CSS="$(curl -fsS -D "$CSS_HEADERS" "http://127.0.0.1:$PORT/assets/style.css" -H "Authorization: Bearer $TOKEN")"
-chk "style defines command rail" "printf '%s' \"\$CSS\" | grep -q 'event-rail'"
+curl -fsS -D "$CSS_HEADERS" -o "$TMP/style-surfaces.css" "http://127.0.0.1:$PORT/assets/command-center/style-surfaces.css" -H "Authorization: Bearer $TOKEN"
+chk "surface styles define event rail" "grep -q 'event-rail' '$TMP/style-surfaces.css'"
+chk "surface styles define the bench" "grep -q 'bench-zone' '$TMP/style-surfaces.css'"
 chk "style response is no-store" "grep -qi '^cache-control: no-store' '$CSS_HEADERS'"
 chk "style response has no referrer policy" "grep -qi '^referrer-policy: no-referrer' '$CSS_HEADERS'"
 
+curl -fsS -o "$TMP/style.css" "http://127.0.0.1:$PORT/assets/command-center/style.css" -H "Authorization: Bearer $TOKEN"
+chk "token styles define light and dark themes" "grep -q 'data-theme=\"dark\"' '$TMP/style.css'"
+
 JS_HEADERS="$TMP/app.headers"
-JS="$(curl -fsS -D "$JS_HEADERS" "http://127.0.0.1:$PORT/assets/app.js" -H "Authorization: Bearer $TOKEN")"
-chk "app opens websocket" "grep -q 'WebSocket' <<<\"\$JS\""
-chk "app posts events" "grep -q '/api/events' <<<\"\$JS\""
-chk "app creates invites" "grep -q '/api/invites' <<<\"\$JS\""
-chk "app lists devices" "grep -q '/api/devices' <<<\"\$JS\""
-chk "app revokes devices" "grep -q '/api/devices/revoke' <<<\"\$JS\""
-chk "app supports availability" "grep -q 'availability.set' <<<\"\$JS\""
-chk "app response is no-store" "grep -qi '^cache-control: no-store' '$JS_HEADERS'"
-chk "app response has no referrer policy" "grep -qi '^referrer-policy: no-referrer' '$JS_HEADERS'"
+curl -fsS -D "$JS_HEADERS" -o "$TMP/live.js" "http://127.0.0.1:$PORT/assets/command-center/live.js" -H "Authorization: Bearer $TOKEN"
+chk "live layer opens websocket" "grep -q 'WebSocket' '$TMP/live.js'"
+chk "live layer posts events" "grep -q '/api/events' '$TMP/live.js'"
+chk "live layer creates invites" "grep -q '/api/invites' '$TMP/live.js'"
+chk "live layer revokes devices" "grep -q '/api/devices/revoke' '$TMP/live.js'"
+chk "live layer response is no-store" "grep -qi '^cache-control: no-store' '$JS_HEADERS'"
+chk "live layer response has no referrer policy" "grep -qi '^referrer-policy: no-referrer' '$JS_HEADERS'"
 
-CSS_QUERY="$(curl -fsS "http://127.0.0.1:$PORT/assets/style.css?token=$TOKEN")"
-chk "query token style defines command rail" "printf '%s' \"\$CSS_QUERY\" | grep -q 'event-rail'"
+curl -fsS -o "$TMP/ops.js" "http://127.0.0.1:$PORT/assets/command-center/ops.js" -H "Authorization: Bearer $TOKEN"
+chk "ops surface keeps leads view" "grep -q 'Leads' '$TMP/ops.js'"
+chk "ops surface keeps workers view" "grep -q 'Workers' '$TMP/ops.js'"
+chk "ops surface keeps rooms view" "grep -q 'Rooms' '$TMP/ops.js'"
+chk "ops surface keeps jobs view" "grep -q 'Jobs' '$TMP/ops.js'"
+chk "ops surface keeps task reassign" "grep -q 'reassignTask' '$TMP/ops.js'"
 
-JS_QUERY="$(curl -fsS "http://127.0.0.1:$PORT/assets/app.js?token=$TOKEN")"
-chk "query token app opens websocket" "grep -q 'WebSocket' <<<\"\$JS_QUERY\""
+curl -fsS -o "$TMP/host.js" "http://127.0.0.1:$PORT/assets/command-center/host.js" -H "Authorization: Bearer $TOKEN"
+chk "host surface keeps enrollment/invites" "grep -q 'Enrollment' '$TMP/host.js'"
+chk "host surface keeps devices view" "grep -q 'Devices' '$TMP/host.js'"
+chk "host surface keeps audit view" "grep -q 'Audit' '$TMP/host.js'"
+chk "host surface uses observer backend role" "grep -q \"'observer'\" '$TMP/host.js' && ! grep -q \"'viewer'\" '$TMP/host.js'"
+
+curl -fsS -o "$TMP/style-query.css" "http://127.0.0.1:$PORT/assets/command-center/style-surfaces.css?token=$TOKEN"
+chk "query token style defines event rail" "grep -q 'event-rail' '$TMP/style-query.css'"
+
+curl -fsS -o "$TMP/live-query.js" "http://127.0.0.1:$PORT/assets/command-center/live.js?token=$TOKEN"
+chk "query token live layer opens websocket" "grep -q 'WebSocket' '$TMP/live-query.js'"
+
+# Every module the HTML references must actually be served (no dead script tags).
+BUNDLE_OK=1
+for m in style.css style-surfaces.css icons.js data.js ui.js live.js bench.js board.js host.js ops.js docs.js app.js; do
+  code="$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/assets/command-center/$m" -H "Authorization: Bearer $TOKEN")"
+  [ "$code" = "200" ] || { echo "asset $m returned $code" >&2; BUNDLE_OK=0; }
+done
+chk "every referenced bundle asset is served" "[ '$BUNDLE_OK' = 1 ]"
+
+UNKNOWN_ASSET_RC=0
+curl -fsS "http://127.0.0.1:$PORT/assets/command-center/../../Cargo.toml" -H "Authorization: Bearer $TOKEN" >/dev/null 2>&1 || UNKNOWN_ASSET_RC=$?
+chk "unknown asset paths are rejected" "[ '$UNKNOWN_ASSET_RC' -ne 0 ]"
 
 UNAUTH_RC=0
 curl -fsS "http://127.0.0.1:$PORT/" >/tmp/mesh.ui-unauth.$$ 2>&1 || UNAUTH_RC=$?
@@ -84,14 +108,39 @@ chk "html rejects missing auth" "[ '$UNAUTH_RC' -ne 0 ]"
 rm -f /tmp/mesh.ui-unauth.$$
 
 UNAUTH_JS_RC=0
-curl -fsS "http://127.0.0.1:$PORT/assets/app.js" >/tmp/mesh.ui-js-unauth.$$ 2>&1 || UNAUTH_JS_RC=$?
-chk "app js rejects missing auth" "[ '$UNAUTH_JS_RC' -ne 0 ]"
+curl -fsS "http://127.0.0.1:$PORT/assets/command-center/live.js" >/tmp/mesh.ui-js-unauth.$$ 2>&1 || UNAUTH_JS_RC=$?
+chk "live layer rejects missing auth" "[ '$UNAUTH_JS_RC' -ne 0 ]"
 rm -f /tmp/mesh.ui-js-unauth.$$
 
 UNAUTH_CSS_RC=0
-curl -fsS "http://127.0.0.1:$PORT/assets/style.css" >/tmp/mesh.ui-css-unauth.$$ 2>&1 || UNAUTH_CSS_RC=$?
+curl -fsS "http://127.0.0.1:$PORT/assets/command-center/style.css" >/tmp/mesh.ui-css-unauth.$$ 2>&1 || UNAUTH_CSS_RC=$?
 chk "style css rejects missing auth" "[ '$UNAUTH_CSS_RC' -ne 0 ]"
 rm -f /tmp/mesh.ui-css-unauth.$$
+
+# /api/state exposes named host fields, never the bearer secret.
+STATE_HOST="$(curl -fsS "http://127.0.0.1:$PORT/api/state" -H "Authorization: Bearer $TOKEN")"
+chk "state exposes host started_by" "printf '%s' \"\$STATE_HOST\" | grep -q '\"started_by\":\"forge-lead\"'"
+chk "state host omits local_token" "! printf '%s' \"\$STATE_HOST\" | grep -q 'local_token'"
+
+# output.chunk: accepted only in its dedicated output:<actor> room.
+post_ui_action "output chunk" "output.chunk" "cargo test -p wb-tailer" \
+  '{"type":"output.chunk","room":"output:generator-1","from":"generator-1","payload":{"kind":"tool_call","tool":"Bash","summary":"cargo test -p wb-tailer"}}'
+OUTPUT_WRONG_ROOM_RC=0
+curl -fsS -X POST "http://127.0.0.1:$PORT/api/events" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"type":"output.chunk","room":"repo:meshui","from":"generator-1","payload":{"kind":"message","summary":"nope"}}' >/dev/null 2>&1 || OUTPUT_WRONG_ROOM_RC=$?
+chk "output.chunk rejected outside output rooms" "[ '$OUTPUT_WRONG_ROOM_RC' -ne 0 ]"
+CHAT_IN_OUTPUT_RC=0
+curl -fsS -X POST "http://127.0.0.1:$PORT/api/events" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"type":"message.sent","room":"output:generator-1","from":"ui:owner","payload":{"text":"nope"}}' >/dev/null 2>&1 || CHAT_IN_OUTPUT_RC=$?
+chk "coordination chat rejected in output rooms" "[ '$CHAT_IN_OUTPUT_RC' -ne 0 ]"
+
+# provider/model round-trip through the doing CLI, same as platform/capabilities.
+"$BIN" doing --target "$TMP" --home "$HOME_TMP" "building the tailer" --as generator-1 --platform linux --provider claude --model sonnet >/dev/null
+STATE_PRESENCE="$(curl -fsS "http://127.0.0.1:$PORT/api/state" -H "Authorization: Bearer $TOKEN")"
+chk "doing reports provider" "printf '%s' \"\$STATE_PRESENCE\" | grep -q '\"provider\":\"claude\"'"
+chk "doing reports model" "printf '%s' \"\$STATE_PRESENCE\" | grep -q '\"model\":\"sonnet\"'"
 
 curl -fsS -X POST "http://127.0.0.1:$PORT/api/events" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
@@ -153,5 +202,6 @@ chk "state includes retry job action" "printf '%s' \"\$STATE\" | grep -q 'job-re
 chk "state includes adopt stale lead action" "printf '%s' \"\$STATE\" | grep -q 'lead-adopt-6'"
 chk "state includes close lead action" "printf '%s' \"\$STATE\" | grep -q 'lead-close-6'"
 chk "state includes availability action" "printf '%s' \"\$STATE\" | grep -q 'availability.set'"
+chk "state includes output chunk" "printf '%s' \"\$STATE\" | grep -q 'output:generator-1'"
 
 [ "$fail" = 0 ] && echo "PASS: mesh-command-center" || { echo "mesh-command-center test failed"; exit 1; }

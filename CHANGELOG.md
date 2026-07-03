@@ -6,6 +6,16 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Mesh command center v2** — the dashboard served by `workbench-mesh serve` is now the redesigned five-surface command center handed off from the Claude Design "Workbench" project (`preview/Workbench Command Center.html`): **Bench** (per-device stations with heartbeat pulses, team chat with `@name` autocomplete and host-lead routing, a per-agent session focus view that interleaves live output and direct messages as one terminal scrollback, and a "For you" rail for decisions/stale leads/cap pressure), **Board** (drag-and-drop lifecycle lanes with in-review cap meter and a parallel Decisions rail), **Host** (host node + topology, single-point-of-failure honesty, enrollment with one-time invite tokens, devices, audit), **Ops** (jobs/leads/workers/rooms/task-reassign plus the live event rail), and **Docs** (maturity ladder with recommend-only level previews, dial table, C4 view, how-to guides, commands reference, FAQ). Light/dark themes follow the system with a manual override; warm paper/ink OKLCH tokens per the design system.
+- The design prototype's simulated data layer (`sim.js`) is replaced by a real one (`live.js`): every collection is projected from the real event log over the existing HTTP/WebSocket API, and every dashboard action posts a real event — chat/ask/handoff (`message.*`, `task.handoff`), decision approve/deny (`decision.answer`), task reassign/transition (`task.reassigned`, `task.status`), job stop/retry, lead adopt/close, and real invite create/revoke + device revoke through `/api/invites` and `/api/devices/revoke`.
+- New `output.chunk` event type for per-agent live-output feeds, room-scoped both ways: it is only accepted in dedicated `output:<actor>` rooms, and those rooms reject coordination events — enforced in `protocol.rs`/`store.rs` with tests. (The tailer that emits these from real sessions is separate follow-up work; the dashboard renders the feeds as they arrive.)
+- Presence gains explicit `--provider` (claude/codex) and `--model` (sonnet/gpt-5/…) on `mesh availability`/`mesh doing`, mirroring the platform/capability pattern: flag → `WORKBENCH_MESH_PROVIDER`/`WORKBENCH_MESH_MODEL` env → `"unknown"`. Two real, separately-running sessions are now distinguishable by device, provider, and model on the bench.
+- `workbench-mesh serve --as <actor>` stamps the starting session's identity into `server.json` (`started_by`, `started_at`), and `/api/state` exposes a `host` object with named fields only — never `local_token`. `mesh.sh start --as <actor>` forwards it.
+
+### Changed
+- The old single-page console (`assets/app.js`/`style.css`) is retired; the command-center bundle is embedded per-module and served under `/assets/command-center/*` with the same bearer/query-token auth and no-store headers. `test/mesh-command-center.test.sh` and the node action harness now verify the new bundle: module parse checks, load order, real-API wiring per surface, confirm-gating of destructive actions, output.chunk room scoping, provider/model round-trip, and host stamping.
+
 ## [0.9.0] - 2026-07-03
 
 The evolution-loop release. Adds a persistent, project-configurable multi-persona

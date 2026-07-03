@@ -9,7 +9,7 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::protocol::{validate_event_type, EventEnvelope};
+use crate::protocol::{validate_event_room, validate_event_type, EventEnvelope};
 
 pub struct MeshStore {
     root: PathBuf,
@@ -34,6 +34,7 @@ impl MeshStore {
         payload: Value,
     ) -> Result<EventEnvelope> {
         validate_event_type(event_type)?;
+        validate_event_room(event_type, room)?;
         let path = self.root.join("events.jsonl");
         append_locked_jsonl(&path, |seq| {
             Ok(EventEnvelope {
