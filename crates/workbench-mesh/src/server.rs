@@ -1694,6 +1694,7 @@ mod tests {
             Some(join_home.path().to_path_buf()),
             "repo:mesh-remote".to_string(),
             "hello from laptop".to_string(),
+            None,
         )
         .await
         .unwrap();
@@ -1743,6 +1744,7 @@ mod tests {
             Some(home.path().to_path_buf()),
             "lead:checkout".to_string(),
             "what are you touching?".to_string(),
+            None,
         )
         .await
         .unwrap();

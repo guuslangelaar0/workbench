@@ -12,6 +12,33 @@ use crate::statusline;
 use crate::store::MeshStore;
 
 const DEFAULT_ACTOR: &str = "session:lead";
+const ACTOR_ENV_VAR: &str = "WORKBENCH_MESH_ACTOR";
+
+/// Resolves which actor identity a CLI-invoked mesh command should post as:
+/// an explicit `--as <name>` wins, then the `WORKBENCH_MESH_ACTOR` env var
+/// (so a real dedicated Claude/Codex process can export it once and have
+/// every mesh call self-identify), then the historical hardcoded default.
+/// Without this, every separate process posting to mesh looked identical.
+fn resolve_actor(explicit: Option<&str>) -> String {
+    resolve_actor_from(explicit, std::env::var(ACTOR_ENV_VAR).ok().as_deref())
+}
+
+/// Pure resolution logic, factored out so tests can supply a synthetic env
+/// value instead of mutating the real process environment (which would race
+/// under the default multi-threaded test harness).
+fn resolve_actor_from(explicit: Option<&str>, env_value: Option<&str>) -> String {
+    if let Some(name) = explicit {
+        if !name.trim().is_empty() {
+            return name.to_string();
+        }
+    }
+    if let Some(name) = env_value {
+        if !name.trim().is_empty() {
+            return name.to_string();
+        }
+    }
+    DEFAULT_ACTOR.to_string()
+}
 
 pub async fn status(project_root: PathBuf, home: Option<PathBuf>) -> Result<()> {
     auth::require_local_project_credential(&project_root, home.clone())?;
@@ -205,13 +232,18 @@ pub async fn revoke_device(
     Ok(())
 }
 
-pub async fn create_room(project_root: PathBuf, home: Option<PathBuf>, name: String) -> Result<()> {
+pub async fn create_room(
+    project_root: PathBuf,
+    home: Option<PathBuf>,
+    name: String,
+    from: Option<String>,
+) -> Result<()> {
     let event = append_or_post_event(
         &project_root,
         home,
         "room.created",
         &name,
-        DEFAULT_ACTOR,
+        &resolve_actor(from.as_deref()),
         None,
         json!({ "name": name }),
     )
@@ -225,13 +257,14 @@ pub async fn send_message(
     home: Option<PathBuf>,
     to: String,
     text: String,
+    from: Option<String>,
 ) -> Result<()> {
     let event = append_or_post_event(
         &project_root,
         home,
         "message.sent",
         &room_for_target(&to),
-        DEFAULT_ACTOR,
+        &resolve_actor(from.as_deref()),
         Some(&to),
         json!({ "text": text }),
     )
@@ -245,13 +278,14 @@ pub async fn ask_status(
     home: Option<PathBuf>,
     to: String,
     question: String,
+    from: Option<String>,
 ) -> Result<()> {
     let event = append_or_post_event(
         &project_root,
         home,
         "message.request_status",
         &room_for_target(&to),
-        DEFAULT_ACTOR,
+        &resolve_actor(from.as_deref()),
         Some(&to),
         json!({ "question": question }),
     )
@@ -265,13 +299,14 @@ pub async fn handoff_task(
     home: Option<PathBuf>,
     task_id: String,
     to: String,
+    from: Option<String>,
 ) -> Result<()> {
     let event = append_or_post_event(
         &project_root,
         home,
         "task.handoff",
         "tasks",
-        DEFAULT_ACTOR,
+        &resolve_actor(from.as_deref()),
         Some(&to),
         json!({ "task_id": task_id }),
     )
@@ -285,13 +320,14 @@ pub async fn set_availability(
     home: Option<PathBuf>,
     state: String,
     reason: Option<String>,
+    from: Option<String>,
 ) -> Result<()> {
     let event = append_or_post_event(
         &project_root,
         home,
         "presence.heartbeat",
         "presence",
-        DEFAULT_ACTOR,
+        &resolve_actor(from.as_deref()),
         None,
         json!({ "availability": state, "reason": reason }),
     )
@@ -300,13 +336,18 @@ pub async fn set_availability(
     Ok(())
 }
 
-pub async fn set_doing(project_root: PathBuf, home: Option<PathBuf>, text: String) -> Result<()> {
+pub async fn set_doing(
+    project_root: PathBuf,
+    home: Option<PathBuf>,
+    text: String,
+    from: Option<String>,
+) -> Result<()> {
     let event = append_or_post_event(
         &project_root,
         home,
         "actor.status",
         "presence",
-        DEFAULT_ACTOR,
+        &resolve_actor(from.as_deref()),
         None,
         json!({ "current_step": text }),
     )
@@ -319,13 +360,14 @@ pub async fn watch_actor(
     project_root: PathBuf,
     home: Option<PathBuf>,
     actor: String,
+    from: Option<String>,
 ) -> Result<()> {
     let event = append_or_post_event(
         &project_root,
         home,
         "message.sent",
         &room_for_target(&actor),
-        DEFAULT_ACTOR,
+        &resolve_actor(from.as_deref()),
         Some(&actor),
         json!({ "intent": "watch", "actor": actor }),
     )
@@ -473,7 +515,7 @@ mod tests {
     use crate::auth;
     use crate::store::MeshStore;
 
-    use super::{job_events, send_message};
+    use super::{job_events, resolve_actor_from, send_message, DEFAULT_ACTOR};
 
     #[test]
     fn remote_metadata_url_rejects_non_http_scheme() {
@@ -576,6 +618,7 @@ mod tests {
             Some(home.path().to_path_buf()),
             "session:worker".to_string(),
             "status?".to_string(),
+            None,
         )
         .await
         .unwrap_err();
@@ -599,6 +642,7 @@ mod tests {
             Some(home.path().to_path_buf()),
             "session:worker".to_string(),
             "status?".to_string(),
+            None,
         )
         .await
         .unwrap();
@@ -609,6 +653,51 @@ mod tests {
             .unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].event_type, "message.sent");
+    }
+
+    #[test]
+    fn resolve_actor_prefers_explicit_over_env_over_default() {
+        assert_eq!(
+            resolve_actor_from(Some("actor:generator-1"), Some("actor:from-env")),
+            "actor:generator-1"
+        );
+        assert_eq!(
+            resolve_actor_from(None, Some("actor:from-env")),
+            "actor:from-env"
+        );
+        assert_eq!(resolve_actor_from(None, None), DEFAULT_ACTOR);
+        // blank explicit/env values must not shadow the next fallback
+        assert_eq!(
+            resolve_actor_from(Some("  "), Some("actor:from-env")),
+            "actor:from-env"
+        );
+        assert_eq!(resolve_actor_from(Some(""), Some("")), DEFAULT_ACTOR);
+    }
+
+    #[tokio::test]
+    async fn send_message_with_explicit_actor_identifies_the_real_sender() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "worker.cred", "mesh-client", "worker");
+
+        send_message(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "room:demo".to_string(),
+            "hello from generator-1".to_string(),
+            Some("actor:generator-1".to_string()),
+        )
+        .await
+        .unwrap();
+
+        let events = MeshStore::open(project.path())
+            .unwrap()
+            .list_events_since(0)
+            .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].from, "actor:generator-1");
+        assert_ne!(events[0].from, DEFAULT_ACTOR);
     }
 
     fn write_project_config(project: &std::path::Path, name: &str) {

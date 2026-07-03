@@ -250,6 +250,10 @@ struct RoomCreateArgs {
     home: Option<PathBuf>,
     #[arg(long)]
     name: String,
+    /// Actor identity to post the room-created event as. Falls back to the
+    /// WORKBENCH_MESH_ACTOR env var, then "session:lead".
+    #[arg(long = "as")]
+    as_actor: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -262,6 +266,12 @@ struct MessageArgs {
     to_actor: String,
     #[arg(long)]
     text: String,
+    /// Actor identity to send this message as. Falls back to the
+    /// WORKBENCH_MESH_ACTOR env var, then "session:lead". Set this (or the
+    /// env var) so multiple real Claude/Codex processes are distinguishable
+    /// in a shared room instead of all appearing as the same default actor.
+    #[arg(long = "as")]
+    as_actor: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -274,6 +284,8 @@ struct AskArgs {
     to_actor: String,
     #[arg(long)]
     question: String,
+    #[arg(long = "as")]
+    as_actor: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -286,6 +298,8 @@ struct HandoffArgs {
     task_id: String,
     #[arg(long = "to")]
     to_actor: String,
+    #[arg(long = "as")]
+    as_actor: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -307,6 +321,8 @@ struct AvailabilityArgs {
     state: String,
     #[arg(long)]
     reason: Option<String>,
+    #[arg(long = "as")]
+    as_actor: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -316,6 +332,8 @@ struct DoingArgs {
     #[arg(long)]
     home: Option<PathBuf>,
     text: String,
+    #[arg(long = "as")]
+    as_actor: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -325,6 +343,8 @@ struct WatchArgs {
     #[arg(long)]
     home: Option<PathBuf>,
     actor: String,
+    #[arg(long = "as")]
+    as_actor: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -366,20 +386,52 @@ async fn main() -> Result<()> {
         Command::Bench(args) => client::bench(args.target, args.home, args.messages).await,
         Command::Room(room) => run_room(room).await,
         Command::Message(args) => {
-            client::send_message(args.target, args.home, args.to_actor, args.text).await
+            client::send_message(
+                args.target,
+                args.home,
+                args.to_actor,
+                args.text,
+                args.as_actor,
+            )
+            .await
         }
         Command::Ask(args) => {
-            client::ask_status(args.target, args.home, args.to_actor, args.question).await
+            client::ask_status(
+                args.target,
+                args.home,
+                args.to_actor,
+                args.question,
+                args.as_actor,
+            )
+            .await
         }
         Command::Handoff(args) => {
-            client::handoff_task(args.target, args.home, args.task_id, args.to_actor).await
+            client::handoff_task(
+                args.target,
+                args.home,
+                args.task_id,
+                args.to_actor,
+                args.as_actor,
+            )
+            .await
         }
         Command::Jobs(args) => client::print_jobs(args.target, args.home, args.since),
         Command::Availability(args) => {
-            client::set_availability(args.target, args.home, args.state, args.reason).await
+            client::set_availability(
+                args.target,
+                args.home,
+                args.state,
+                args.reason,
+                args.as_actor,
+            )
+            .await
         }
-        Command::Doing(args) => client::set_doing(args.target, args.home, args.text).await,
-        Command::Watch(args) => client::watch_actor(args.target, args.home, args.actor).await,
+        Command::Doing(args) => {
+            client::set_doing(args.target, args.home, args.text, args.as_actor).await
+        }
+        Command::Watch(args) => {
+            client::watch_actor(args.target, args.home, args.actor, args.as_actor).await
+        }
         Command::Actor(actor) => run_actor(actor).await,
         Command::Snapshot(snapshot) => run_snapshot(snapshot),
     }
@@ -418,7 +470,7 @@ async fn run_device(device_command: DeviceCommand) -> Result<()> {
 async fn run_room(room_command: RoomCommand) -> Result<()> {
     match room_command.command {
         RoomSubcommand::Create(args) => {
-            client::create_room(args.target, args.home, args.name).await
+            client::create_room(args.target, args.home, args.name, args.as_actor).await
         }
     }
 }

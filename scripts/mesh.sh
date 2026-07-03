@@ -27,13 +27,18 @@ operations:
   connect [URL] TOKEN [DEVICE]
   devices
   revoke-device DEVICE
-  room NAME
-  message TARGET TEXT...
-  ask TARGET QUESTION...
-  handoff TASK_ID TARGET
-  availability STATE [--reason TEXT]
-  doing TEXT...
-  watch ACTOR
+  room NAME [--as ACTOR]
+  message TARGET TEXT... [--as ACTOR]
+  ask TARGET QUESTION... [--as ACTOR]
+  handoff TASK_ID TARGET [--as ACTOR]
+  availability STATE [--reason TEXT] [--as ACTOR]
+  doing TEXT... [--as ACTOR]
+  watch ACTOR [--as ACTOR]
+
+--as ACTOR identifies this session/process as ACTOR in the posted event,
+instead of the shared default "session:lead". Set this (or export
+WORKBENCH_MESH_ACTOR) whenever more than one real session is expected to
+post into the same room/mesh, so senders are distinguishable.
 EOF
 }
 
@@ -159,6 +164,28 @@ cmd="${1:-}"
 [ -n "$cmd" ] || { usage; exit 2; }
 shift || true
 
+# Pull a `--as ACTOR` pair out of the remaining args, wherever it appears, so
+# it doesn't get swallowed by commands that greedily join the rest of the
+# args as message/question text (e.g. `message room hello --as actor:x`).
+# Leaves AS_ARGS empty (not passed to the binary) when no --as was given, so
+# the binary's own WORKBENCH_MESH_ACTOR/default fallback still applies.
+AS_ARGS=()
+if [ "$#" -gt 0 ]; then
+  rest=()
+  i=1
+  while [ "$i" -le "$#" ]; do
+    arg="${!i}"
+    if [ "$arg" = "--as" ]; then
+      i=$((i + 1))
+      AS_ARGS=(--as "${!i:-}")
+    else
+      rest+=("$arg")
+    fi
+    i=$((i + 1))
+  done
+  set -- "${rest[@]}"
+fi
+
 case "$cmd" in
   start)
     mode="local"
@@ -247,27 +274,27 @@ case "$cmd" in
     ;;
   room)
     require_arg "room name" "${1:-}"
-    exec "$BIN" room create "${PROJECT_ARGS[@]}" --name "$1"
+    exec "$BIN" room create "${PROJECT_ARGS[@]}" --name "$1" "${AS_ARGS[@]}"
     ;;
   message)
     require_arg "message target" "${1:-}"
     to="$1"
     shift
     require_arg "message text" "${1:-}"
-    exec "$BIN" message "${PROJECT_ARGS[@]}" --to "$to" --text "$*"
+    exec "$BIN" message "${PROJECT_ARGS[@]}" --to "$to" --text "$*" "${AS_ARGS[@]}"
     ;;
   ask)
     require_arg "ask target" "${1:-}"
     to="$1"
     shift
     require_arg "question" "${1:-}"
-    exec "$BIN" ask "${PROJECT_ARGS[@]}" --to "$to" --question "$*"
+    exec "$BIN" ask "${PROJECT_ARGS[@]}" --to "$to" --question "$*" "${AS_ARGS[@]}"
     ;;
   handoff)
     require_arg "task id" "${1:-}"
     task_id="$1"
     require_arg "handoff target" "${2:-}"
-    exec "$BIN" handoff "${PROJECT_ARGS[@]}" --task-id "$task_id" --to "$2"
+    exec "$BIN" handoff "${PROJECT_ARGS[@]}" --task-id "$task_id" --to "$2" "${AS_ARGS[@]}"
     ;;
   jobs)
     if [ -x "$PLUGIN_ROOT/scripts/job.sh" ]; then
@@ -285,15 +312,15 @@ case "$cmd" in
     ;;
   availability)
     require_arg "availability state" "${1:-}"
-    exec "$BIN" availability "${PROJECT_ARGS[@]}" "$@"
+    exec "$BIN" availability "${PROJECT_ARGS[@]}" "$@" "${AS_ARGS[@]}"
     ;;
   doing)
     require_arg "doing text" "${1:-}"
-    exec "$BIN" doing "${PROJECT_ARGS[@]}" "$*"
+    exec "$BIN" doing "${PROJECT_ARGS[@]}" "$*" "${AS_ARGS[@]}"
     ;;
   watch)
     require_arg "actor" "${1:-}"
-    exec "$BIN" watch "${PROJECT_ARGS[@]}" "$1"
+    exec "$BIN" watch "${PROJECT_ARGS[@]}" "$1" "${AS_ARGS[@]}"
     ;;
   open)
     if url="$(metadata_url)"; then
