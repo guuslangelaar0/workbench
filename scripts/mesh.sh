@@ -115,7 +115,10 @@ metadata_port() {
 metadata_lan_ips() {
   local meta="$TARGET/.workbench/mesh/server.json"
   [ -f "$meta" ] || return 1
-  tr ',' '\n' < "$meta" | sed -n 's/.*"\([0-9][0-9.]*\)".*/\1/p'
+  # Only the lan_ips array — a bare number-dot grep over the whole file also
+  # matches the host field and prints duplicate connect-ip lines.
+  sed -n 's/.*"lan_ips"[[:space:]]*:[[:space:]]*\[\([^]]*\)\].*/\1/p' "$meta" \
+    | tr ',' '\n' | sed -n 's/.*"\([0-9][0-9.]*\)".*/\1/p' | sort -u
 }
 
 print_connect_commands() {

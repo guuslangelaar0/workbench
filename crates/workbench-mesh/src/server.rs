@@ -638,8 +638,12 @@ fn state_json(state: &AppState, role: &str) -> Result<Value> {
     let mut actors = BTreeSet::new();
     for event in &events {
         actors.insert(event.from.clone());
+        // `to == room` is a room broadcast (message <room>), not a direct
+        // recipient — counting it would list room names as actors in `who`.
         if let Some(to) = &event.to {
-            actors.insert(to.clone());
+            if *to != event.room {
+                actors.insert(to.clone());
+            }
         }
     }
     Ok(json!({
@@ -1943,6 +1947,66 @@ mod tests {
         }));
 
         server.abort();
+    }
+
+    #[tokio::test]
+    async fn state_actors_exclude_room_broadcast_targets() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Service");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let store = Arc::new(MeshStore::open(project.path()).unwrap());
+        // Room broadcast: to == room — the room name must NOT become an actor.
+        store
+            .append_event(
+                "message.sent",
+                "mesh-acceptance",
+                "forge-lead",
+                Some("mesh-acceptance"),
+                serde_json::json!({ "text": "team broadcast" }),
+            )
+            .unwrap();
+        // Direct address: to != room — the recipient IS an actor.
+        store
+            .append_event(
+                "task.handoff",
+                "tasks",
+                "forge-lead",
+                Some("critic-1"),
+                serde_json::json!({ "task_id": "2001" }),
+            )
+            .unwrap();
+        let (events_tx, _) = broadcast::channel(256);
+        let state = AppState {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            store,
+            events_tx,
+            daemon_token: "daemon-token".to_string(),
+            local_credential_token: auth::local_project_token(
+                project.path(),
+                Some(home.path().to_path_buf()),
+            )
+            .unwrap(),
+            tail_scan_seq: Arc::new(AtomicU64::new(0)),
+            daemon_broadcast_seqs: Arc::new(Mutex::new(BTreeSet::new())),
+            connect_urls: Vec::new(),
+            host_meta: serde_json::json!({}),
+        };
+
+        let json = super::state_json(&state, "owner").unwrap();
+        let actors: Vec<&str> = json["actors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| a.as_str().unwrap())
+            .collect();
+        assert!(actors.contains(&"forge-lead"));
+        assert!(actors.contains(&"critic-1"));
+        assert!(
+            !actors.contains(&"mesh-acceptance"),
+            "room broadcast target leaked into actors: {actors:?}"
+        );
     }
 
     #[test]

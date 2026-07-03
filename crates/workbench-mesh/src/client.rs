@@ -119,6 +119,11 @@ pub async fn who(project_root: PathBuf, home: Option<PathBuf>) -> Result<()> {
     if let Some(actors) = state.get("actors").and_then(Value::as_array) {
         for actor in actors {
             if let Some(actor) = actor.as_str() {
+                // System identities (invite/device plumbing) are not the
+                // team — `devices` lists enrolled machines explicitly.
+                if actor.starts_with("auth:") || actor.starts_with("device:") {
+                    continue;
+                }
                 println!("{actor}");
             }
         }
