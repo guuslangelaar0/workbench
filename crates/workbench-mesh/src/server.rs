@@ -169,6 +169,8 @@ struct EventRequest {
     from: String,
     to: Option<String>,
     payload: Value,
+    #[serde(default)]
+    ack_of: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -530,13 +532,26 @@ async fn websocket_session(socket: WebSocket, state: AppState, last_seq: u64, to
 }
 
 fn append_event(state: &AppState, request: EventRequest) -> Result<EventEnvelope> {
+    let referenced = match request.ack_of {
+        Some(seq) => state.store.get_event(seq)?,
+        None => None,
+    };
+    crate::protocol::validate_ack(
+        request.ack_of,
+        &request.event_type,
+        &request.from,
+        request.to.as_deref(),
+        &request.room,
+        referenced.as_ref(),
+    )?;
     let mut daemon_broadcast_seqs = state.daemon_broadcast_seqs.lock().ok();
-    let event = state.store.append_event(
+    let event = state.store.append_event_with_ack(
         &request.event_type,
         &request.room,
         &request.from,
         request.to.as_deref(),
         request.payload,
+        request.ack_of,
     )?;
     let should_broadcast = daemon_broadcast_seqs
         .as_mut()
@@ -1190,6 +1205,82 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(after_revoke.status(), reqwest::StatusCode::UNAUTHORIZED);
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn ack_of_round_trips_and_rejects_unaddressed_actor() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Service");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let owner_token =
+            auth::local_project_token(project.path(), Some(home.path().to_path_buf())).unwrap();
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+            started_by: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+        let base = format!("http://{}:{}", metadata.host, metadata.port);
+        let client = Client::new();
+
+        let sent: Value = client
+            .post(format!("{base}/api/events"))
+            .bearer_auth(&owner_token)
+            .json(&json!({
+                "type": "message.sent",
+                "room": "repo:mesh-service",
+                "from": "session:lead",
+                "to": "session:worker",
+                "payload": { "text": "status?" }
+            }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let sent_seq = sent["seq"].as_u64().unwrap();
+
+        let ack = client
+            .post(format!("{base}/api/events"))
+            .bearer_auth(&owner_token)
+            .json(&json!({
+                "type": "message.delivered",
+                "room": "repo:mesh-service",
+                "from": "session:worker",
+                "ack_of": sent_seq,
+                "payload": {}
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(ack.status(), reqwest::StatusCode::OK);
+        let ack_body: Value = ack.json().await.unwrap();
+        assert_eq!(ack_body["ack_of"], sent_seq);
+
+        let rejected = client
+            .post(format!("{base}/api/events"))
+            .bearer_auth(&owner_token)
+            .json(&json!({
+                "type": "message.delivered",
+                "room": "repo:mesh-service",
+                "from": "session:bystander",
+                "ack_of": sent_seq,
+                "payload": {}
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(rejected.status(), reqwest::StatusCode::BAD_REQUEST);
 
         server.abort();
     }

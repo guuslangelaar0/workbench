@@ -33,6 +33,18 @@ impl MeshStore {
         to: Option<&str>,
         payload: Value,
     ) -> Result<EventEnvelope> {
+        self.append_event_with_ack(event_type, room, from, to, payload, None)
+    }
+
+    pub fn append_event_with_ack(
+        &self,
+        event_type: &str,
+        room: &str,
+        from: &str,
+        to: Option<&str>,
+        payload: Value,
+        ack_of: Option<u64>,
+    ) -> Result<EventEnvelope> {
         validate_event_type(event_type)?;
         validate_event_room(event_type, room)?;
         let path = self.root.join("events.jsonl");
@@ -49,7 +61,7 @@ impl MeshStore {
                     .format(&Rfc3339)
                     .context("format event timestamp")?,
                 payload,
-                ack_of: None,
+                ack_of,
             })
         })
     }
