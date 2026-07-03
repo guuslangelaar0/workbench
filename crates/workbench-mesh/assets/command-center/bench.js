@@ -10,6 +10,27 @@ window.WB = window.WB || {};
 
   const TOOL_ICON = { Bash: 'terminal', Edit: 'pencil', Read: 'file-code', Git: 'git', Test: 'check-circle', Screenshot: 'camera' };
 
+  // Client-side reveal animation only — nothing here changes what data
+  // crosses the wire (the tailer still only ever sends finished boundary
+  // chunks, never token deltas). This just avoids dumping a whole chunk
+  // into the DOM at once, so arrival feels like a continuous stream rather
+  // than a bucket dropping in. ~28 chars/frame at 60fps ≈ natural reading pace.
+  function revealText(el, text, opts) {
+    const o = opts || {};
+    const speed = o.charsPerFrame || 3;
+    if (o.instant || !text) { el.textContent = text || ''; return; }
+    let i = 0;
+    el.textContent = '';
+    el.classList.add('reveal-cursor');
+    function step() {
+      i = Math.min(text.length, i + speed);
+      el.textContent = text.slice(0, i);
+      if (i < text.length) { requestAnimationFrame(step); }
+      else { el.classList.remove('reveal-cursor'); }
+    }
+    requestAnimationFrame(step);
+  }
+
   function agent(id) { return WB.AGENTS.find((a) => a.id === id); }
 
   /* ── stations ── */
@@ -647,7 +668,10 @@ window.WB = window.WB || {};
     const feed = document.getElementById('focus-feed');
     if (feed && feed.getAttribute('data-agent') === id) {
       const pinned = feed.scrollTop + feed.clientHeight >= feed.scrollHeight - 48;
-      feed.appendChild(feedLine({ ts: Date.now(), line: line }));
+      const node = feedLine({ ts: Date.now(), line: line });
+      feed.appendChild(node);
+      const textEl = node.querySelector('.fl-text');
+      if (textEl) { const full = textEl.textContent; revealText(textEl, full); }
       while (feed.children.length > 80) feed.removeChild(feed.firstChild);
       if (pinned) feed.scrollTop = feed.scrollHeight;
     }
@@ -663,7 +687,16 @@ window.WB = window.WB || {};
     const scroll = document.getElementById('chat-scroll');
     if (scroll && chatMatches(m)) {
       const pinned = scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 60;
-      scroll.appendChild(msgNode(m));
+      const node = msgNode(m);
+      const isOwn = m.who === 'you (operator)';
+      scroll.appendChild(node);
+      if (!isOwn) {
+        const bubble = node.querySelector('.bubble');
+        if (bubble) {
+          const full = bubble.textContent;
+          revealText(bubble, full);
+        }
+      }
       if (pinned) scroll.scrollTop = scroll.scrollHeight;
     }
     const feed = document.getElementById('focus-feed');

@@ -398,3 +398,15 @@ body[data-density="compact"] .session-meta { width: 280px; }
   font-size: 10px;
   color: var(--ink-3, #8a8f98);
 }
+/* ── reveal animation (typewriter) ── */
+.reveal-cursor::after {
+  content: '▍';
+  display: inline-block;
+  margin-left: 1px;
+  animation: reveal-blink 0.9s steps(1) infinite;
+  color: var(--amber-deep, #b8860b);
+}
+@keyframes reveal-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
