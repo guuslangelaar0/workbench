@@ -67,6 +67,7 @@ bash "$ROOT/scripts/evolve.sh" log --target . \
 #    a hardcoded id).
 if [ -n "$retro_id" ]; then
   bash "$ROOT/scripts/evolve.sh" log --target . \
+    --audit-of "$retro_id" \
     --persona critic \
     --idea "retrospective audit of task #$retro_id" \
     --disposition "verified but checkbox-done — no search, no date-range filter, no export; no expansion queued this cycle, flagged for next retro slot"
