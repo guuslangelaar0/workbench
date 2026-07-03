@@ -232,7 +232,7 @@ window.WB = window.WB || {};
         if (idx >= 0) { pendingSelf.splice(idx, 1); return; } // optimistic copy already shown
       }
       const kind = type === 'message.request_status' ? 'ask' : type === 'task.handoff' ? 'handoff' : 'msg';
-      const m = { room: ev.room, who: displayWho(ev.from), kind: kind, text: text, ts: when, to: ev.to || null };
+      const m = { room: ev.room, who: displayWho(ev.from), kind: kind, text: text, ts: when, to: ev.to || null, seq: ev.seq };
       WB.CHAT.push(m);
       if (!quiet) sim.emit('chat', m);
     }
@@ -397,6 +397,16 @@ window.WB = window.WB || {};
       const type = m.kind === 'ask' ? 'message.request_status' : m.kind === 'handoff' ? 'task.handoff' : 'message.sent';
       const payload = m.kind === 'handoff' ? { task_id: m.text } : { text: m.text };
       return post(type, m.room === 'team' ? 'repo:workbench' : m.room, payload, m.to || undefined);
+    },
+    loadOlder(room, beforeSeq) {
+      const params = new URLSearchParams({ room: room, before: String(beforeSeq), limit: '50' });
+      return fetch('/api/events?' + params.toString(), { headers: headers(false) })
+        .then(requireOk)
+        .then((data) => {
+          const evs = Array.isArray(data.events) ? data.events : [];
+          for (const ev of evs) ingest(ev, true); // quiet — no chat/heartbeat emits, just backfills WB.CHAT
+          return evs;
+        });
     },
     resolveDecision(id, approved) {
       return post('decision.answer', 'decisions', { decision: id, answer: approved ? 'approved' : 'denied', approved: approved });

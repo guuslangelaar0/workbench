@@ -67,7 +67,8 @@ window.WB = window.WB || {};
   function chatMatches(m) { return roomFilter === 'all' || m.room === roomFilter || m.room === 'team'; }
   function renderChatList(scroll) {
     scroll.replaceChildren();
-    for (const m of WB.CHAT) { if (chatMatches(m)) scroll.appendChild(msgNode(m)); }
+    const matched = WB.CHAT.filter(chatMatches);
+    for (const m of matched) scroll.appendChild(msgNode(m));
     scroll.scrollTop = scroll.scrollHeight;
   }
   // Routing: the host lead fronts everything by default; @name targets a
@@ -224,8 +225,27 @@ window.WB = window.WB || {};
       ]),
       hint,
     ]);
+    let oldestLoadedSeq = null;
+    let loadingOlder = false;
+    scroll.addEventListener('scroll', () => {
+      if (loadingOlder || scroll.scrollTop > 150) return;
+      if (oldestLoadedSeq == null) return;
+      loadingOlder = true;
+      const before = oldestLoadedSeq;
+      const prevHeight = scroll.scrollHeight;
+      const room = roomFilter === 'all' ? 'team' : roomFilter;
+      WB.api.loadOlder(room, before).then((evs) => {
+        loadingOlder = false;
+        if (!evs.length) return;
+        oldestLoadedSeq = Math.min(...evs.map((e) => e.seq));
+        renderChatList(scroll);
+        scroll.scrollTop = scroll.scrollHeight - prevHeight; // preserve viewport position
+      }).catch(() => { loadingOlder = false; });
+    });
     updateHint();
     renderChatList(scroll);
+    const initialMatched = WB.CHAT.filter(chatMatches);
+    oldestLoadedSeq = initialMatched.length ? Math.min(...initialMatched.map((m) => m.seq)) : null;
     renderTypingLine();
     return col;
   }
