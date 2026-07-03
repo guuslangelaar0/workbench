@@ -54,12 +54,46 @@ fn extract_text(event: &Value) -> String {
         .to_string()
 }
 
+/// First retry is fast (covers the common case — a blip); subsequent
+/// retries back off exponentially, capped, with jitter so many actors
+/// reconnecting after a server restart don't all hammer it in lockstep.
+fn backoff_delay(attempt: u32) -> std::time::Duration {
+    if attempt == 0 {
+        return std::time::Duration::from_millis(250);
+    }
+    let base_ms = 250u64.saturating_mul(1u64 << attempt.min(6));
+    let capped_ms = base_ms.min(5_000);
+    // Jitter is at most 10% of the cap so the total never exceeds 5 500 ms.
+    let jitter_ms = (capped_ms / 10).max(1);
+    let jitter = (attempt as u64 * 97) % jitter_ms; // deterministic pseudo-jitter, no rand dependency needed
+    std::time::Duration::from_millis(capped_ms + jitter)
+}
+
+/// Reconnect loop around `run_once`: every dropped connection is retried
+/// with backoff rather than exiting, so a `listen` process started once at
+/// session start survives server restarts for the rest of the dev session.
+pub async fn run(project_root: PathBuf, home: Option<PathBuf>, actor: String) -> Result<()> {
+    let mut attempt = 0u32;
+    loop {
+        match run_once(&project_root, home.clone(), &actor).await {
+            Ok(()) => {
+                eprintln!("listen: connection closed cleanly, reconnecting");
+                attempt = 0;
+            }
+            Err(err) => {
+                eprintln!("listen: connection error: {err:#}, reconnecting");
+                attempt = attempt.saturating_add(1);
+            }
+        }
+        tokio::time::sleep(backoff_delay(attempt)).await;
+    }
+}
+
 /// Connects once, subscribes to the actor's own channel plus its
 /// coordination rooms, and for every inbound event: acks it immediately
 /// (`message.delivered`) and writes it to the actor's FIFO so the
 /// harness-facing blocking reader wakes instantly instead of polling.
-/// Returns when the connection drops — the caller (Task 11) wraps this in
-/// a reconnect loop.
+/// Returns when the connection drops — `run` wraps this in a reconnect loop.
 pub async fn run_once(project_root: &Path, home: Option<PathBuf>, actor: &str) -> Result<()> {
     let metadata = read_server_metadata(project_root).context("read server metadata")?;
     let token = crate::auth::local_mutating_project_token(project_root, home)
@@ -86,62 +120,83 @@ pub async fn run_once(project_root: &Path, home: Option<PathBuf>, actor: &str) -
     #[cfg(not(unix))]
     eprintln!("listen: FIFO wake unsupported on this platform, falling back to no wake pipe");
 
-    while let Some(message) = read.next().await {
-        let message = message.context("read ws frame")?;
-        let Message::Text(text) = message else {
-            continue;
-        };
-        let Ok(envelope) = serde_json::from_str::<Value>(&text) else {
-            continue;
-        };
-        let events: Vec<Value> =
-            if envelope.get("type") == Some(&Value::String("batch".to_string())) {
-                envelope
-                    .get("events")
-                    .and_then(Value::as_array)
-                    .cloned()
-                    .unwrap_or_default()
-            } else {
-                vec![envelope]
-            };
-        for event in events {
-            if !is_inbound_for(actor, &event) {
-                continue;
-            }
-            let Some(seq) = event.get("seq").and_then(Value::as_u64) else {
-                continue;
-            };
-            let room = event
-                .get("room")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string();
-            let from = event
-                .get("from")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string();
-            let text = extract_text(&event);
+    let mut ping_interval = tokio::time::interval(std::time::Duration::from_secs(5));
+    let mut last_ping_sent: Option<tokio::time::Instant> = None;
 
-            let ack = json!({
-                "v": 1,
-                "type": "message.delivered",
-                "room": room,
-                "from": actor,
-                "ack_of": seq,
-                "payload": {},
-            });
-            if let Err(err) = write.send(Message::Text(ack.to_string())).await {
-                eprintln!("listen: failed to send ack for seq {seq}: {err}");
+    loop {
+        tokio::select! {
+            _ = ping_interval.tick() => {
+                last_ping_sent = Some(tokio::time::Instant::now());
+                if write.send(Message::Ping(vec![])).await.is_err() {
+                    break;
+                }
             }
+            message = read.next() => {
+                let Some(message) = message else { break };
+                let message = message.context("read ws frame")?;
+                match message {
+                    Message::Pong(_) => {
+                        if let Some(sent) = last_ping_sent.take() {
+                            eprintln!("listen: rtt={}ms", sent.elapsed().as_millis());
+                        }
+                    }
+                    Message::Text(text) => {
+                        let Ok(envelope) = serde_json::from_str::<Value>(&text) else {
+                            continue;
+                        };
+                        let events: Vec<Value> =
+                            if envelope.get("type") == Some(&Value::String("batch".to_string())) {
+                                envelope
+                                    .get("events")
+                                    .and_then(Value::as_array)
+                                    .cloned()
+                                    .unwrap_or_default()
+                            } else {
+                                vec![envelope]
+                            };
+                        for event in events {
+                            if !is_inbound_for(actor, &event) {
+                                continue;
+                            }
+                            let Some(seq) = event.get("seq").and_then(Value::as_u64) else {
+                                continue;
+                            };
+                            let room = event
+                                .get("room")
+                                .and_then(Value::as_str)
+                                .unwrap_or("")
+                                .to_string();
+                            let from = event
+                                .get("from")
+                                .and_then(Value::as_str)
+                                .unwrap_or("")
+                                .to_string();
+                            let text = extract_text(&event);
 
-            let hit = InboxHit { seq, room, from, text };
-            #[cfg(unix)]
-            if let Err(err) = write_fifo(&fifo_path, &hit) {
-                eprintln!("listen: failed to write inbox pipe: {err:#}");
+                            let ack = json!({
+                                "v": 1,
+                                "type": "message.delivered",
+                                "room": room,
+                                "from": actor,
+                                "ack_of": seq,
+                                "payload": {},
+                            });
+                            if let Err(err) = write.send(Message::Text(ack.to_string())).await {
+                                eprintln!("listen: failed to send ack for seq {seq}: {err}");
+                            }
+
+                            let hit = InboxHit { seq, room, from, text };
+                            #[cfg(unix)]
+                            if let Err(err) = write_fifo(&fifo_path, &hit) {
+                                eprintln!("listen: failed to write inbox pipe: {err:#}");
+                            }
+                            #[cfg(not(unix))]
+                            let _ = hit;
+                        }
+                    }
+                    _ => {}
+                }
             }
-            #[cfg(not(unix))]
-            let _ = hit;
         }
     }
     Ok(())
@@ -266,6 +321,15 @@ mod tests {
             "wb-1"
         );
         assert_eq!(extract_text(&json!({ "payload": {} })), "?");
+    }
+
+    #[test]
+    fn backoff_delay_starts_fast_and_caps_at_five_seconds() {
+        assert_eq!(super::backoff_delay(0), std::time::Duration::from_millis(250));
+        assert!(super::backoff_delay(1) > std::time::Duration::from_millis(250));
+        assert!(super::backoff_delay(10) <= std::time::Duration::from_secs(5) + std::time::Duration::from_millis(500));
+        // every call must stay within a sane floor even with jitter
+        assert!(super::backoff_delay(10) >= std::time::Duration::from_secs(2));
     }
 
     #[test]

@@ -581,7 +581,7 @@ async fn main() -> Result<()> {
                 std::env::var("WORKBENCH_MESH_ACTOR")
                     .unwrap_or_else(|_| "session:lead".to_string())
             });
-            workbench_mesh::listen::run_once(&args.target, args.home, &actor).await
+            workbench_mesh::listen::run(args.target, args.home, actor).await
         }
     }
 }
