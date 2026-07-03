@@ -21,7 +21,7 @@ Dispatch a task to an engineer. Follow the `orchestration` skill — **you are t
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-move.sh" <id> in-development --target "${CLAUDE_PROJECT_DIR}"`
    and append an owner line to its `## Notes` (e.g. `<UTC time> — claimed by lead:<topic> (session <sid>)`).
    Set this session's durable lead purpose to the dispatched task:
-   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lead.sh" set --target "${CLAUDE_PROJECT_DIR}" --session-id "<session-id>" --mode task --active-task "<id>" --track "<task Track field>" --purpose "<task title>"`
+   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lead.sh" set --target "${CLAUDE_PROJECT_DIR}" --as "<session-id>" --mode task --active-task "<id>" --track "<task Track field>" --purpose "<task title>"`
 4. Resolve the engineer's model via the `models` skill (read `way_of_working.models`).
 5. Choose the lane isolation path:
    - **Default / foreground:** spawn the engineer with the Task tool, `subagent_type: engineer`, passing the model and a prompt that includes: the task file path, the target repo/stack (from the lane hint or `config.project.repos`), and the instruction to implement, run the declared verification, commit (scoped pathspec, no Co-Authored-By), note progress, and report back. The `engineer` agent declares `isolation: worktree`, so current Claude Code releases put the subagent in a native temporary worktree.

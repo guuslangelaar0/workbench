@@ -7,6 +7,12 @@ description: Use when more than one Claude or Codex session is open on the same 
 
 Every Claude Code tab (and every Codex session) is an independent process that shares only the filesystem — there is no live supervisor that sees them all. Sessions coordinate through files under `.claude/locks/` at the project root: **runtime state, gitignored, never history.** The tooling lives in `scripts/coord/`. Principle: **look, don't ask** — read presence and claims from disk before acting.
 
+## Actor identity — the `--as` flag
+
+`--as <actor>` is the canonical way to identify which session/actor a command is acting as, across `mesh.sh`, `job.sh`, `lane.sh`, `lead.sh`, `park.sh`, and `watchdog.sh`. Each of these scripts answers the same underlying question ("which actor/session is doing this") — `--as` is the one flag name to reach for across all of them, so a dispatch flow that chains several of these scripts back to back (see `commands/dispatch.md`, `commands/codex-engineer.md`) doesn't force you to re-derive that `--owner`, `--session-id`, and `--as` are the same concept every time.
+
+`--owner` (`job.sh`, `lane.sh`) and `--session-id` (`lead.sh`, `park.sh`, `watchdog.sh`) remain accepted as backward-compatible aliases — existing scripts, muscle memory, and in-flight docs that use them keep working unchanged. If both a flag and `--as` are passed to the same invocation, `--as` wins. New documentation and examples should use `--as`.
+
 ## Presence (C) — who else is live
 - `scripts/coord/wb-coord ping <label>` registers/refreshes this session's heartbeat (the PostToolUse hook auto-pings, throttled, so it costs ~nothing). Use a `<label>` like `lead:storage`.
 - `scripts/coord/wb-coord who` lists live sessions (within the TTL); `wb-coord status` adds held locks, active claims, and the overlap check.

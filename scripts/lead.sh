@@ -23,12 +23,13 @@ usage() {
 }
 
 CMD="${1:-}"; [ "$#" -gt 0 ] && shift || true
-TARGET="$PWD" SESSION_ID="${CLAUDE_SESSION_ID:-}" MODE="unassigned" PURPOSE="" ACTIVE_TASK="" TRACK="" STATUS="open"
+TARGET="$PWD" SESSION_ID="${CLAUDE_SESSION_ID:-}" SESSION_ID_AS="" MODE="unassigned" PURPOSE="" ACTIVE_TASK="" TRACK="" STATUS="open"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --target)      TARGET="${2:-}"; shift 2 ;;
     --session-id)  SESSION_ID="${2:-}"; shift 2 ;;
+    --as)          SESSION_ID_AS="${2:-}"; shift 2 ;;   # canonical actor-identity flag; alias for --session-id (wins if both given)
     --mode)        MODE="${2:-}"; shift 2 ;;
     --purpose)     PURPOSE="${2:-}"; shift 2 ;;
     --active-task) ACTIVE_TASK="${2:-}"; shift 2 ;;
@@ -39,6 +40,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+[ -n "$SESSION_ID_AS" ] && SESSION_ID="$SESSION_ID_AS"
 TARGET="${TARGET%/}"; [ -n "$TARGET" ] || TARGET="/"
 [ -n "$SESSION_ID" ] || SESSION_ID="default"
 
