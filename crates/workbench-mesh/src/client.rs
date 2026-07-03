@@ -70,10 +70,7 @@ fn default_capabilities(platform: &str) -> Vec<String> {
             "android-emulator".to_string(),
         ],
         "windows" => vec!["windows-native".to_string()],
-        "linux" => vec![
-            "linux-native".to_string(),
-            "android-emulator".to_string(),
-        ],
+        "linux" => vec!["linux-native".to_string(), "android-emulator".to_string()],
         _ => Vec::new(),
     }
 }
