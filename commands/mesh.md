@@ -1,5 +1,6 @@
 ---
 description: Coordinate Claude sessions/leads/workers over the local/LAN Workbench Mesh command center
+argument-hint: "[start|stop|status|who|open|invite|connect|devices|revoke-device|room|message|ask|handoff|availability|doing|watch|tail|inbox]"
 allowed-tools: ["Bash", "Read"]
 ---
 
