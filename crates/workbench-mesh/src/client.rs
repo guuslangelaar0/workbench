@@ -553,8 +553,15 @@ pub async fn set_activity(
     let event = match ack_of {
         Some(seq) => {
             let referenced = referenced_event(&project_root, home.clone(), seq).await?;
-            append_or_post_ack(&project_root, home, "message.read", &referenced.room, &actor, seq)
-                .await?
+            append_or_post_ack(
+                &project_root,
+                home,
+                "message.read",
+                &referenced.room,
+                &actor,
+                seq,
+            )
+            .await?
         }
         None => {
             append_or_post_event(
@@ -584,8 +591,7 @@ pub async fn send_ack(
     from: Option<&str>,
 ) -> Result<()> {
     let actor = resolve_actor(from);
-    let event =
-        append_or_post_ack(&project_root, home, event_type, room, &actor, ack_of).await?;
+    let event = append_or_post_ack(&project_root, home, event_type, room, &actor, ack_of).await?;
     println!("ack: {event_type} seq={}", event.seq);
     Ok(())
 }
@@ -1145,7 +1151,13 @@ mod tests {
 
         let sent = MeshStore::open(project.path())
             .unwrap()
-            .append_event("message.sent", "repo:workbench", "session:lead", Some("session:worker"), json!({ "text": "hi" }))
+            .append_event(
+                "message.sent",
+                "repo:workbench",
+                "session:lead",
+                Some("session:worker"),
+                json!({ "text": "hi" }),
+            )
             .unwrap();
 
         set_activity(
@@ -1158,8 +1170,14 @@ mod tests {
         .await
         .unwrap();
 
-        let events = MeshStore::open(project.path()).unwrap().list_events_since(0).unwrap();
-        let ack = events.iter().find(|e| e.event_type == "message.read").unwrap();
+        let events = MeshStore::open(project.path())
+            .unwrap()
+            .list_events_since(0)
+            .unwrap();
+        let ack = events
+            .iter()
+            .find(|e| e.event_type == "message.read")
+            .unwrap();
         assert_eq!(ack.ack_of, Some(sent.seq));
         assert_eq!(ack.room, "repo:workbench");
         assert_eq!(ack.from, "session:worker");
@@ -1182,7 +1200,10 @@ mod tests {
         .await
         .unwrap();
 
-        let events = MeshStore::open(project.path()).unwrap().list_events_since(0).unwrap();
+        let events = MeshStore::open(project.path())
+            .unwrap()
+            .list_events_since(0)
+            .unwrap();
         assert_eq!(events[0].event_type, "presence.heartbeat");
         assert_eq!(events[0].payload["activity"], "typing");
     }
@@ -1196,7 +1217,13 @@ mod tests {
 
         let sent = MeshStore::open(project.path())
             .unwrap()
-            .append_event("message.sent", "repo:workbench", "session:lead", Some("session:worker"), json!({ "text": "hi" }))
+            .append_event(
+                "message.sent",
+                "repo:workbench",
+                "session:lead",
+                Some("session:worker"),
+                json!({ "text": "hi" }),
+            )
             .unwrap();
 
         super::send_ack(
@@ -1210,8 +1237,14 @@ mod tests {
         .await
         .unwrap();
 
-        let events = MeshStore::open(project.path()).unwrap().list_events_since(0).unwrap();
-        let ack = events.iter().find(|e| e.event_type == "message.delivered").unwrap();
+        let events = MeshStore::open(project.path())
+            .unwrap()
+            .list_events_since(0)
+            .unwrap();
+        let ack = events
+            .iter()
+            .find(|e| e.event_type == "message.delivered")
+            .unwrap();
         assert_eq!(ack.ack_of, Some(sent.seq));
     }
 }

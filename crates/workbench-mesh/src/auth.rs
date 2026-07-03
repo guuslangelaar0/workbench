@@ -184,9 +184,8 @@ pub fn issue_invite_credential(
     let now = OffsetDateTime::now_utc();
     let project_id = project_id(project_root)?;
 
-    let (role, revoked_at) = redeem_invite(&invite_path, &token_hash, now).map_err(|err| {
-        let _ = append_invite_rejection_audit(&store, &err, &sanitized_device, &token_hash);
-        err
+    let (role, revoked_at) = redeem_invite(&invite_path, &token_hash, now).inspect_err(|err| {
+        let _ = append_invite_rejection_audit(&store, err, &sanitized_device, &token_hash);
     })?;
 
     let credential = ProjectCredential {
@@ -756,6 +755,7 @@ fn mutate_devices<T>(
         .read(true)
         .write(true)
         .create(true)
+        .truncate(false) // we seek+set_len(0) ourselves after reading
         .open(path)
         .with_context(|| format!("open {}", path.display()))?;
     file.lock_exclusive()
@@ -810,6 +810,7 @@ fn mutate_invites<T>(
         .read(true)
         .write(true)
         .create(true)
+        .truncate(false) // we seek+set_len(0) ourselves after reading
         .open(path)
         .with_context(|| format!("open {}", path.display()))?;
     file.lock_exclusive()
@@ -1318,7 +1319,7 @@ mod tests {
         )
         .is_err());
         let devices = list_devices(project.path()).unwrap();
-        assert_eq!(devices[0].revoked_at.is_some(), true);
+        assert!(devices[0].revoked_at.is_some());
         assert!(
             std::fs::read_to_string(project.path().join(".workbench/mesh/audit.jsonl"))
                 .unwrap()

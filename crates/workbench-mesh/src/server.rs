@@ -422,9 +422,11 @@ async fn api_events(
 ) -> Result<Json<Value>, ApiError> {
     require_bearer(&state, &headers)?;
     let events = if query.room.is_some() || query.before.is_some() || query.limit.is_some() {
-        state
-            .store
-            .list_events_page(query.room.as_deref(), query.before, query.limit.unwrap_or(50))?
+        state.store.list_events_page(
+            query.room.as_deref(),
+            query.before,
+            query.limit.unwrap_or(50),
+        )?
     } else {
         state.store.list_events_since(query.since.unwrap_or(0))?
     };
@@ -606,12 +608,10 @@ async fn websocket_session(socket: WebSocket, state: AppState, last_seq: u64, to
                 // in quick succession are coalesced into a single batch frame.
                 let mut batch = vec![first_event];
                 let deadline = tokio::time::Instant::now() + Duration::from_millis(16);
-                loop {
-                    match tokio::time::timeout_at(deadline, rx.recv()).await {
-                        Ok(Some(event)) => batch.push(event),
-                        // Timeout elapsed or channel closed — flush whatever we have.
-                        _ => break,
-                    }
+                // Drain the channel for up to ~16ms so events that arrive in quick
+                // succession are coalesced into a single batch frame.
+                while let Ok(Some(event)) = tokio::time::timeout_at(deadline, rx.recv()).await {
+                    batch.push(event);
                 }
                 let Ok(text) = serde_json::to_string(&json!({ "v": 1, "type": "batch", "events": batch })) else {
                     continue;
@@ -732,10 +732,7 @@ fn remember_daemon_broadcast_seq(
 }
 
 fn prune_daemon_broadcast_seqs(seqs: &mut BTreeSet<u64>, scanned_seq: u64) {
-    loop {
-        let Some(seq) = seqs.iter().next().copied() else {
-            break;
-        };
+    while let Some(seq) = seqs.iter().next().copied() {
         if seq > scanned_seq {
             break;
         }
@@ -1097,8 +1094,7 @@ mod tests {
         // subscribe to the room so that live broadcast traffic is delivered
         second
             .send(ClientMessage::Text(
-                json!({ "v": 1, "type": "subscribe", "rooms": ["repo:mesh-service"] })
-                    .to_string(),
+                json!({ "v": 1, "type": "subscribe", "rooms": ["repo:mesh-service"] }).to_string(),
             ))
             .await
             .unwrap();
@@ -1701,8 +1697,7 @@ mod tests {
         // (needed to trigger the token-revoke check on the receive path).
         listening_socket
             .send(ClientMessage::Text(
-                json!({ "v": 1, "type": "subscribe", "rooms": ["repo:mesh-remote"] })
-                    .to_string(),
+                json!({ "v": 1, "type": "subscribe", "rooms": ["repo:mesh-remote"] }).to_string(),
             ))
             .await
             .unwrap();
@@ -2239,8 +2234,7 @@ mod tests {
         // subscribe to the room so that dispatched events are delivered
         socket
             .send(ClientMessage::Text(
-                json!({ "v": 1, "type": "subscribe", "rooms": ["repo:mesh-service"] })
-                    .to_string(),
+                json!({ "v": 1, "type": "subscribe", "rooms": ["repo:mesh-service"] }).to_string(),
             ))
             .await
             .unwrap();
@@ -2566,7 +2560,10 @@ mod tests {
             ClientMessage::Text(text) => serde_json::from_str(&text).unwrap(),
             other => panic!("expected websocket text frame, got {other:?}"),
         };
-        assert_eq!(batch["type"], "batch", "expected a batch frame, got: {batch}");
+        assert_eq!(
+            batch["type"], "batch",
+            "expected a batch frame, got: {batch}"
+        );
         let events = batch["events"].as_array().unwrap();
         assert!(
             events.len() >= 2,
@@ -2615,7 +2612,9 @@ mod tests {
                 .unwrap()
                 .unwrap()
                 .unwrap();
-            let ClientMessage::Text(text) = message else { continue };
+            let ClientMessage::Text(text) = message else {
+                continue;
+            };
             let value: Value = serde_json::from_str(&text).unwrap();
             // Live-pushed events now arrive as batch frames. Transparently
             // unwrap to the first event so all single-event assertions keep
@@ -2700,7 +2699,9 @@ mod tests {
         .await
         .unwrap();
         socket
-            .send(ClientMessage::Text(json!({ "v": 1, "type": "ping", "t": 12345 }).to_string()))
+            .send(ClientMessage::Text(
+                json!({ "v": 1, "type": "ping", "t": 12345 }).to_string(),
+            ))
             .await
             .unwrap();
         let pong = read_ws_json(&mut socket).await;

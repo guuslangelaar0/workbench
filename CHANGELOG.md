@@ -6,6 +6,19 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+The mesh real-time protocol release. Chat on the command center becomes a proper live-messaging surface: delivery and read receipts flow back to senders, the WebSocket server pushes only to rooms the client subscribed to instead of broadcasting every event globally, back-to-back events are coalesced into 16 ms micro-batch frames, and chat history paginates from the backend with a DOM mount cap so the feed stays fast at any depth. The `workbench-mesh listen` command replaces the polling loop with an event-driven connector that wakes instantly via a FIFO push and falls back to polling where FIFOs are unavailable. Covered by Rust unit and integration tests (106 lib + 4 binary tests, all green); not yet live-verified in a browser session.
+
+### Added
+- **`ack_of` delivery and read receipt protocol** — events carry an optional `ack_of` field referencing the sequence number of the message being acknowledged. `protocol.rs` enforces that only `message.delivered` and `message.read` event types may set it, that the referenced event exists and addresses the acknowledging actor, and that non-ack events leave it absent; `store.rs` re-validates the field at append time. The CLI gains `workbench-mesh ack <seq> [--type delivered|read]`, and `workbench-mesh activity` emits `message.read` automatically when `--ack-of` is supplied.
+- **Per-room/per-actor WebSocket subscription filtering** — clients send a `{"v":1,"type":"subscribe","rooms":[...]}` frame after connecting and receive live pushes only for the rooms they subscribed to; direct messages (events with an explicit `to` actor) are always delivered regardless of subscription. Replaces the previous global broadcast that sent every append to every connected socket.
+- **16 ms micro-batch push frames** — the server collects events for up to 16 ms and delivers them together as a single `{"v":1,"type":"batch","events":[...]}` WebSocket frame, coalescing bursts without adding perceptible latency.
+- **Chat history pagination** — a new `GET /api/events?room=…&before=…&limit=…` endpoint lets the frontend page backwards through history; `store.rs` gains `list_events_page` with room filtering, reverse-seq ordering, and ceiling-cursor semantics.
+- **`workbench-mesh listen` connector** — replaces polling with a push-driven model: the server writes a wake byte into a named FIFO (`<store>/listeners/<token>.fifo`) on every matching append, waking the listener with zero poll delay; where FIFOs are unavailable the connector falls back to lightweight short-poll. Reconnection uses exponential backoff capped at 5 s. The connector also measures and reports WebSocket app-level ping/pong round-trip time for diagnosing latency.
+- **Frontend chat pagination with DOM mount cap** — the command-center chat surface pages backwards through history when scrolled to the top, and enforces a mount cap (default 200 messages) so the DOM stays bounded in busy rooms; older messages beyond the cap are evicted as new ones arrive.
+- **Optimistic send with receipt ticks** — outgoing messages appear immediately with a "sending" state and are upgraded to ✓ sent, ✓✓ delivered, and ✓✓✓ read as `message.delivered`/`message.read` receipts arrive; the room header shows "seen by N/M members".
+- **RTT display and presence freshness** — the command-center toolbar shows the WebSocket round-trip time from `ping`/`pong` frames, and the receipts feed colors presence indicators by recency (green/amber/red based on heartbeat age).
+- **Animated chat and output-feed reveal** — new incoming messages and output-feed lines slide and fade in via a CSS `@keyframes` animation rather than appearing instantly, giving the feed a live feel without impacting performance.
+
 ## [0.10.0] - 2026-07-03
 
 The mesh command center release. The dashboard served by `workbench-mesh serve`

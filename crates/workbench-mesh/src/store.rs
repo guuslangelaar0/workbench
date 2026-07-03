@@ -116,7 +116,7 @@ impl MeshStore {
             .filter(|event| event.seq < ceiling)
             .filter(|event| room.is_none_or(|r| event.room == r))
             .collect();
-        matching.sort_by(|left, right| right.seq.cmp(&left.seq));
+        matching.sort_by_key(|e| std::cmp::Reverse(e.seq));
         matching.truncate(limit);
         Ok(matching)
     }
@@ -396,7 +396,13 @@ mod tests {
         let project = TempDir::new().unwrap();
         let store = MeshStore::open(project.path()).unwrap();
         let appended = store
-            .append_event("message.sent", "repo:workbench", "session:lead", None, json!({ "text": "hi" }))
+            .append_event(
+                "message.sent",
+                "repo:workbench",
+                "session:lead",
+                None,
+                json!({ "text": "hi" }),
+            )
             .unwrap();
 
         let found = store.get_event(appended.seq).unwrap();
@@ -476,15 +482,29 @@ mod tests {
         let store = MeshStore::open(project.path()).unwrap();
         for i in 0..5 {
             store
-                .append_event("message.sent", "repo:workbench", "session:lead", None, json!({ "text": format!("a{i}") }))
+                .append_event(
+                    "message.sent",
+                    "repo:workbench",
+                    "session:lead",
+                    None,
+                    json!({ "text": format!("a{i}") }),
+                )
                 .unwrap();
             store
-                .append_event("message.sent", "repo:other", "session:lead", None, json!({ "text": format!("b{i}") }))
+                .append_event(
+                    "message.sent",
+                    "repo:other",
+                    "session:lead",
+                    None,
+                    json!({ "text": format!("b{i}") }),
+                )
                 .unwrap();
         }
         // 10 events total, seqs 1..=10, alternating repo:workbench / repo:other
 
-        let page = store.list_events_page(Some("repo:workbench"), None, 2).unwrap();
+        let page = store
+            .list_events_page(Some("repo:workbench"), None, 2)
+            .unwrap();
         assert_eq!(page.len(), 2);
         assert_eq!(page[0].payload["text"], "a4"); // newest first
         assert_eq!(page[1].payload["text"], "a3");

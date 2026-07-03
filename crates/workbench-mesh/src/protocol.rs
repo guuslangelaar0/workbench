@@ -139,7 +139,9 @@ pub fn validate_ack(
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_ack, validate_event_room, validate_event_type, ALLOWED_EVENT_TYPES, EventEnvelope};
+    use super::{
+        validate_ack, validate_event_room, validate_event_type, EventEnvelope, ALLOWED_EVENT_TYPES,
+    };
 
     #[test]
     fn validates_known_event_types() {
@@ -175,47 +177,124 @@ mod tests {
 
     #[test]
     fn ack_requires_delivered_or_read_type() {
-        let referenced = sample_event("message.sent", "repo:workbench", "session:lead", Some("session:worker"));
-        let err = validate_ack(Some(1), "message.sent", "session:worker", Some("session:lead"), "repo:workbench", Some(&referenced)).unwrap_err();
-        assert!(err.to_string().contains("ack_of is only valid on message.delivered/message.read"));
+        let referenced = sample_event(
+            "message.sent",
+            "repo:workbench",
+            "session:lead",
+            Some("session:worker"),
+        );
+        let err = validate_ack(
+            Some(1),
+            "message.sent",
+            "session:worker",
+            Some("session:lead"),
+            "repo:workbench",
+            Some(&referenced),
+        )
+        .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("ack_of is only valid on message.delivered/message.read"));
     }
 
     #[test]
     fn ack_requires_a_referenced_event() {
-        let err = validate_ack(Some(1), "message.delivered", "session:worker", None, "repo:workbench", None).unwrap_err();
+        let err = validate_ack(
+            Some(1),
+            "message.delivered",
+            "session:worker",
+            None,
+            "repo:workbench",
+            None,
+        )
+        .unwrap_err();
         assert!(err.to_string().contains("ack_of references an unknown seq"));
     }
 
     #[test]
     fn ack_rejects_actor_who_was_not_addressed() {
-        let referenced = sample_event("message.sent", "repo:workbench", "session:lead", Some("session:worker"));
-        let err = validate_ack(Some(1), "message.delivered", "session:bystander", None, "repo:workbench", Some(&referenced)).unwrap_err();
-        assert!(err.to_string().contains("ack_of actor was not addressed by the referenced event"));
+        let referenced = sample_event(
+            "message.sent",
+            "repo:workbench",
+            "session:lead",
+            Some("session:worker"),
+        );
+        let err = validate_ack(
+            Some(1),
+            "message.delivered",
+            "session:bystander",
+            None,
+            "repo:workbench",
+            Some(&referenced),
+        )
+        .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("ack_of actor was not addressed by the referenced event"));
     }
 
     #[test]
     fn ack_allows_direct_addressee() {
-        let referenced = sample_event("message.sent", "repo:workbench", "session:lead", Some("session:worker"));
-        validate_ack(Some(1), "message.delivered", "session:worker", None, "repo:workbench", Some(&referenced)).unwrap();
+        let referenced = sample_event(
+            "message.sent",
+            "repo:workbench",
+            "session:lead",
+            Some("session:worker"),
+        );
+        validate_ack(
+            Some(1),
+            "message.delivered",
+            "session:worker",
+            None,
+            "repo:workbench",
+            Some(&referenced),
+        )
+        .unwrap();
     }
 
     #[test]
     fn ack_allows_room_member_when_no_explicit_to() {
         let referenced = sample_event("message.sent", "repo:workbench", "session:lead", None);
-        validate_ack(Some(1), "message.read", "session:worker", None, "repo:workbench", Some(&referenced)).unwrap();
+        validate_ack(
+            Some(1),
+            "message.read",
+            "session:worker",
+            None,
+            "repo:workbench",
+            Some(&referenced),
+        )
+        .unwrap();
     }
 
     #[test]
     fn ack_rejects_mismatched_room() {
         let referenced = sample_event("message.sent", "repo:workbench", "session:lead", None);
-        let err = validate_ack(Some(1), "message.delivered", "session:worker", None, "repo:other", Some(&referenced)).unwrap_err();
+        let err = validate_ack(
+            Some(1),
+            "message.delivered",
+            "session:worker",
+            None,
+            "repo:other",
+            Some(&referenced),
+        )
+        .unwrap_err();
         assert!(err.to_string().contains("ack_of room mismatch"));
     }
 
     #[test]
     fn non_ack_events_require_ack_of_to_be_absent() {
-        let err = validate_ack(Some(1), "message.sent", "session:lead", None, "repo:workbench", None).unwrap_err();
-        assert!(err.to_string().contains("ack_of is only valid on message.delivered/message.read"));
+        let err = validate_ack(
+            Some(1),
+            "message.sent",
+            "session:lead",
+            None,
+            "repo:workbench",
+            None,
+        )
+        .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("ack_of is only valid on message.delivered/message.read"));
     }
 
     fn sample_event(event_type: &str, room: &str, from: &str, to: Option<&str>) -> EventEnvelope {

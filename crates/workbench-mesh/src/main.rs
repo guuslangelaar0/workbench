@@ -560,8 +560,14 @@ async fn main() -> Result<()> {
             .await
         }
         Command::Activity(args) => {
-            client::set_activity(args.target, args.home, args.state, args.as_actor, args.ack_of)
-                .await
+            client::set_activity(
+                args.target,
+                args.home,
+                args.state,
+                args.as_actor,
+                args.ack_of,
+            )
+            .await
         }
         Command::Ack(args) => {
             client::send_ack(
@@ -578,8 +584,7 @@ async fn main() -> Result<()> {
         Command::Snapshot(snapshot) => run_snapshot(snapshot),
         Command::Listen(args) => {
             let actor = args.as_actor.unwrap_or_else(|| {
-                std::env::var("WORKBENCH_MESH_ACTOR")
-                    .unwrap_or_else(|_| "session:lead".to_string())
+                std::env::var("WORKBENCH_MESH_ACTOR").unwrap_or_else(|_| "session:lead".to_string())
             });
             workbench_mesh::listen::run(args.target, args.home, actor).await
         }

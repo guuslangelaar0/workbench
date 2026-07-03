@@ -224,7 +224,11 @@ fn ensure_fifo(project_root: &Path, actor: &str) -> Result<PathBuf> {
         // bitmask; no invariants beyond that are required.
         let result = unsafe { libc_mkfifo(cpath.as_ptr(), 0o600) };
         if result != 0 {
-            anyhow::bail!("mkfifo({}) failed: {}", path.display(), std::io::Error::last_os_error());
+            anyhow::bail!(
+                "mkfifo({}) failed: {}",
+                path.display(),
+                std::io::Error::last_os_error()
+            );
         }
     }
     Ok(path)
@@ -325,9 +329,15 @@ mod tests {
 
     #[test]
     fn backoff_delay_starts_fast_and_caps_at_five_seconds() {
-        assert_eq!(super::backoff_delay(0), std::time::Duration::from_millis(250));
+        assert_eq!(
+            super::backoff_delay(0),
+            std::time::Duration::from_millis(250)
+        );
         assert!(super::backoff_delay(1) > std::time::Duration::from_millis(250));
-        assert!(super::backoff_delay(10) <= std::time::Duration::from_secs(5) + std::time::Duration::from_millis(500));
+        assert!(
+            super::backoff_delay(10)
+                <= std::time::Duration::from_secs(5) + std::time::Duration::from_millis(500)
+        );
         // every call must stay within a sane floor even with jitter
         assert!(super::backoff_delay(10) >= std::time::Duration::from_secs(2));
     }
