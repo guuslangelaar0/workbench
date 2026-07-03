@@ -12,7 +12,7 @@ trap 'rm -rf "$TMP"' EXIT
 fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
 
-bash "$HERE/scripts/init.sh" --name "Dogfood" --mission "Prove it works end to end." --target "$TMP" --profile full >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --name "Dogfood" --mission "Prove it works end to end." --target "$TMP" --profile full --level fleet >/dev/null 2>&1
 
 # a fresh scaffold must be drift-clean (manifest matches the rendered files)
 chk "fresh scaffold is drift-clean" "! bash '$HERE/scripts/drift.sh' '$TMP' 2>/dev/null | grep -qE ' edited| missing'"

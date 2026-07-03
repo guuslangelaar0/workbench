@@ -15,7 +15,7 @@ chk "unconfigured reports unconfigured" "printf '%s' \"\$out_unconfigured\" | gr
 
 ENABLED="$TMP/enabled"
 mkdir -p "$ENABLED"
-bash "$HERE/scripts/init.sh" --profile full --name "HooksEnabled" --mission "m" --target "$ENABLED" --hooks enabled >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --profile full --level fleet --name "HooksEnabled" --mission "m" --target "$ENABLED" --hooks enabled >/dev/null 2>&1
 out_enabled="$(bash "$HERE/scripts/hooks-mode.sh" status --target "$ENABLED" --plugin-root "$HERE")"
 chk "fresh init records hooks enabled" "python3 - <<PY
 import json
@@ -47,7 +47,7 @@ chk "reenabled status is enabled" "printf '%s' \"\$out_reenabled\" | grep -q '^s
 
 SKIPPED="$TMP/skipped"
 mkdir -p "$SKIPPED"
-bash "$HERE/scripts/init.sh" --profile full --name "HooksSkipped" --mission "m" --target "$SKIPPED" --hooks disabled >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --profile full --level fleet --name "HooksSkipped" --mission "m" --target "$SKIPPED" --hooks disabled >/dev/null 2>&1
 out_skipped="$(bash "$HERE/scripts/hooks-mode.sh" status --target "$SKIPPED" --plugin-root "$HERE")"
 chk "init can record hooks disabled" "printf '%s' \"\$out_skipped\" | grep -q '^state=disabled$'"
 
@@ -77,7 +77,7 @@ chk "missing hook preference is reported" "printf '%s' \"\$out_missing\" | grep 
 
 STALE="$TMP/stale"
 mkdir -p "$STALE"
-bash "$HERE/scripts/init.sh" --profile full --name "HooksStale" --mission "m" --target "$STALE" --hooks enabled >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --profile full --level fleet --name "HooksStale" --mission "m" --target "$STALE" --hooks enabled >/dev/null 2>&1
 python3 - <<PY
 import json
 p='$STALE/.workbench/config.json'

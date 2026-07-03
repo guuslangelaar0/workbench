@@ -10,12 +10,12 @@ fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
 
 # scaffold a full project (gives scripts/coord/wb-coord + .workbench/config.json)
-bash "$HERE/scripts/init.sh" --name "Acme" --mission "Test." --target "$TMP" --profile full >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --name "Acme" --mission "Test." --target "$TMP" --profile full --level fleet >/dev/null 2>&1
 BBC="$TMP/scripts/coord/wb-coord"
 
 # --- gitignore: coordination runtime state must be ignored (and not duplicated on re-run) ---
 chk "scaffold gitignores .claude/locks/"   "grep -qxF '/.claude/locks/' '$TMP/.gitignore'"
-bash "$HERE/scripts/init.sh" --name "Acme" --mission "Test." --target "$TMP" --profile full >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --name "Acme" --mission "Test." --target "$TMP" --profile full --level fleet >/dev/null 2>&1
 chk "gitignore locks line not duplicated"  "[ \"\$(grep -cxF '/.claude/locks/' '$TMP/.gitignore')\" = 1 ]"
 
 # --- wb-coord claims: cross-session visibility ---

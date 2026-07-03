@@ -9,7 +9,7 @@ chk "doctor command exists" "[ -f '$HERE/commands/doctor.md' ]"
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 (cd "$TMP" && git init -q)
-bash "$HERE/scripts/init.sh" --name "Doctor" --mission "x" --target "$TMP" >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --level fleet --name "Doctor" --mission "x" --target "$TMP" >/dev/null 2>&1
 OUT="$(bash "$HERE/scripts/doctor.sh" --target "$TMP" 2>/dev/null || true)"
 chk "doctor reports config ok" "printf '%s' \"\$OUT\" | grep -q 'Config: ok'"
 chk "doctor reports manifest ok" "printf '%s' \"\$OUT\" | grep -q 'Manifest: ok'"

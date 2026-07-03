@@ -11,7 +11,7 @@ chk "config level required enum"  "python3 -c \"import json;p=json.load(open('$S
 chk "config wow has required"     "python3 -c \"import json;p=json.load(open('$S/config.schema.json'))['properties']['way_of_working'];exit(0 if 'required' in p else 1)\""
 chk "schemas still valid JSON"    "python3 -m json.tool '$S/config.schema.json' >/dev/null && python3 -m json.tool '$S/manifest.schema.json' >/dev/null"
 # a real scaffolded config + manifest validate against the (hardened) schemas
-TMP="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --name "Acme" --mission "x" --target "$TMP" >/dev/null 2>&1
+TMP="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --level fleet --name "Acme" --mission "x" --target "$TMP" >/dev/null 2>&1
 chk "scaffolded config validates" "python3 -c \"import json,jsonschema,sys;jsonschema.validate(json.load(open('$TMP/.workbench/config.json')),json.load(open('$S/config.schema.json')))\" 2>/dev/null || python3 -c \"import json;json.load(open('$TMP/.workbench/config.json'))\""
 chk "scaffolded manifest validates" "python3 -c \"import json,jsonschema;jsonschema.validate(json.load(open('$TMP/.workbench/manifest.json')),json.load(open('$S/manifest.schema.json')))\" 2>/dev/null || python3 -c \"import json;json.load(open('$TMP/.workbench/manifest.json'))\""
 chk "manifest v2 schema version" "python3 -c \"import json;d=json.load(open('$TMP/.workbench/manifest.json'));exit(0 if d.get('schema_version')==2 else 1)\""
@@ -25,18 +25,18 @@ rm -rf "$TMP"
 TMP_PRE="$(mktemp -d)"
 printf 'USER CLAUDE\n' > "$TMP_PRE/CLAUDE.md"
 pre_hash="sha256:$(python3 -c "import hashlib;print(hashlib.sha256(open('$TMP_PRE/CLAUDE.md','rb').read()).hexdigest())")"
-bash "$HERE/scripts/init.sh" --name "Pre" --mission "x" --target "$TMP_PRE" >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --level fleet --name "Pre" --mission "x" --target "$TMP_PRE" >/dev/null 2>&1
 chk "manifest records preexisting file" "python3 -c \"import json;d=json.load(open('$TMP_PRE/.workbench/manifest.json'));f=next(x for x in d['files'] if x['path']=='CLAUDE.md');exit(0 if f['action']=='preserved' and f['preexisting'] is True and f['previous_hash']=='$pre_hash' else 1)\""
 rm -rf "$TMP_PRE"
 
 TMP_GIT="$(mktemp -d)"; (cd "$TMP_GIT" && git init -q)
-bash "$HERE/scripts/init.sh" --name "Git" --mission "x" --target "$TMP_GIT" >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --level fleet --name "Git" --mission "x" --target "$TMP_GIT" >/dev/null 2>&1
 chk "manifest records git hook side effect" "python3 -c \"import json;d=json.load(open('$TMP_GIT/.workbench/manifest.json'));hooks=d.get('side_effects',{}).get('git_hooks',[]);exit(0 if any(h.get('type')=='pre-commit' and 'wb-coord' in h.get('marker','') for h in hooks) else 1)\""
 chk "manifest records gitignore side effect" "python3 -c \"import json;d=json.load(open('$TMP_GIT/.workbench/manifest.json'));blocks=d.get('side_effects',{}).get('gitignore_blocks',[]);exit(0 if any(b.get('path')=='.gitignore' for b in blocks) else 1)\""
 rm -rf "$TMP_GIT"
 
 # Task 2: drift.sh checks
-TMP="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --name "Drift" --mission "x" --target "$TMP" >/dev/null 2>&1
+TMP="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --level fleet --name "Drift" --mission "x" --target "$TMP" >/dev/null 2>&1
 OUT="$(bash "$HERE/scripts/drift.sh" "$TMP" 2>/dev/null)"
 chk "drift: fresh all ok"      "printf '%s' \"\$OUT\" | grep -q 'CLAUDE.md' && ! printf '%s' \"\$OUT\" | grep -qi 'edited'"
 echo "USER EDIT" >> "$TMP/CLAUDE.md"
@@ -55,7 +55,7 @@ chk "upgrade skill 3 modes"    "grep -q 'managed' '$HERE/skills/upgrade/SKILL.md
 chk "upgrade command exists"   "[ -f '$HERE/commands/upgrade.md' ]"
 chk "upgrade script exists"    "[ -f '$HERE/scripts/upgrade.sh' ]"
 
-TMP="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --name "Classify" --mission "x" --target "$TMP" >/dev/null 2>&1
+TMP="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --level fleet --name "Classify" --mission "x" --target "$TMP" >/dev/null 2>&1
 UP="$(bash "$HERE/scripts/upgrade.sh" --target "$TMP" --dry-run 2>/dev/null || true)"
 chk "upgrade classifies fresh ok" "printf '%s' \"\$UP\" | grep -q 'CLAUDE.md.*ok'"
 echo "USER EDIT" >> "$TMP/CLAUDE.md"
@@ -79,7 +79,7 @@ rm -rf "$TMP"
 
 TMP_PRE="$(mktemp -d)"
 printf 'USER CLAUDE\n' > "$TMP_PRE/CLAUDE.md"
-bash "$HERE/scripts/init.sh" --name "PreClassify" --mission "x" --target "$TMP_PRE" >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --level fleet --name "PreClassify" --mission "x" --target "$TMP_PRE" >/dev/null 2>&1
 UP5="$(bash "$HERE/scripts/upgrade.sh" --target "$TMP_PRE" --dry-run 2>/dev/null || true)"
 chk "upgrade classifies preexisting" "printf '%s' \"\$UP5\" | grep -q 'CLAUDE.md.*preexisting'"
 rm -rf "$TMP_PRE"
