@@ -71,6 +71,16 @@ impl MeshStore {
         result
     }
 
+    /// Look up a single event by seq — used to validate that a
+    /// `message.delivered`/`message.read` ack actually references a real
+    /// event this actor was addressed by.
+    pub fn get_event(&self, seq: u64) -> Result<Option<EventEnvelope>> {
+        Ok(self
+            .list_events_since(seq.saturating_sub(1))?
+            .into_iter()
+            .find(|event| event.seq == seq))
+    }
+
     pub fn append_audit(&self, action: &str, actor: &str, payload: Value) -> Result<EventEnvelope> {
         validate_event_type(action)?;
         let path = self.root.join("audit.jsonl");
@@ -339,5 +349,20 @@ mod tests {
         assert_eq!(listed.len(), 2);
         assert_eq!(listed[1].seq, 2);
         assert_eq!(listed[1].event_type, "message.sent");
+    }
+
+    #[test]
+    fn get_event_returns_the_matching_envelope_or_none() {
+        let project = TempDir::new().unwrap();
+        let store = MeshStore::open(project.path()).unwrap();
+        let appended = store
+            .append_event("message.sent", "repo:workbench", "session:lead", None, json!({ "text": "hi" }))
+            .unwrap();
+
+        let found = store.get_event(appended.seq).unwrap();
+        assert_eq!(found.unwrap().id, appended.id);
+
+        let missing = store.get_event(appended.seq + 100).unwrap();
+        assert!(missing.is_none());
     }
 }
