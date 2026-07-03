@@ -16,6 +16,6 @@ Do not spawn an engineer, do not verify tasks, and do not move files. This is a 
 4. Otherwise run:
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/deps.sh" ready --target "${CLAUDE_PROJECT_DIR}"`
    and report the first ready backlog task by ID/title.
-5. Tell the user the exact next command only when it is safe: `/workbench:dispatch <id>`.
+5. Tell the user the exact next command only when it is safe: `/workbench:dispatch <id>` (defaults to a Claude engineer lane; add `--engine codex` to route the same task to Codex instead).
 
 Correct output includes the reason: cap/drain, blocked/dependency, or ready task. Never silently dispatch from this command.

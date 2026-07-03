@@ -40,17 +40,21 @@ chk "engineer: no Co-Authored-By"   "grep -qi 'Co-Authored-By' '$A/engineer.md'"
 chk "verifier: does not fix"        "grep -qi 'do not fix\|does not fix\|not fix' '$A/verifier.md'"
 
 # --- commands ---
-for c in loop task dispatch verify mc; do
+for c in loop task dispatch claude-engineer verify mc; do
   chk "$c command exists"           "[ -f '$C/$c.md' ]"
   chk "$c has frontmatter"          "head -1 '$C/$c.md' | grep -q '^---'"
 done
 chk "mc command runs mc.sh"         "grep -q 'scripts/mc.sh' '$C/mc.md'"
 chk "task command runs task-new.sh" "grep -q 'scripts/task-new.sh' '$C/task.md'"
+chk "dispatch is engine-agnostic"   "grep -q -- '--engine' '$C/dispatch.md' && grep -qi 'claude-engineer.md' '$C/dispatch.md' && grep -qi 'codex-engineer.md' '$C/dispatch.md'"
+chk "dispatch defaults to claude"   "grep -qi 'default' '$C/dispatch.md' && grep -q 'claude-engineer' '$C/dispatch.md'"
 chk "dispatch moves to in-development" "grep -qE 'task-move.sh|in-development' '$C/dispatch.md'"
 chk "dispatch spawns engineer"      "grep -q 'engineer' '$C/dispatch.md'"
-chk "dispatch supports native worktree lanes" "grep -q -- '--worktree' '$C/dispatch.md' && grep -q -- '--bg' '$C/dispatch.md' && grep -q 'claude agents' '$C/dispatch.md'"
-chk "dispatch shared avoids false current-checkout promise" "grep -q -- '--shared' '$C/dispatch.md' && grep -q 'normal foreground Task-tool path' '$C/dispatch.md' && ! grep -q 'force the current checkout' '$C/dispatch.md'"
-chk "dispatch covers native worktree base and trust" "grep -q 'worktree.baseRef' '$C/dispatch.md' && grep -q 'workspace trust' '$C/dispatch.md'"
+chk "claude-engineer moves to in-development" "grep -qE 'task-move.sh|in-development' '$C/claude-engineer.md'"
+chk "claude-engineer spawns engineer" "grep -q 'engineer' '$C/claude-engineer.md'"
+chk "claude-engineer supports native worktree lanes" "grep -q -- '--worktree' '$C/claude-engineer.md' && grep -q -- '--bg' '$C/claude-engineer.md' && grep -q 'claude agents' '$C/claude-engineer.md'"
+chk "claude-engineer shared avoids false current-checkout promise" "grep -q -- '--shared' '$C/claude-engineer.md' && grep -q 'normal foreground Task-tool path' '$C/claude-engineer.md' && ! grep -q 'force the current checkout' '$C/claude-engineer.md'"
+chk "claude-engineer covers native worktree base and trust" "grep -q 'worktree.baseRef' '$C/claude-engineer.md' && grep -q 'workspace trust' '$C/claude-engineer.md'"
 chk "verify gates to verified"      "grep -qE 'task-move.sh|verified' '$C/verify.md'"
 chk "loop invokes orchestration"    "grep -qi 'orchestration' '$C/loop.md'"
 
