@@ -36,6 +36,7 @@ operations:
   doing TEXT... [--as ACTOR] [--platform NAME] [--capability VALUE]... [--provider NAME] [--model NAME]
   watch ACTOR [--as ACTOR]
   tail --as ACTOR [--provider NAME] [--model NAME]   (reads stream-json on stdin)
+  inbox --as ACTOR [--wait] [--since N]   (unread inbound messages; --wait blocks until one arrives)
 
 --as ACTOR identifies this session/process as ACTOR in the posted event,
 instead of the shared default "session:lead". Set this (or export
@@ -440,6 +441,62 @@ case "$cmd" in
       exit 2
     fi
     exec "$BIN" tail "${PROJECT_ARGS[@]}" "${AS_ARGS[@]}" "${PROVIDER_ARGS[@]}" "${MODEL_ARGS[@]}"
+    ;;
+  inbox)
+    # Unread inbound messages for --as ACTOR: direct (to==actor), the actor's
+    # own room, or shared rooms. --wait blocks until one arrives and then
+    # exits — run it as a background task and its completion becomes a push
+    # notification into the session (the harness re-invokes on completion).
+    if [ "${#AS_ARGS[@]}" -eq 0 ] && [ -z "${WORKBENCH_MESH_ACTOR:-}" ]; then
+      echo "mesh: inbox requires --as ACTOR (or export WORKBENCH_MESH_ACTOR)" >&2
+      exit 2
+    fi
+    actor="${AS_ARGS[1]:-$WORKBENCH_MESH_ACTOR}"
+    wait_flag=0
+    since=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --wait) wait_flag=1; shift ;;
+        --since) require_arg "--since value" "${2:-}"; since="$2"; shift 2 ;;
+        *) echo "mesh: unknown arg to inbox: '$1'" >&2; exit 2 ;;
+      esac
+    done
+    seq_file="$TARGET/.workbench/mesh/inbox-$actor.seq"
+    [ -n "$since" ] || since="$(cat "$seq_file" 2>/dev/null || echo 0)"
+    while true; do
+      out="$("$BIN" event list "${PROJECT_ARGS[@]}" --since "$since" 2>/dev/null | ACTOR="$actor" python3 -c '
+import json, os, sys
+actor = os.environ["ACTOR"]
+top, hits = 0, []
+for line in sys.stdin:
+    try:
+        e = json.loads(line)
+    except ValueError:
+        continue
+    top = max(top, e.get("seq", 0))
+    if not e.get("type", "").startswith(("message.", "task.handoff")):
+        continue
+    if e.get("from") == actor:
+        continue
+    if e.get("to") == actor or e.get("room") in (actor, "team") or e.get("room", "").startswith("repo:"):
+        p = e.get("payload", {})
+        text = p.get("text") or p.get("task_id") or p.get("question") or "?"
+        hits.append("seq=%s room=%s from=%s: %s" % (e["seq"], e["room"], e["from"], text))
+print(top)
+for h in hits:
+    print(h)
+')"
+      top="$(printf '%s\n' "$out" | head -1)"
+      body="$(printf '%s\n' "$out" | tail -n +2)"
+      if [ -n "$body" ]; then
+        printf '%s\n' "$top" > "$seq_file"
+        printf 'mesh inbox for %s:\n%s\n' "$actor" "$body"
+        exit 0
+      fi
+      case "$top" in ''|*[!0-9]*) : ;; *) [ "$top" -gt "$since" ] && { since="$top"; printf '%s\n' "$top" > "$seq_file"; } ;; esac
+      [ "$wait_flag" = 1 ] || { echo "mesh inbox for $actor: empty"; exit 0; }
+      sleep 2
+    done
     ;;
   open)
     if url="$(metadata_url)"; then
