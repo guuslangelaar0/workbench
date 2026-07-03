@@ -587,13 +587,24 @@ async fn websocket_session(socket: WebSocket, state: AppState, last_seq: u64, to
     loop {
         tokio::select! {
             event = rx.recv() => {
-                let Some(event) = event else {
+                let Some(first_event) = event else {
                     return;
                 };
                 if require_token(&state, &token).is_err() {
                     return;
                 }
-                let Ok(text) = serde_json::to_string(&event) else {
+                // Drain the channel for up to ~16ms so that events that arrive
+                // in quick succession are coalesced into a single batch frame.
+                let mut batch = vec![first_event];
+                let deadline = tokio::time::Instant::now() + Duration::from_millis(16);
+                loop {
+                    match tokio::time::timeout_at(deadline, rx.recv()).await {
+                        Ok(Some(event)) => batch.push(event),
+                        // Timeout elapsed or channel closed — flush whatever we have.
+                        _ => break,
+                    }
+                }
+                let Ok(text) = serde_json::to_string(&json!({ "v": 1, "type": "batch", "events": batch })) else {
                     continue;
                 };
                 if sender.send(Message::Text(text)).await.is_err() {
@@ -2200,8 +2211,11 @@ mod tests {
 
         super::tail_store_events_once(&state).await;
 
-        let first = read_ws_json(&mut socket).await;
-        let second = read_ws_json(&mut socket).await;
+        // Both events may arrive in a single micro-batch frame; use the
+        // buffered helper so we get them one-by-one regardless.
+        let mut buf = std::collections::VecDeque::new();
+        let first = read_ws_json_buf(&mut socket, &mut buf).await;
+        let second = read_ws_json_buf(&mut socket, &mut buf).await;
         let received = [first, second];
         assert!(received.iter().any(|event| {
             event["seq"] == 1
@@ -2432,6 +2446,76 @@ mod tests {
         server.abort();
     }
 
+    #[tokio::test]
+    async fn concurrent_events_arrive_batched_in_one_frame() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Service");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let owner_token =
+            auth::local_project_token(project.path(), Some(home.path().to_path_buf())).unwrap();
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+            started_by: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+
+        let (mut socket, _) = connect_async(format!(
+            "ws://{}:{}/ws?token={}&last_seq=0",
+            metadata.host, metadata.port, metadata.local_token
+        ))
+        .await
+        .unwrap();
+        socket
+            .send(ClientMessage::Text(
+                json!({ "v": 1, "type": "subscribe", "rooms": ["repo:mesh-service"] }).to_string(),
+            ))
+            .await
+            .unwrap();
+        sleep(Duration::from_millis(50)).await;
+
+        let client = Client::new();
+        let base = format!("http://{}:{}", metadata.host, metadata.port);
+        for i in 0..5 {
+            client
+                .post(format!("{base}/api/events"))
+                .bearer_auth(&owner_token)
+                .json(&json!({ "type": "message.sent", "room": "repo:mesh-service", "from": "session:lead", "payload": { "idx": i } }))
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap();
+        }
+
+        // Read the raw WS frame — must be a batch frame with >= 2 events coalesced.
+        // We bypass read_ws_json here because that helper transparently unwraps
+        // batch frames; we need to inspect the batch envelope directly.
+        let msg = tokio::time::timeout(Duration::from_secs(2), socket.next())
+            .await
+            .expect("timed out waiting for batch frame")
+            .unwrap()
+            .unwrap();
+        let batch: Value = match msg {
+            ClientMessage::Text(text) => serde_json::from_str(&text).unwrap(),
+            other => panic!("expected websocket text frame, got {other:?}"),
+        };
+        assert_eq!(batch["type"], "batch", "expected a batch frame, got: {batch}");
+        let events = batch["events"].as_array().unwrap();
+        assert!(
+            events.len() >= 2,
+            "expected multiple events coalesced into one frame, got {}",
+            events.len()
+        );
+
+        server.abort();
+    }
+
     async fn wait_for_metadata(project: &Path) -> super::ServerMetadata {
         for _ in 0..50 {
             if server_metadata_path(project).is_file() {
@@ -2446,14 +2530,49 @@ mod tests {
     where
         S: StreamExt<Item = Result<ClientMessage, tokio_tungstenite::tungstenite::Error>> + Unpin,
     {
-        let message = tokio::time::timeout(Duration::from_secs(2), socket.next())
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
-        match message {
-            ClientMessage::Text(text) => serde_json::from_str(&text).unwrap(),
-            other => panic!("expected websocket text frame, got {other:?}"),
+        let mut _discard = std::collections::VecDeque::new();
+        read_ws_json_buf(socket, &mut _discard).await
+    }
+
+    /// Like `read_ws_json` but buffers leftover events from batch frames so
+    /// that callers which read multiple events from the same socket get them
+    /// one-by-one even when they arrive coalesced in a single batch frame.
+    async fn read_ws_json_buf<S>(
+        socket: &mut S,
+        overflow: &mut std::collections::VecDeque<Value>,
+    ) -> Value
+    where
+        S: StreamExt<Item = Result<ClientMessage, tokio_tungstenite::tungstenite::Error>> + Unpin,
+    {
+        // Return a buffered leftover from a previous batch read first.
+        if let Some(buffered) = overflow.pop_front() {
+            return buffered;
+        }
+        loop {
+            let message = tokio::time::timeout(Duration::from_secs(2), socket.next())
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            let ClientMessage::Text(text) = message else { continue };
+            let value: Value = serde_json::from_str(&text).unwrap();
+            // Live-pushed events now arrive as batch frames. Transparently
+            // unwrap to the first event so all single-event assertions keep
+            // working. Any remaining events in the batch go into `overflow`
+            // so subsequent calls to this helper can return them.
+            // Tests that need to inspect the raw batch envelope should
+            // read from the socket directly instead of using this helper.
+            if value["type"] == "batch" {
+                let mut events = value["events"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter();
+                let Some(first) = events.next() else { continue };
+                overflow.extend(events);
+                return first;
+            }
+            return value;
         }
     }
 
