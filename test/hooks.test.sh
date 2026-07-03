@@ -21,7 +21,7 @@ chk "precompact wrote marker"  "ls '$TMP/.workbench/checkpoints/'*.json >/dev/nu
 ND="$(mktemp -d)"; printf '{}' | CLAUDE_PROJECT_DIR="$ND" bash "$HERE/hooks/bin/precompact-checkpoint.sh" >/dev/null 2>&1; echo "rc=$?" >/tmp/pc.$$
 chk "precompact no-op elsewhere" "[ \"\$(cat /tmp/pc.$$)\" = 'rc=0' ] && ! ls '$ND/.workbench' >/dev/null 2>&1"
 DIS="$(mktemp -d)"
-bash "$HERE/scripts/init.sh" --profile full --name "HooksOff" --mission m --target "$DIS" --hooks disabled >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --profile full --level fleet --name "HooksOff" --mission m --target "$DIS" --hooks disabled >/dev/null 2>&1
 mkdir -p "$DIS/.workbench"
 python3 - <<PY
 import json
@@ -60,8 +60,8 @@ rm -rf "$TMP" "$ND" /tmp/pc.$$
 
 # --- SessionStart presence must be scoped to CLAUDE_PROJECT_DIR, not the cwd ---
 PROJ="$(mktemp -d)"; OTHER="$(mktemp -d)"
-bash "$HERE/scripts/init.sh" --profile full --name "ProjA" --mission m --target "$PROJ"  >/dev/null 2>&1
-bash "$HERE/scripts/init.sh" --profile full --name "ProjB" --mission m --target "$OTHER" >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --profile full --level fleet --name "ProjA" --mission m --target "$PROJ"  >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --profile full --level fleet --name "ProjB" --mission m --target "$OTHER" >/dev/null 2>&1
 NO_COLOR=1 WB_WORKSPACE_ROOT="$PROJ"  WB_SID_OVERRIDE="sidProjAAA"  bash "$PROJ/scripts/coord/wb-coord"  ping projA >/dev/null 2>&1
 NO_COLOR=1 WB_WORKSPACE_ROOT="$OTHER" WB_SID_OVERRIDE="sidOtherBBB" bash "$OTHER/scripts/coord/wb-coord" ping projB >/dev/null 2>&1
 OUTF="$(mktemp)"
@@ -79,7 +79,7 @@ rm -rf "$PROJ" "$OTHER" "$OUTF"
 
 # UserPromptSubmit purpose hook injects current lead purpose as additional context.
 LP="$(mktemp -d)"
-bash "$HERE/scripts/init.sh" --profile full --name "LeadProj" --mission m --target "$LP" >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --profile full --level fleet --name "LeadProj" --mission m --target "$LP" >/dev/null 2>&1
 bash "$HERE/scripts/lead.sh" set --target "$LP" --session-id sidLead123 --mode task --active-task 0007 --track checkout --purpose "ship checkout retry" >/dev/null
 printf '{"session_id":"sidLead123","prompt":"also fix analytics"}' \
   | CLAUDE_PROJECT_DIR="$LP" CLAUDE_PLUGIN_ROOT="$HERE" bash "$HERE/hooks/bin/lead-purpose-nudge.sh" > "$LP/nudge.json"

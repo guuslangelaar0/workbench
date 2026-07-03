@@ -10,7 +10,7 @@ trap 'rm -rf "$TMP"' EXIT
 fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
 
-bash "$HERE/scripts/init.sh" --name "Acme" --mission "Test." --target "$TMP" --profile full >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --name "Acme" --mission "Test." --target "$TMP" --profile full --level fleet >/dev/null 2>&1
 CFG="$TMP/.workbench/config.json"
 
 # feed a Bash command to the guard as PreToolUse JSON; assert block (rc!=0) or allow (rc=0)
@@ -64,7 +64,7 @@ ngtest "no-python allows benign w/ scary desc" allow '{"tool_name":"Bash","tool_
 
 # --- notify gating ---
 # remote=off → silent no-op
-TMP2="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --name "Off" --target "$TMP2" --profile full >/dev/null 2>&1
+TMP2="$(mktemp -d)"; bash "$HERE/scripts/init.sh" --name "Off" --target "$TMP2" --profile full --level fleet >/dev/null 2>&1
 o_off="$(CLAUDE_PROJECT_DIR="$TMP2" WORKBENCH_NOTIFY_DRYRUN=1 bash "$NOTIFY" 2>/dev/null || true)"
 chk "notify no-ops when remote=off"  "[ -z \"$o_off\" ]"
 rm -rf "$TMP2"

@@ -11,6 +11,15 @@ bash "$HERE/scripts/init.sh" --profile minimal --name "Acme" --mission "Privacy 
 
 chk "missing flag value exits 64"  "bash '$HERE/scripts/init.sh' --name >/dev/null 2>&1; [ \$? -eq 64 ]"
 chk "unwritable target exits nonzero"  "bash '$HERE/scripts/init.sh' --name X --target /dev/null/x >/dev/null 2>&1; [ \$? -ne 0 ]"
+
+# --- --profile full with no explicit --level must fail loudly, not silently default to fleet ---
+TMPF="$(mktemp -d)"
+full_no_level_out="$(bash "$HERE/scripts/init.sh" --profile full --name "Footgun" --mission "m" --target "$TMPF" 2>&1)"
+full_no_level_rc=$?
+chk "profile full without --level exits nonzero"     "[ $full_no_level_rc -ne 0 ]"
+chk "profile full without --level names the footgun" "printf '%s' \"\$full_no_level_out\" | grep -qi 'requires an explicit --level'"
+chk "profile full without --level does not scaffold" "[ ! -e '$TMPF/.workbench/config.json' ]"
+rm -rf "$TMPF"
 chk "backlog dir created"        "[ -d '$TMP/.claude/tasks/backlog' ]"
 chk "decisions dir created"      "[ -d '$TMP/.claude/tasks/decisions' ]"
 chk "_next-id is 0001"           "[ \"\$(cat '$TMP/.claude/tasks/_next-id')\" = 0001 ]"
@@ -35,13 +44,13 @@ PY"
 
 # --- re-running init.sh must NOT clobber existing managed files (greenfield-only scaffold) ---
 TMP2="$(mktemp -d)"
-bash "$HERE/scripts/init.sh" --profile full --name "Orig" --mission "m" --target "$TMP2" >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --profile full --level fleet --name "Orig" --mission "m" --target "$TMP2" >/dev/null 2>&1
 echo "USER-EDIT-CLAUDE"  >> "$TMP2/CLAUDE.md"
 echo "USER-EDIT-AGENTS"  >> "$TMP2/AGENTS.md"
 echo "USER-EDIT-SOUL"    >> "$TMP2/.claude/SOUL.md"
 echo "USER-EDIT-README"  >> "$TMP2/.claude/tasks/README.md"
 echo "# USER-EDIT-COORD" >> "$TMP2/scripts/coord/lib.sh"
-re_out="$(bash "$HERE/scripts/init.sh" --profile full --name "Orig" --mission "m" --target "$TMP2" 2>&1)"
+re_out="$(bash "$HERE/scripts/init.sh" --profile full --level fleet --name "Orig" --mission "m" --target "$TMP2" 2>&1)"
 chk "re-run preserves CLAUDE.md edit"  "grep -q USER-EDIT-CLAUDE '$TMP2/CLAUDE.md'"
 chk "re-run preserves AGENTS.md edit"  "grep -q USER-EDIT-AGENTS '$TMP2/AGENTS.md'"
 chk "re-run preserves SOUL.md edit"    "grep -q USER-EDIT-SOUL '$TMP2/.claude/SOUL.md'"
@@ -51,7 +60,7 @@ chk "re-run reports preserved files"   "printf '%s' \"\$re_out\" | grep -qi pres
 rm -rf "$TMP2"
 
 TMPW="$(mktemp -d)"
-bash "$HERE/scripts/init.sh" --profile full --name "Wb" --mission m --target "$TMPW" >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --profile full --level fleet --name "Wb" --mission m --target "$TMPW" >/dev/null 2>&1
 chk "scaffolds .workbench/ not .initlab/" "[ -f '$TMPW/.workbench/config.json' ] && [ ! -d '$TMPW/.initlab' ]"
 chk "full scaffold gitignores mesh runtime" "grep -qxF '/.workbench/mesh/' '$TMPW/.gitignore'"
 rm -rf "$TMPW"

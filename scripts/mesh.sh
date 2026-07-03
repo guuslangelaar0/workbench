@@ -22,6 +22,7 @@ usage: mesh.sh <operation> [args]
 
 operations:
   start [--local|--lan] [--port N] [--pid-file PATH]
+  stop [--pid-file PATH]
   status | who | jobs | open
   invite [--role ROLE] [--ttl-seconds N] [--max-uses N]
   connect [URL] TOKEN [DEVICE]
@@ -45,6 +46,11 @@ its default dispatch capabilities (e.g. macOS gets ios-simulator). --platform
 overrides auto-detection; --capability (repeatable) adds project-specific
 extras on top. A lead reading these can route iOS QA only to macos sessions,
 Windows-native work only to windows sessions, and so on.
+
+start always writes a pid file so it can be stopped later — pass --pid-file
+to choose the path explicitly (test harnesses do this), otherwise it defaults
+to <target>/.workbench/mesh/server.pid, next to server.json. stop reads that
+same default (or an explicit --pid-file) and sends SIGTERM, never SIGKILL.
 EOF
 }
 
@@ -211,6 +217,7 @@ case "$cmd" in
   start)
     mode="local"
     port="0"
+    pidfile=""
     pass=()
     while [ "$#" -gt 0 ]; do
       case "$1" in
@@ -233,6 +240,11 @@ case "$cmd" in
           pass+=(--port "$2")
           shift 2
           ;;
+        --pid-file)
+          require_arg "--pid-file value" "${2:-}"
+          pidfile="$2"
+          shift 2
+          ;;
         *)
           pass+=("$1")
           shift
@@ -243,9 +255,62 @@ case "$cmd" in
       port="${WORKBENCH_MESH_PORT:-47321}"
       pass+=(--port "$port")
     fi
+    # Always record a pid file so `/workbench:mesh stop` can find and signal this
+    # process later, even when the caller didn't ask for one explicitly — default to
+    # a fixed path next to server.json rather than leaving the server unstoppable.
+    [ -n "$pidfile" ] || pidfile="$TARGET/.workbench/mesh/server.pid"
+    pass+=(--pid-file "$pidfile")
     "$BIN" auth bootstrap "${PROJECT_ARGS[@]}" >/dev/null
     print_start_info "$mode" "$port"
     exec "$BIN" serve "${PROJECT_ARGS[@]}" --bind "$mode" "${pass[@]}"
+    ;;
+  stop)
+    pidfile=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --pid-file)
+          require_arg "--pid-file value" "${2:-}"
+          pidfile="$2"
+          shift 2
+          ;;
+        *)
+          echo "mesh: unknown arg to stop: '$1'" >&2
+          usage >&2
+          exit 2
+          ;;
+      esac
+    done
+    [ -n "$pidfile" ] || pidfile="$TARGET/.workbench/mesh/server.pid"
+    if [ ! -f "$pidfile" ]; then
+      echo "mesh: no pid file at $pidfile — is a mesh server running? (start with /workbench:mesh start)" >&2
+      exit 1
+    fi
+    pid="$(tr -d ' \t\n' < "$pidfile")"
+    case "$pid" in
+      ''|*[!0-9]*)
+        echo "mesh: pid file $pidfile does not contain a valid pid ('$pid')" >&2
+        exit 1
+        ;;
+    esac
+    if ! kill -0 "$pid" 2>/dev/null; then
+      echo "mesh: process $pid (from $pidfile) is not running — removing stale pid file"
+      rm -f "$pidfile"
+      exit 0
+    fi
+    if ! kill -TERM "$pid" 2>/dev/null; then
+      echo "mesh: failed to signal pid $pid" >&2
+      exit 1
+    fi
+    for _ in $(seq 1 50); do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 0.1
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+      echo "mesh: sent SIGTERM to $pid but it is still running after 5s" >&2
+      exit 1
+    fi
+    rm -f "$pidfile"
+    echo "mesh: stopped mesh server (pid $pid)"
     ;;
   status)
     exec "$BIN" status "${PROJECT_ARGS[@]}" "$@"

@@ -1,12 +1,14 @@
 ---
 description: Capture or review recommend-only suggestions — the home for a feature IDEA ("would be cool", "for later") and recommendations the loop surfaces (graduation, drift, anti-gaming, budget). An un-committed idea goes here via `add`, NOT in the task backlog (which is for committed work) and is never auto-built.
 allowed-tools: ["Bash", "Read"]
-argument-hint: "[list|act <key>|dismiss <key>|add ...]"
+argument-hint: "[list|act <key>|dismiss <key>|clear <key>|add ...]"
 ---
 
 You are the `/workbench:suggest` command. Read `$ARGUMENTS` and act on it.
 
 Suggestions are **recommend-only**: the loop surfaces options the way Claude surfaces tips, but nothing changes without the human. This is the third response mode — distinct from auto-acting (only bugs auto-file) and blocking to `decisions/` (only an expensive, irreversible fork). Most operational intelligence lives here.
+
+Once a suggestion is accepted and the human decides to commit to it, it graduates into a real backlog task via `/workbench:park --type feature` (or `/workbench:task`) — don't re-type the idea into the backlog by hand.
 
 ## Resolve the project
 
@@ -37,6 +39,16 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/suggest.sh" dismiss <key> --target "${CLAUDE
 ```
 
 Marks it `dismissed` so it won't resurface. Use when the user says a recommendation isn't wanted.
+
+## `clear <key>`
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/suggest.sh" clear <key> --target "${CLAUDE_PROJECT_DIR}"
+```
+
+Deletes the suggestion file outright, so the same key **could** be re-emitted later if a producer detects the condition again.
+
+**`dismiss` vs `clear`:** `dismiss` means "I've seen this, stop showing it to me" — permanent, the file stays (marked dismissed) so a producer re-emitting the same key is a no-op forever. `clear` means "remove this specific instance, but let the underlying condition re-flag it if it recurs" — temporary/positional, the file is gone so the same key can be filed fresh next time a producer checks.
 
 ## `add ...` (producers / manual)
 

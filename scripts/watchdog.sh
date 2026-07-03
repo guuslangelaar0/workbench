@@ -18,9 +18,10 @@
 # last-resume stamp so it doesn't thrash on the same failure.
 #
 # Usage:
-#   scripts/watchdog.sh --session-id ID [--project DIR] [--max-idle SECS] [--exec]
+#   scripts/watchdog.sh --as ID [--project DIR] [--max-idle SECS] [--exec]
 #
-#   --session-id ID   (required) the Claude Code session to `claude --resume`
+#   --as ID           (required) the Claude Code session to `claude --resume` — canonical
+#                     actor-identity flag (--session-id ID accepted as alias)
 #   --project DIR     project root (default: $PWD)
 #   --max-idle SECS   SESSION_STATE.md older than this ⇒ stale ⇒ resume (default: 1800)
 #   --exec            actually run the resume command (default: dry-run / print only)
@@ -28,7 +29,7 @@
 #
 # Example crontab (every 5 minutes, execute, log output):
 #   */5 * * * * /path/to/workbench/scripts/watchdog.sh \
-#       --session-id abc123 --project /home/me/proj --max-idle 1800 --exec \
+#       --as abc123 --project /home/me/proj --max-idle 1800 --exec \
 #       >> /home/me/proj/.workbench/recovery/watchdog.log 2>&1
 #
 # Example systemd (user) units — watchdog.service + watchdog.timer:
@@ -54,6 +55,7 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SELF_DIR/lib.sh"
 
 SESSION_ID=""
+SESSION_ID_AS=""
 PROJECT="$PWD"
 MAX_IDLE=1800
 EXEC=0
@@ -63,6 +65,7 @@ usage() { sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --session-id) SESSION_ID="${2:-}"; shift 2 ;;
+    --as)         SESSION_ID_AS="${2:-}"; shift 2 ;;   # canonical actor-identity flag; alias for --session-id (wins if both given)
     --project)    PROJECT="${2:-$PWD}"; shift 2 ;;
     --max-idle)   MAX_IDLE="${2:-1800}"; shift 2 ;;
     --exec)       EXEC=1; shift ;;
@@ -71,7 +74,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-[ -n "$SESSION_ID" ] || { echo "watchdog: --session-id is required" >&2; usage; exit 2; }
+[ -n "$SESSION_ID_AS" ] && SESSION_ID="$SESSION_ID_AS"
+[ -n "$SESSION_ID" ] || { echo "watchdog: --as ID is required (or --session-id ID)" >&2; usage; exit 2; }
 
 CFG="$(il_cfg_dir "$PROJECT")"
 REC_DIR="$CFG/recovery"

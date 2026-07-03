@@ -10,6 +10,7 @@ Use Workbench Mesh for cross-session, cross-device, and teamlead communication i
 ## Routing
 
 - Use `/workbench:mesh status` and `/workbench:mesh who` before guessing who is connected or what they are doing.
+- Use `/workbench:mesh stop` to cleanly shut down a mesh server started with `start` — it reads the same pid file `start` wrote (default `.workbench/mesh/server.pid`, or an explicit `--pid-file`) and sends SIGTERM, never SIGKILL.
 - Use `/workbench:mesh room <name>` for shared lead, task, incident, or project channels.
 - Use `/workbench:mesh message <target> <text>` for direct chat or room updates.
 - Use `/workbench:mesh ask <target> <question>` for status, blocker, help, or clarification requests.

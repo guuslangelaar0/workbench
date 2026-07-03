@@ -1,7 +1,7 @@
 ---
 description: Create/list epics for big multi-part efforts, themes, initiatives, or fleet-level decomposition into related tasks
 allowed-tools: ["Bash", "Read"]
-argument-hint: "[\"<title>\"] [--theme <theme>] | list"
+argument-hint: "[\"<title>\"] [--theme <theme>] | list | close <id>"
 ---
 
 You are the `/workbench:epic` command. Epics group related tasks under one user-facing outcome. They exist at levels whose `decomposition` dial is grouped (pair = light-epics, crew = epics, fleet = themes-epics); a `solo` project uses flat tasks and has no `.claude/epics/` dir.
@@ -32,6 +32,18 @@ It allocates the next ID from the **shared** `.claude/tasks/_next-id` (so epic a
 
 Then tell the user how to attach tasks: create tasks under it with `/workbench:task "<title>" --epic <epic-id>`, or add `**Epic:** <epic-id>` to an existing task's header. The epic's progress (done/total) shows in `/workbench:mc` and `/workbench:epic list`.
 
-An epic's `**Status:**` is `open` until you mark it `done` (edit the epic file when all its tasks are verified/shipped).
+An epic's `**Status:**` is `open` until it is closed (see below) — never hand-edit it to `done`.
+
+## Close — when `$ARGUMENTS` starts with `close <id>`
+
+Run the epic closer:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/epic-close.sh" <epic-id> --target "${CLAUDE_PROJECT_DIR}"
+```
+
+It scans `.claude/tasks/**/*.md` for every task carrying `**Epic:** <epic-id>`, resolves this project's terminal lifecycle stages from its level (`verified`/`shipped` — whichever the level actually has; `staged`/`release-candidate` are deploy-gated waypoints, not terminal), and only rewrites the epic's `**Status:**` to `done` if every linked task has reached one of those. If any linked task is not yet terminal, it refuses (non-zero exit) and lists exactly which task(s) are blocking and their current stage — this is the same enforcement discipline `task-move.sh`/`verify-gate.sh` already apply to task transitions, now applied to epics too. There is no force override: report the blocking tasks to the user rather than closing anyway.
+
+Report either the closed epic ID, or the blocking task list verbatim so the user knows what still needs to land.
 
 Do not create an epic until you have a title. If the project is unconfigured, defer to `/workbench:setup` first.

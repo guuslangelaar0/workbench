@@ -28,6 +28,8 @@ Then explain: continue the latest open purpose with `adopt`, or pick from backlo
 
 Set this session's purpose. Use mode `task` only when the purpose is tied to one task id; otherwise use `track` for a track lead or `backlog-scout` when the lead is intentionally triaging backlog.
 
+For designating a topic lead specifically, `/workbench:teamlead <topic>` wraps this same `--mode track` call and additionally runs a liveness check (`wb-coord who`) to catch another live session already leading that track — calling `set` here alone does not check for that collision.
+
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/lead.sh" set \
   --target "${CLAUDE_PROJECT_DIR}" \

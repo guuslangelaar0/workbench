@@ -5,7 +5,8 @@ TMP="$(mktemp -d)"
 HOME_TMP="$(mktemp -d)"
 LOG="$TMP/mesh.log"
 PIDF="$TMP/mesh.pid"
-trap 'kill "$(cat "$PIDF" 2>/dev/null)" >/dev/null 2>&1 || true; rm -rf "$TMP" "$HOME_TMP"' EXIT
+DEFAULT_PIDF="$TMP/.workbench/mesh/server.pid"
+trap 'kill "$(cat "$PIDF" 2>/dev/null)" >/dev/null 2>&1 || true; kill "$(cat "$DEFAULT_PIDF" 2>/dev/null)" >/dev/null 2>&1 || true; rm -rf "$TMP" "$HOME_TMP"' EXIT
 fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
 
@@ -52,5 +53,35 @@ UNAUTH_RC=0
 curl -fsS "http://127.0.0.1:$PORT/api/state" >/tmp/mesh.unauth.$$ 2>&1 || UNAUTH_RC=$?
 chk "api rejects missing auth" "[ '$UNAUTH_RC' -ne 0 ]"
 rm -f /tmp/mesh.unauth.$$
+
+# --- mesh.sh stop: explicit --pid-file, clean SIGTERM (not SIGKILL) on the server
+#     already started above via the raw binary + --pid-file "$PIDF" ---
+SERVER_PID="$(cat "$PIDF")"
+STOP_OUT="$(bash "$HERE/scripts/mesh.sh" stop --pid-file "$PIDF" 2>&1)"; STOP_RC=$?
+chk "mesh stop exits 0"                    "[ '$STOP_RC' -eq 0 ]"
+chk "mesh stop reports success"            "printf '%s' \"\$STOP_OUT\" | grep -q 'stopped mesh server'"
+chk "mesh stop actually killed the server" "! kill -0 '$SERVER_PID' 2>/dev/null"
+chk "mesh stop removed the pid file"       "[ ! -f '$PIDF' ]"
+
+STOP_AGAIN_OUT="$(bash "$HERE/scripts/mesh.sh" stop --pid-file "$PIDF" 2>&1)"; STOP_AGAIN_RC=$?
+chk "mesh stop on an already-stopped server is a clean error" "[ '$STOP_AGAIN_RC' -ne 0 ]"
+chk "mesh stop reports no pid file"                            "printf '%s' \"\$STOP_AGAIN_OUT\" | grep -q 'no pid file'"
+
+# --- mesh.sh start (no --pid-file): defaults to .workbench/mesh/server.pid so
+#     `mesh.sh stop` (no args either) can find it without the caller remembering a path ---
+CLAUDE_PLUGIN_ROOT="$HERE" CLAUDE_PROJECT_DIR="$TMP" WORKBENCH_HOME="$HOME_TMP" \
+  bash "$HERE/scripts/mesh.sh" start --local --port 0 > "$TMP/start2.log" 2>&1 &
+for _ in $(seq 1 50); do
+  [ -s "$DEFAULT_PIDF" ] && break
+  sleep 0.1
+done
+chk "start without --pid-file defaults to .workbench/mesh/server.pid" "[ -s '$DEFAULT_PIDF' ]"
+DEFAULT_PID="$(cat "$DEFAULT_PIDF" 2>/dev/null)"
+chk "default-pid-file server process is alive" "[ -n '$DEFAULT_PID' ] && kill -0 '$DEFAULT_PID' 2>/dev/null"
+
+DEFAULT_STOP_OUT="$(CLAUDE_PLUGIN_ROOT="$HERE" CLAUDE_PROJECT_DIR="$TMP" WORKBENCH_HOME="$HOME_TMP" \
+  bash "$HERE/scripts/mesh.sh" stop 2>&1)"; DEFAULT_STOP_RC=$?
+chk "stop without --pid-file discovers the default path" "[ '$DEFAULT_STOP_RC' -eq 0 ]"
+chk "stop without --pid-file kills the default-path server" "! kill -0 '$DEFAULT_PID' 2>/dev/null"
 
 [ "$fail" = 0 ] && echo "PASS: mesh-service" || { echo "mesh-service test failed"; exit 1; }

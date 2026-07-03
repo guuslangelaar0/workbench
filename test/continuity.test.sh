@@ -6,7 +6,7 @@ fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
 jmode() { python3 -c "import json,sys;d=json.load(open(sys.argv[1]));print(next((f['mode'] for f in d['files'] if f['path']==sys.argv[2]),'MISSING'))" "$1" "$2"; }
 
-bash "$HERE/scripts/init.sh" --name "Acme" --mission "Private." --target "$TMP" >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --level fleet --name "Acme" --mission "Private." --target "$TMP" >/dev/null 2>&1
 chk "SESSION_STATE rendered"      "[ -f '$TMP/.claude/SESSION_STATE.md' ]"
 chk "SESSION_STATE has name"      "grep -q 'Acme' '$TMP/.claude/SESSION_STATE.md'"
 chk "SESSION_STATE no tokens"     "! grep -q '{{' '$TMP/.claude/SESSION_STATE.md'"
@@ -16,7 +16,7 @@ chk "charter carries the goal"    "grep -q 'Goal' '$TMP/.workbench/loop-charter.
 chk "charter no tokens left"      "! grep -q '{{' '$TMP/.workbench/loop-charter.md'"
 # once: a re-run must not clobber edits
 echo "EDITED-BY-USER" >> "$TMP/.claude/SESSION_STATE.md"
-bash "$HERE/scripts/init.sh" --name "Acme" --mission "Private." --target "$TMP" >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --level fleet --name "Acme" --mission "Private." --target "$TMP" >/dev/null 2>&1
 chk "SESSION_STATE preserved"     "grep -q 'EDITED-BY-USER' '$TMP/.claude/SESSION_STATE.md'"
 
 # the grounding hook prints a useful brief for a workbench project, and no-ops elsewhere

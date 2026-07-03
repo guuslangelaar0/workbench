@@ -1,32 +1,18 @@
 ---
-description: Dispatch a specific unblocked backlog task by id — checks claims, dependencies, and in-review pressure before spawning an engineer lane
-allowed-tools: ["Bash", "Read", "Task", "TodoWrite"]
-argument-hint: "<id> [--worktree [name]|--shared] [--background|--wait] [lane/repo]"
+description: Dispatch a specific unblocked backlog task by id to an engineer lane — Claude by default, or Codex via --engine codex — after checking claims, dependencies, and in-review pressure
+allowed-tools: ["Bash", "Read", "Task", "Agent", "TodoWrite"]
+argument-hint: "<id> [--engine claude|codex] [--worktree [name]|--shared] [--background|--wait|--reconcile] [--fresh|--resume] [--model <model|spark>] [--effort <level>] [lane/repo]"
 ---
 
-Dispatch a task to an engineer. Follow the `orchestration` skill — **you are the lead; you do not write the code yourself.**
+`dispatch` is the generic front door for "assign this task to an engineer" — it does not care which engine does the work. Follow the `orchestration` skill — **you are the lead; you do not write the code yourself.**
 
-1. Parse `$ARGUMENTS`: the task `<id>` (4-digit) and an optional lane/repo hint. If no explicit ID was supplied, do not guess and do not spawn a lane. Run `/workbench:mc` or `deps.sh ready` and tell the user which task is actually ready.
-   - `--worktree [name]`: prefer a native Claude Code worktree lane. Use the given name or `wb-<id>-<slug>`.
-   - `--shared`: avoid a persistent/background worktree and use the normal foreground Task-tool path. The engineer agent can still run in Claude's temporary `isolation: worktree` sandbox.
-   - `--background`: for a native CLI lane, launch it with `claude --worktree <name> --bg --agent engineer "<prompt>"`.
-   - `--wait`: keep the engineer in the current session foreground path.
-   - if `--background` and `--wait` are both present, stop and ask the user to choose one.
-2. Read the task file under `.claude/tasks/` for that id (its `## Why`, acceptance criteria, `**Repo(s):**`, `**Verification:**`). If it has `**Blocked-by:**` IDs that have not reached `verified/`/`shipped/`, stop and report the blocker; do not start the lane.
-   Before spawning, check the in-review cap via `/workbench:mc` or by counting `.claude/tasks/in-review/`. If the queue is at/over the hard-drain threshold, stop and tell the user to drain/verify in-review first.
-3. **Claim the task** so no other live lead takes it (multi-teamlead safety — see the `coordination` skill). First check it's free, then claim it:
-   - `bash "${CLAUDE_PROJECT_DIR}/scripts/coord/wb-coord" claims task:<id>` — if it reports the task claimed by another live session, STOP (someone else owns it).
-   - otherwise `bash "${CLAUDE_PROJECT_DIR}/scripts/coord/wb-coord" claim task:<id>` (skip silently if `scripts/coord/wb-coord` doesn't exist — coordination is full-profile only).
-   Then move it to in-development (you own lifecycle transitions):
-   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-move.sh" <id> in-development --target "${CLAUDE_PROJECT_DIR}"`
-   and append an owner line to its `## Notes` (e.g. `<UTC time> — claimed by lead:<topic> (session <sid>)`).
-   Set this session's durable lead purpose to the dispatched task:
-   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lead.sh" set --target "${CLAUDE_PROJECT_DIR}" --session-id "<session-id>" --mode task --active-task "<id>" --track "<task Track field>" --purpose "<task title>"`
-4. Resolve the engineer's model via the `models` skill (read `way_of_working.models`).
-5. Choose the lane isolation path:
-   - **Default / foreground:** spawn the engineer with the Task tool, `subagent_type: engineer`, passing the model and a prompt that includes: the task file path, the target repo/stack (from the lane hint or `config.project.repos`), and the instruction to implement, run the declared verification, commit (scoped pathspec, no Co-Authored-By), note progress, and report back. The `engineer` agent declares `isolation: worktree`, so current Claude Code releases put the subagent in a native temporary worktree.
-   - **Native background worktree:** when the user asked for a background/worktree lane, or when a lead is running several same-repo lanes, launch Claude Code itself with `claude --worktree <name> --bg --agent engineer "<prompt>"`. Capture the printed background session id/management commands in the task notes, then use `claude agents --cwd "${CLAUDE_PROJECT_DIR}" --json` or `claude agents` to monitor it. Claude worktrees branch from the configured worktree base; when the lane must inherit the current branch/task move or unpushed context, commit/push the required state or set Claude Code `worktree.baseRef` to `"head"` before launch. If the first worktree launch reports a workspace trust error, run `claude` once in the repo to accept trust, then retry.
-   - **Fallback:** if native `--worktree`/background launch is unavailable, use `scripts/coord/bb-worktree.sh new <name>` and start Claude from that checkout, or fall back to the current Task-tool lane.
-6. When the engineer returns or a background worktree lane reports ready, **gate** it (review diff, build, run verification) per the `orchestration` skill — do not advance the task on the engineer's word alone. Then `/workbench:verify <id>`.
+1. Parse `$ARGUMENTS` for an `--engine <claude|codex>` flag.
+   - No `--engine` flag, or `--engine claude`: the engine is **Claude** — this is the default and is exactly what `/workbench:dispatch <id>` has always done. Nothing about this path changes: same flags, same claim/move-to-in-development step, same lane spawn, same gate.
+   - `--engine codex`: the engine is **Codex**.
+   Strip `--engine <value>` from the arguments; forward everything else (`<id>`, lane/repo hint, and any remaining flags) unchanged to the resolved engine's command below.
+2. Route to the engine-specific command and follow **every step it documents**, verbatim, with the forwarded arguments:
+   - **Claude (default):** follow `commands/claude-engineer.md` — it claims the task via `wb-coord`, moves it to `in-development` (`task-move.sh`), resolves the model via the `models` skill, and spawns the `engineer` Task-tool lane (foreground, `--worktree`, `--background`/`--wait`, or `--shared`).
+   - **Codex (`--engine codex`):** follow `commands/codex-engineer.md` — it claims the task via `wb-coord`, moves it to `in-development`, starts the disk lane lease and Workbench job record, and invokes the `codex:codex-rescue` subagent through the `Agent` tool. This also covers `--reconcile`, `--fresh`/`--resume`, `--model`, and `--effort`.
+3. Never claim the task is done here — dispatch only starts the work, regardless of engine.
 
-Never claim the task is done here — dispatch only starts the work.
+`/workbench:claude-engineer <id>` and `/workbench:codex-engineer <id>` remain independently callable when the user wants to name the engine directly; `/workbench:dispatch` is the engine-agnostic entry point that defaults to Claude and routes to whichever engine `--engine` (or the equivalent direct command) selects.
