@@ -85,14 +85,18 @@ evo_parse() { # <personas.json>
     function flush() { if (havetok) { emit(tok); havetok = 0 }; expectval = 0 }
     function emit(v) {
       gsub(/\t/, " ", v)
-      if (depth == 1)      printf "knob\t%s\t%s\n", lastkey, v
-      else if (depth >= 2) printf "p\t%d\t%s\t%s\n", pidx, lastkey, v
+      if (depth == 1)                printf "knob\t%s\t%s\n", lastkey, v
+      else if (depth >= 2 && pdepth) printf "p\t%d\t%s\t%s\n", pidx, lastkey, v
     }
     { buf = buf $0 "\n" }
     END {
       n = length(buf); depth = 0; instr = 0; esc = 0
       tok = ""; havetok = 0; lastkey = ""; expectval = 0
       pidx = 0; numtok = ""; innum = 0
+      # pdepth = bracket depth at which the TOP-LEVEL "personas" array opened
+      # (0 = not inside it). Only objects inside that array are personas —
+      # a depth-2 object under any other key is ignored, never counted/emitted.
+      adepth = 0; pdepth = 0
       for (i = 1; i <= n; i++) {
         c = substr(buf, i, 1)
         if (instr) {
@@ -106,10 +110,11 @@ evo_parse() { # <personas.json>
         if (expectval && c ~ /[-0-9.]/) { numtok = numtok c; innum = 1; continue }
         if (innum) { emit(numtok); numtok = ""; innum = 0; expectval = 0 }
         if      (c == ":")  { if (havetok) { lastkey = tok; havetok = 0 }; expectval = 1 }
-        else if (c == "{")  { depth++; if (depth == 2) pidx++; expectval = 0 }
+        else if (c == "{")  { depth++; if (depth == 2 && pdepth) pidx++; expectval = 0 }
         else if (c == "}")  { flush(); depth-- }
         else if (c == ",")  { flush() }
-        else if (c == "[" || c == "]") { flush() }
+        else if (c == "[")  { flush(); adepth++; if (!pdepth && depth == 1 && lastkey == "personas") pdepth = adepth }
+        else if (c == "]")  { flush(); if (pdepth && adepth == pdepth) pdepth = 0; adepth-- }
       }
       printf "meta\tpcount\t%d\n", pidx   # objects SEEN (even empty {}), for validation
     }
@@ -154,7 +159,11 @@ _validate() { # <personas.json> -> problem lines on stdout; return 0 iff clean
     total=$((total + 1))
     name="${line%%$'\t'*}"; rest="${line#*$'\t'}"
     role="${rest%%$'\t'*}"; prompt="${rest#*$'\t'}"
-    [ -n "$name" ] || { echo "persona #$total has no name (every persona requires a name)"; bad=1; name="#$total"; }
+    # a name must contain at least one non-whitespace char — "  " is not a name
+    case "$name" in
+      *[![:space:]]*) : ;;
+      *) echo "persona #$total has no name (every persona requires a non-blank name)"; bad=1; name="#$total" ;;
+    esac
     [ -n "$prompt" ] || { echo "persona '$name' has an empty prompt"; bad=1; }
     [ "${#prompt}" -le "$EVO_MAX_PROMPT_CHARS" ] || { echo "persona '$name' prompt is ${#prompt} chars (max $EVO_MAX_PROMPT_CHARS)"; bad=1; }
     case "$role" in
@@ -331,7 +340,9 @@ case "$CMD" in
       case "$last" in ''|*[!0-9]*) last=0 ;; esac
       gap="${EVOLVE_SUMMIT_GUARD_SECONDS:-600}"
       age=$(( $(date +%s) - last ))
-      if [ "$age" -ge 0 ] && [ "$age" -lt "$gap" ]; then
+      # negative age = future-dated stamp (clock skew / bad write): treat it as
+      # freshly recorded and still refuse — never silently disable the guard
+      if [ "$age" -lt "$gap" ]; then
         echo "evolve: a summit was recorded ${age}s ago (< ${gap}s guard) — refusing a duplicate; another session likely claimed this summit (--force to override)" >&2
         exit 75
       fi
