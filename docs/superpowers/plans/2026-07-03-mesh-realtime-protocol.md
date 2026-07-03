@@ -115,6 +115,7 @@ Add to the `tests` module in `protocol.rs`:
             to: to.map(str::to_string),
             ts: "2026-07-03T00:00:00Z".to_string(),
             payload: serde_json::json!({}),
+            ack_of: None,
         }
     }
 ```
