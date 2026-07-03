@@ -68,6 +68,9 @@ Run a task's declared verification, review the diff, build, and gate it: on pass
 ### `/workbench:mc`
 Mission Control — a text dashboard of tasks by stage, the in-review cap, decisions, build status, and prod health. Flags: `--no-prod` (skip network checks), `--no-build` (skip cargo/tsc).
 
+### `/workbench:evolve [status | init | --force] [--track <t>]`
+**Opt-in** evolution summit — a project-configurable persona panel that keeps replenishing the backlog with good work. The roster lives at `.workbench/evolution/personas.json` (N generators + **exactly one** critic; schema in `templates/schemas/personas.schema.json`); `init` scaffolds a preset matching your maturity level (solo → one broad generator + critic; pair/crew/fleet → 3 domain generators + critic; `--preset admin-example` is a worked 4-generator panel for internal admin/ops surfaces). A summit is due when the unblocked backlog for the roster's track drops below `queue_low_water` **or** strictly more than `cadence_hours` have passed since the last one — and the very first check after `init` returns `due no-summit-yet` unconditionally (before any backlog/cadence evaluation), so a freshly-enabled project convenes its first summit on the next rotation. `/workbench:loop` consults this trigger as part of its normal rotation (`scripts/evolve.sh check`), so there is no separate scheduler. Each summit runs a dual mandate: generator personas propose new ideas *and* retrospectively audit a rotating slice of already-verified/shipped tasks; one critic pass kills/merges/approves; approved survivors become normal backlog tasks (`task-new.sh`, epics at pair+). Every idea lands in the append-only ideas ledger (`.workbench/evolution/ideas-log.md`) — the panel's memory across cycles and your window into what it's been thinking. No new approval gate, and the verification ladder is unchanged: a panel-argued task still earns `verified/` only with evidence.
+
 ---
 
 ## Multi-session & greenfield

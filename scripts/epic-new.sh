@@ -28,6 +28,8 @@ TARGET="${TARGET%/}"; [ -n "$TARGET" ] || TARGET="/"
 # shared global ID counter lives under .claude/tasks/ (epics + tasks draw from it)
 NID="$TARGET/.claude/tasks/_next-id"
 [ -f "$NID" ] || { echo "epic-new.sh: no $NID (run /workbench:init first?)" >&2; exit 1; }
+# same lock as task-new.sh — one counter, one lock
+il_lock "$TARGET" tasks-next-id || exit 75
 ID="$(tr -d ' \n' < "$NID")"
 case "$ID" in ''|*[!0-9]*) echo "epic-new.sh: _next-id is not numeric: '$ID'" >&2; exit 1 ;; esac
 

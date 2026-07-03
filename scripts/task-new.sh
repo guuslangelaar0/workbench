@@ -33,6 +33,10 @@ TARGET="${TARGET%/}"; [ -n "$TARGET" ] || TARGET="/"
 T="$TARGET/.claude/tasks"
 NID="$T/_next-id"
 [ -f "$NID" ] || { echo "task-new.sh: no $NID (run /workbench:init first?)" >&2; exit 1; }
+# serialize the read-allocate-bump of _next-id across concurrent sessions
+# (same advisory-lock discipline as coord's with-lock.sh; shared with epic-new.sh
+# so task and epic IDs can't collide under concurrency either)
+il_lock "$TARGET" tasks-next-id || exit 75
 ID="$(tr -d ' \n' < "$NID")"
 case "$ID" in ''|*[!0-9]*) echo "task-new.sh: _next-id is not numeric: '$ID'" >&2; exit 1 ;; esac
 

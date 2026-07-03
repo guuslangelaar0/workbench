@@ -1,0 +1,28 @@
+{
+  "workbench": {
+    "version": "0.8.1",
+    "initialized_at": "2026-06-01T00:00:00Z",
+    "level": "crew"
+  },
+  "project": {
+    "name": "Fixture Admin Project",
+    "mission": "Admin/ops control surface fixture for evolution-loop evals.",
+    "kind": "existing",
+    "topology": "single"
+  },
+  "way_of_working": {
+    "models": "recommended",
+    "verification": "recommended",
+    "review": "recommended",
+    "parallelism": "recommended",
+    "enforcement": "warn-default",
+    "continuity": "recommended",
+    "graphify": "off",
+    "codex": "off",
+    "remote": "off",
+    "inception_depth": "recommended"
+  },
+  "lifecycle": {
+    "in_review_cap": 10
+  }
+}
