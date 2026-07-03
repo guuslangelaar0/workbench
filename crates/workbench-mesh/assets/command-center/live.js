@@ -51,6 +51,7 @@ window.WB = window.WB || {};
   let socket = null;
   let lastContact = 0;
   let firstLoad = true;
+  let lastDerivedHostState = null; // last reachable state we derived, so live detection doesn't fight a manual tweak
 
   function setHostState(next) {
     if (WB.state && WB.state.hostState !== next) {
@@ -58,6 +59,23 @@ window.WB = window.WB || {};
       if (next === 'down') WB.HOST.downSince = lastContact || Date.now();
       if (WB.app) { WB.app.refreshChrome(); WB.app.rerenderSurface(); }
     }
+  }
+
+  // Reachable-state detection: reachability ('down') is owned by loadState/tick;
+  // here we resolve the two reachable states — healthy vs orphaned — from live
+  // presence. Orphaned = the daemon answers but the actor that started it (its
+  // host session) has gone stale. Applied through setHostState so a transition
+  // re-renders chrome + surface like any other. Only fires when the derived
+  // value CHANGES, so the Tweaks panel can still override for exploration.
+  function deriveHostState(now) {
+    const reachable = lastContact && (now - lastContact) <= 30000;
+    if (!reachable) { lastDerivedHostState = null; return; }
+    const host = WB.HOST.startedBy && WB.AGENTS.find((a) => a.id === WB.HOST.startedBy);
+    const derived = host && host.heat === 'stale' ? 'orphaned' : 'healthy';
+    if (derived === lastDerivedHostState) return;
+    lastDerivedHostState = derived;
+    if (derived === 'orphaned') WB.HOST.orphanedSince = (host && host.staleSince) || now;
+    setHostState(derived);
   }
 
   function loadState() {
@@ -71,8 +89,7 @@ window.WB = window.WB || {};
         const evs = Array.isArray(data.events) ? data.events : [];
         for (const ev of evs) ingest(ev, firstLoad);
         firstLoad = false;
-        recomputeDerived();
-        setHostState('healthy');
+        recomputeDerived(); // ends in deriveHostState — sets healthy/orphaned from live presence
         if (WB.app) { WB.app.refreshChrome(); WB.app.rerenderSurface(); }
         connectSocket();
       })
@@ -303,6 +320,7 @@ window.WB = window.WB || {};
       if (!alive && a) l.staleFor = WB.ui.rel(now - (a.staleSince || now));
       l.isHost = l.actor === WB.HOST.startedBy;
     }
+    deriveHostState(now);
   }
 
   let tickN = 0;

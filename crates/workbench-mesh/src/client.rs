@@ -454,6 +454,85 @@ pub async fn set_doing(
     Ok(())
 }
 
+/// Tail a session's structured CLI stream into the mesh.
+///
+/// Reads `claude -p --output-format stream-json` / `codex exec --json`
+/// lines on stdin, tees every line through to stdout unchanged (so the
+/// tailer can sit inside an existing pipeline), and appends one
+/// `output.chunk` event per extracted boundary into the per-agent
+/// `output:<actor>` room. Diagnostics go to stderr only — stdout stays
+/// bit-identical to the wrapped stream. Append failures are warnings, not
+/// fatal: the tailer must never take down the session it observes.
+pub async fn tail_stream(
+    project_root: PathBuf,
+    home: Option<PathBuf>,
+    from: Option<String>,
+    provider: Option<String>,
+    model: Option<String>,
+) -> Result<()> {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+
+    let actor = resolve_actor(from.as_deref());
+    let room = format!("output:{actor}");
+    let platform = detect_platform();
+    let capabilities = merge_capabilities(&platform, Vec::new());
+    let provider = resolve_identity_field(provider, "WORKBENCH_MESH_PROVIDER");
+    let model = resolve_identity_field(model, "WORKBENCH_MESH_MODEL");
+
+    // Announce presence once so the actor appears on the bench immediately;
+    // every subsequent output.chunk refreshes its liveness on the dashboard.
+    match append_or_post_event(
+        &project_root,
+        home.clone(),
+        "presence.heartbeat",
+        "presence",
+        &actor,
+        None,
+        json!({
+            "availability": "busy",
+            "reason": "tailing session output",
+            "platform": platform,
+            "capabilities": capabilities,
+            "provider": provider,
+            "model": model,
+        }),
+    )
+    .await
+    {
+        Ok(event) => eprintln!("tail: {actor} on the bench (seq={})", event.seq),
+        Err(error) => eprintln!("tail: presence heartbeat failed: {error:#}"),
+    }
+
+    let stdin = BufReader::new(tokio::io::stdin());
+    let mut lines = stdin.lines();
+    let mut forwarded: u64 = 0;
+    while let Some(line) = lines.next_line().await.context("read stream line")? {
+        println!("{line}");
+        for chunk in crate::tailer::extract_chunks(&line) {
+            let mut payload = json!({ "kind": chunk.kind, "summary": chunk.summary });
+            if let Some(tool) = &chunk.tool {
+                payload["tool"] = json!(tool);
+            }
+            match append_or_post_event(
+                &project_root,
+                home.clone(),
+                "output.chunk",
+                &room,
+                &actor,
+                None,
+                payload,
+            )
+            .await
+            {
+                Ok(_) => forwarded += 1,
+                Err(error) => eprintln!("tail: dropped chunk: {error:#}"),
+            }
+        }
+    }
+    eprintln!("tail: stream ended — {forwarded} output.chunk events into {room}");
+    Ok(())
+}
+
 pub async fn watch_actor(
     project_root: PathBuf,
     home: Option<PathBuf>,

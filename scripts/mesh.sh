@@ -35,6 +35,7 @@ operations:
   availability STATE [--reason TEXT] [--as ACTOR] [--platform NAME] [--capability VALUE]... [--provider NAME] [--model NAME]
   doing TEXT... [--as ACTOR] [--platform NAME] [--capability VALUE]... [--provider NAME] [--model NAME]
   watch ACTOR [--as ACTOR]
+  tail --as ACTOR [--provider NAME] [--model NAME]   (reads stream-json on stdin)
 
 --as ACTOR identifies this session/process as ACTOR in the posted event,
 instead of the shared default "session:lead". Set this (or export
@@ -46,6 +47,14 @@ its default dispatch capabilities (e.g. macOS gets ios-simulator). --platform
 overrides auto-detection; --capability (repeatable) adds project-specific
 extras on top. A lead reading these can route iOS QA only to macos sessions,
 Windows-native work only to windows sessions, and so on.
+
+tail pipes a live Claude/Codex session's stream-json into the mesh: it tees
+stdin through to stdout unchanged while appending output.chunk events into the
+room output:<ACTOR> and posting one presence heartbeat, so the actor appears on
+the bench. --as is required (a tailer with no actor identity would write into
+room "output:", which the server rejects). Example:
+  claude -p "fix the bug" --output-format stream-json --verbose \
+    | mesh.sh tail --as generator-1 --provider claude --model sonnet
 
 start always writes a pid file so it can be stopped later — pass --pid-file
 to choose the path explicitly (test harnesses do this), otherwise it defaults
@@ -417,6 +426,17 @@ case "$cmd" in
   watch)
     require_arg "actor" "${1:-}"
     exec "$BIN" watch "${PROJECT_ARGS[@]}" "$1" "${AS_ARGS[@]}"
+    ;;
+  tail)
+    # tail reads stream-json on stdin and needs an actor identity to name its
+    # per-agent room output:<ACTOR>. Without --as it would write into "output:",
+    # which the server rejects — fail early with a clear message instead.
+    if [ "${#AS_ARGS[@]}" -eq 0 ] && [ -z "${WORKBENCH_MESH_ACTOR:-}" ]; then
+      echo "mesh: tail requires --as ACTOR (or export WORKBENCH_MESH_ACTOR)" >&2
+      usage >&2
+      exit 2
+    fi
+    exec "$BIN" tail "${PROJECT_ARGS[@]}" "${AS_ARGS[@]}" "${PROVIDER_ARGS[@]}" "${MODEL_ARGS[@]}"
     ;;
   open)
     if url="$(metadata_url)"; then

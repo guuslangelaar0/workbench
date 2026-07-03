@@ -33,6 +33,9 @@ enum Command {
     Availability(AvailabilityArgs),
     Doing(DoingArgs),
     Watch(WatchArgs),
+    /// Tail a session's stream-json output into output:<actor> as
+    /// output.chunk events, teeing every stdin line through to stdout.
+    Tail(TailArgs),
     Actor(ActorCommand),
     Snapshot(SnapshotCommand),
 }
@@ -367,6 +370,22 @@ struct DoingArgs {
 }
 
 #[derive(Debug, Args)]
+struct TailArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    /// Actor identity the tailed session posts as; its feed room is
+    /// output:<actor>. Falls back to WORKBENCH_MESH_ACTOR.
+    #[arg(long = "as")]
+    as_actor: Option<String>,
+    #[arg(long)]
+    provider: Option<String>,
+    #[arg(long)]
+    model: Option<String>,
+}
+
+#[derive(Debug, Args)]
 struct WatchArgs {
     #[arg(long)]
     target: PathBuf,
@@ -476,6 +495,16 @@ async fn main() -> Result<()> {
         }
         Command::Watch(args) => {
             client::watch_actor(args.target, args.home, args.actor, args.as_actor).await
+        }
+        Command::Tail(args) => {
+            client::tail_stream(
+                args.target,
+                args.home,
+                args.as_actor,
+                args.provider,
+                args.model,
+            )
+            .await
         }
         Command::Actor(actor) => run_actor(actor).await,
         Command::Snapshot(snapshot) => run_snapshot(snapshot),

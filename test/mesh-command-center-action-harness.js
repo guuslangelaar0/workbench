@@ -124,6 +124,15 @@ for (const file of ["host.js", "ops.js", "bench.js"]) {
   chk(file + " confirms name a target", sources[file].includes("target:"));
 }
 
+// XSS hygiene: server-derived host fields flowing into an html: sink must be
+// escaped. The send button interpolates WB.HOST.startedBy (from the --as flag).
+const ui = sources["ui.js"];
+chk(
+  "ui.js escapes startedBy in the send button html",
+  ui.includes("esc(WB.HOST.startedBy)") && !/'\s*Send to\s*'\s*\+\s*WB\.HOST\.startedBy/.test(ui),
+  "send button must interpolate esc(WB.HOST.startedBy), not the raw field"
+);
+
 // The real bundle must not carry the design prototype's demo scenario.
 chk("data.js carries no demo agents", !sources["data.js"].includes("forge-lead"));
 chk("data.js starts with empty roster", sources["data.js"].includes("WB.AGENTS = []"));

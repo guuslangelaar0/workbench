@@ -5,3 +5,4 @@ pub mod protocol;
 pub mod server;
 pub mod statusline;
 pub mod store;
+pub mod tailer;

@@ -136,6 +136,23 @@ curl -fsS -X POST "http://127.0.0.1:$PORT/api/events" \
   -d '{"type":"message.sent","room":"output:generator-1","from":"ui:owner","payload":{"text":"nope"}}' >/dev/null 2>&1 || CHAT_IN_OUTPUT_RC=$?
 chk "coordination chat rejected in output rooms" "[ '$CHAT_IN_OUTPUT_RC' -ne 0 ]"
 
+# tail: stream-json on stdin → output.chunk events in output:<actor>, stdout teed unchanged.
+TAIL_IN="$TMP/tail-input.jsonl"
+cat > "$TAIL_IN" <<'JSONL'
+{"type":"system","subtype":"init","tools":[]}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Running the tailer fixture."},{"type":"tool_use","name":"Bash","input":{"command":"cargo test -p tail-fixture"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"noisy tool result that must not be forwarded"}]}}
+{"type":"result","subtype":"success","result":"fixture complete"}
+JSONL
+TAIL_OUT="$("$BIN" tail --target "$TMP" --home "$HOME_TMP" --as tail-fixture --provider claude --model sonnet < "$TAIL_IN" 2>"$TMP/tail.err")"
+chk "tail tees stdin through to stdout unchanged" "[ \"\$TAIL_OUT\" = \"\$(cat '$TAIL_IN')\" ]"
+STATE_TAIL="$(curl -fsS "http://127.0.0.1:$PORT/api/state" -H "Authorization: Bearer $TOKEN")"
+chk "tail posts tool-call chunk into output room" "printf '%s' \"\$STATE_TAIL\" | grep -q 'cargo test -p tail-fixture'"
+chk "tail posts result message chunk" "printf '%s' \"\$STATE_TAIL\" | grep -q 'result: fixture complete'"
+chk "tail announces presence with provider/model" "printf '%s' \"\$STATE_TAIL\" | grep -q '\"reason\":\"tailing session output\"'"
+chk "tail never forwards tool results" "! printf '%s' \"\$STATE_TAIL\" | grep -q 'noisy tool result'"
+chk "tail chunks land in output:tail-fixture" "printf '%s' \"\$STATE_TAIL\" | grep -q '\"room\":\"output:tail-fixture\"'"
+
 # provider/model round-trip through the doing CLI, same as platform/capabilities.
 "$BIN" doing --target "$TMP" --home "$HOME_TMP" "building the tailer" --as generator-1 --platform linux --provider claude --model sonnet >/dev/null
 STATE_PRESENCE="$(curl -fsS "http://127.0.0.1:$PORT/api/state" -H "Authorization: Bearer $TOKEN")"

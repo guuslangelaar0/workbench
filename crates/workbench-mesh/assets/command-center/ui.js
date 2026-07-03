@@ -99,7 +99,7 @@ window.WB = window.WB || {};
       el('button', { class: 'btn quiet', style: 'flex-shrink:0; font-size:11px;', html: svgIcon('copy', 11), title: 'Copy command', onclick: () => toast('Command copied', cmd) }),
       el('button', {
         class: 'btn primary', style: 'flex-shrink:0; font-size:11px;',
-        html: svgIcon('send', 11) + ' Send to ' + WB.HOST.startedBy,
+        html: svgIcon('send', 11) + ' Send to ' + esc(WB.HOST.startedBy),
         title: live ? 'Posts the command into the host session — it runs there, not here' : 'Host session is gone — nobody is home to run it',
         disabled: live ? null : 'disabled',
         onclick: () => {
