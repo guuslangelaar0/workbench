@@ -91,7 +91,7 @@ window.WB = window.WB || {};
     const me = m.who === 'you (operator)';
     const bubble = el('div', { class: 'bubble' + (m.kind === 'command' ? ' cmd' : '') });
     if (m.kind === 'ask') bubble.appendChild(el('span', { class: 'ask-chip', html: chip('status?', 'amber').outerHTML }));
-    bubble.appendChild(document.createTextNode((m.kind === 'command' ? '$ ' : '') + m.text));
+    bubble.appendChild(el('span', { class: 'bubble-text', text: (m.kind === 'command' ? '$ ' : '') + m.text }));
     let tag;
     if (m.to) tag = '→ @' + m.to;
     else if (m.room === 'team') tag = '→ team' + (m.via ? ' · via ' + m.via : '');
@@ -691,7 +691,7 @@ window.WB = window.WB || {};
       const isOwn = m.who === 'you (operator)';
       scroll.appendChild(node);
       if (!isOwn) {
-        const bubble = node.querySelector('.bubble');
+        const bubble = node.querySelector('.bubble-text');
         if (bubble) {
           const full = bubble.textContent;
           revealText(bubble, full);
