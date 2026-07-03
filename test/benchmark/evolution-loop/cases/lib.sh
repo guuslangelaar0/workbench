@@ -64,14 +64,21 @@ el_ledger_has_disposition_for() {
 }
 
 # el_ledger_count_retro_entries_for <ledger_path> <task_id> — how many (wrap-
-# normalized) "retrospective audit of task #<id>" entries exist. Use this instead of
-# a raw grep -c so a re-audit is caught even when the original entry wraps.
+# normalized) ledger entries contain the idea text "retrospective audit of task #<id>".
+# This checks the HUMAN-READABLE idea text portion of an entry (useful for asserting the
+# right idea was logged). It does NOT replace checking the STRUCTURAL [audit:#NNNN]
+# marker: retrospective-coverage TRACKING by evolve.sh audited/retro-candidates requires
+# the tab-delimited marker written by `evolve.sh log --audit-of NNNN`. Use this helper
+# only to verify idea-text content; use `evolve.sh audited` to verify coverage tracking.
 el_ledger_count_retro_entries_for() {
   el_ledger_flat "$1" | grep -ciE "retrospective audit of task #${2}\b"
 }
 
-# el_ledger_has_retro_entry_for <ledger_path> <task_id> — an existing "retrospective
-# audit of task #<id>" entry (the dedup marker per the spec's "Ideas ledger" section).
+# el_ledger_has_retro_entry_for <ledger_path> <task_id> — returns true if a ledger
+# entry with idea text "retrospective audit of task #<id>" exists (wrap-normalized).
+# NOTE: this checks the idea-text only, not the structural [audit:#NNNN] marker. For
+# coverage tracking (dedup rotation), the structural marker is what counts — verify it
+# separately via `evolve.sh audited --target .`.
 el_ledger_has_retro_entry_for() {
   [ "$(el_ledger_count_retro_entries_for "$1" "$2")" -ge 1 ]
 }

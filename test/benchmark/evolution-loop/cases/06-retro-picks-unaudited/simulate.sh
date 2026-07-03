@@ -16,6 +16,7 @@ target_id="$(bash "$ROOT/scripts/evolve.sh" retro-candidates --target . --track 
 bash "$ROOT/scripts/evolve.sh" record-summit --target . >/dev/null
 
 bash "$ROOT/scripts/evolve.sh" log --target . \
+  --audit-of "$target_id" \
   --persona critic \
   --idea "retrospective audit of task #$target_id" \
   --disposition "verified, reason codes visible, but no filter/search by reason code across refunds — minor expansion queued"

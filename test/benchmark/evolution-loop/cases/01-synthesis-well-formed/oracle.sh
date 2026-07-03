@@ -81,9 +81,11 @@ done
 }
 
 # the retrospective mandate must ALSO have produced a ledger disposition this summit,
-# targeting one of the fixture's real retro-candidates (not just the synthesis path).
-printf '%s\n' "$new_ledger_lines" | grep -qE 'retrospective audit of task #(1203|1204)\b' || {
-  echo "no retrospective-audit disposition logged this summit for a real retro-candidate (#1203/#1204)" >&2
+# targeting the CORRECT candidate: #1203 (oldest verified/shipped task without a prior
+# audit marker). #1204 is already audited in the fixture (see ideas-log.md — it has a
+# structural [audit:#1204] entry from the 2026-06-18 summit) so it must NOT be picked.
+printf '%s\n' "$new_ledger_lines" | grep -qE 'retrospective audit of task #1203\b' || {
+  echo "no retrospective-audit disposition logged this summit for the correct retro-candidate (#1203 — #1204 is already audited in the fixture and must not be re-picked)" >&2
   exit 1
 }
 exit 0

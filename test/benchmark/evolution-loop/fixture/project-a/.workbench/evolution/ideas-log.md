@@ -3,8 +3,10 @@
 Append-only. One entry per idea any persona raises in any summit — this file is
 the panel's memory across cycles and the human's readable window into what the
 "board" has been thinking about. Every summit READS it before generating (so a
-rejected idea is not re-proposed identically) and greps it for
-`retrospective audit of task #NNNN` entries to rotate retrospective coverage.
+rejected idea is not re-proposed identically) and tracks retrospective coverage
+via structural tab-delimited `[audit:#NNNN]` markers (the ONLY thing
+`evolve.sh audited` / `retro-candidates` count — free text mentioning a task id
+is never treated as coverage).
 
 Entry format (one line, written by `evolve.sh log`):
 
@@ -12,9 +14,14 @@ Entry format (one line, written by `evolve.sh log`):
 - [YYYY-MM-DD] <persona> — <idea one-liner> — <disposition>
 ```
 
+Retrospective audit entry format (written by `evolve.sh log --audit-of NNNN`):
+
+```
+- [YYYY-MM-DD]	[audit:#NNNN]	<persona> — <idea one-liner> — <disposition>
+```
+
 Dispositions: `queued as task #NNNN` · `merged into existing task #NNNN` ·
-`rejected by critic: <reason>` · `deferred: <reason>` ·
-`retrospective audit of task #NNNN: <disposition>`
+`rejected by critic: <reason>` · `deferred: <reason>`
 
 Created: 2026-06-01
 

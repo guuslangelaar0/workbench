@@ -49,6 +49,38 @@ if [ "$SIMULATE" = 0 ] && [ "${WB_BENCH:-0}" != 1 ]; then
 fi
 
 pass=0 total=0 failures=0
+
+# Build a frozen-"now" date shim from the fixture's NOW-for-eval-fixture-only marker.
+# evolve.sh calls `date +%s` (epoch) and `date -u +%Y-%m-%d` / `date -u +'%Y-%m-%d %H:%M UTC'`
+# (UTC wall-clock strings). Without a shim these calls return TODAY, causing every oracle
+# that pattern-matches the fixture's intended date (2026-07-02) to fail on any other calendar day.
+_make_date_shim() { # <shim_dir> <fixture_project_dir>
+  local shim_dir="$1" now_file="$2/.workbench/evolution/NOW-for-eval-fixture-only"
+  [ -f "$now_file" ] || return 0   # no marker → no shim, real date passes through
+  local iso; iso="$(tr -d '[:space:]' < "$now_file")"
+  [ -n "$iso" ] || return 0
+  # parse ISO 8601 UTC string to epoch (Linux date -d, not BSD date)
+  local epoch; epoch="$(date -d "$iso" +%s 2>/dev/null)" || return 0
+  local ymd; ymd="$(date -d "@$epoch" -u +%Y-%m-%d)"
+  local hhmm; hhmm="$(date -d "@$epoch" -u +'%H:%M')"
+  mkdir -p "$shim_dir"
+  cat > "$shim_dir/date" <<SHEOF
+#!/usr/bin/env bash
+# Frozen date shim for evolution-loop eval harness (fixture now = $iso)
+# Passes through any flag combination that doesn't match the three patterns
+# evolve.sh uses; everything else resolves to the fixture's frozen now.
+# NOTE: \$* strips quoting — "date -u +'%Y-%m-%d %H:%M UTC'" arrives as
+#       "-u +%Y-%m-%d %H:%M UTC" (no embedded single-quotes in \$*).
+case "\$*" in
+  '+%s')                         printf '%s\n' "$epoch" ;;
+  '-u +%Y-%m-%d')                printf '%s\n' "$ymd" ;;
+  '-u +%Y-%m-%d %H:%M UTC')     printf '%s %s UTC\n' "$ymd" "$hhmm" ;;
+  *)                              /usr/bin/date "\$@" ;;
+esac
+SHEOF
+  chmod +x "$shim_dir/date"
+}
+
 for cdir in "$CASES"/*/; do
   [ -d "$cdir" ] || continue
   id="$(basename "$cdir")"
@@ -61,18 +93,23 @@ for cdir in "$CASES"/*/; do
   cp -r "$FIXTURE/." "$P/"
   [ -f "$cdir/variant.sh" ] && ( cd "$P" && FIXTURE="$FIXTURE" ROOT="$ROOT" bash "$cdir/variant.sh" ) >/dev/null 2>&1
 
+  # Frozen-now shim: built AFTER variant.sh so variant-mutated NOW-for-eval-fixture-only
+  # is respected if a future variant ever changes it (none currently does).
+  SHIM_DIR="$(mktemp -d)"
+  _make_date_shim "$SHIM_DIR" "$P"
+
   if [ "$SIMULATE" = 1 ]; then
     : > "$P/.run-output"
-    ( cd "$P" && ROOT="$ROOT" FIXTURE="$FIXTURE" bash "$cdir/simulate.sh" ) >/dev/null 2>&1
+    ( cd "$P" && PATH="$SHIM_DIR:$PATH" ROOT="$ROOT" FIXTURE="$FIXTURE" bash "$cdir/simulate.sh" ) >/dev/null 2>&1
   else
     prompt="$(cat "$cdir/prompt.md")"
-    out="$( cd "$P" && timeout "$LIVE_TIMEOUT" claude -p --plugin-dir "$ROOT" --dangerously-skip-permissions "$prompt" 2>/dev/null )"
+    out="$( cd "$P" && PATH="$SHIM_DIR:$PATH" timeout "$LIVE_TIMEOUT" claude -p --plugin-dir "$ROOT" --dangerously-skip-permissions "$prompt" 2>/dev/null )"
     rc=$?
     [ "$rc" -eq 124 ] && out="TIMEOUT after ${LIVE_TIMEOUT}s"
     printf '%s' "$out" > "$P/.run-output"
   fi
 
-  if ( cd "$P" && RUN_OUTPUT="$P/.run-output" ROOT="$ROOT" FIXTURE="$FIXTURE" bash "$cdir/oracle.sh" ) >/dev/null 2>&1; then
+  if ( cd "$P" && PATH="$SHIM_DIR:$PATH" RUN_OUTPUT="$P/.run-output" ROOT="$ROOT" FIXTURE="$FIXTURE" bash "$cdir/oracle.sh" ) >/dev/null 2>&1; then
     verdict="PASS"; pass=$((pass+1))
   else
     verdict="fail"; failures=$((failures+1))
@@ -80,6 +117,7 @@ for cdir in "$CASES"/*/; do
 
   printf '  %-28s %s\n' "$id" "$verdict"
   if [ "$KEEP" = 1 ]; then echo "      (kept: $P)"; else rm -rf "$P"; fi
+  rm -rf "$SHIM_DIR"
 done
 
 echo "─────────────────────────────────────────────"
@@ -88,5 +126,6 @@ grade="$(awk -v p="$pass" -v t="$total" 'BEGIN{ printf "%.0f", 100.0*p/t }')"
 printf "BENCH-EVOLUTION-LOOP conformance=%d/%d  grade=%d/100\n" "$pass" "$total" "$grade"
 if [ "$failures" -gt 0 ]; then
   echo "  ↳ a failed case = the summit mechanism didn't do the right thing — see cases/README.md for what each case checks and any implementation assumptions baked into its oracle."
+  exit 1
 fi
 exit 0
