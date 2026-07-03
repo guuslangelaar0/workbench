@@ -9,6 +9,7 @@ Run `${CLAUDE_PLUGIN_ROOT}/scripts/mesh.sh $ARGUMENTS`.
 
 Prefer natural outcome routing:
 - "talk to my MacBook Claude" -> status, start with `start --lan` if no LAN mesh is running, create `invite --role worker --ttl-seconds 900`, then show `/workbench:mesh connect URL TOKEN <device>` using hostname/mDNS and raw IP forms.
+- "stop the mesh" / "shut down the command center" -> `stop`. It reads the pid file `start` wrote (defaults to `.workbench/mesh/server.pid` next to `server.json` unless `start` was given an explicit `--pid-file`) and sends the process a clean SIGTERM — never SIGKILL. Report whether it stopped, was already down, or is still running after 5s.
 - "open a channel for leads" -> `room <name>` and then `message <name> <text>` when the request includes something to say.
 - "ask this room what they are touching" -> `message <room> what are you touching?` because rooms use chat messages.
 - "ask worker status" -> `ask <actor> <question>` because individual actors use status/help requests.
