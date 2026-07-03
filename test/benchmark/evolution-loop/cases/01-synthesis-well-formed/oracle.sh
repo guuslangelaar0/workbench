@@ -80,10 +80,20 @@ done
   exit 1
 }
 
-# the retrospective mandate must ALSO have produced a ledger disposition this summit,
-# targeting one of the fixture's real retro-candidates (not just the synthesis path).
-printf '%s\n' "$new_ledger_lines" | grep -qE 'retrospective audit of task #(1203|1204)\b' || {
-  echo "no retrospective-audit disposition logged this summit for a real retro-candidate (#1203/#1204)" >&2
+# the retrospective mandate must ALSO have produced a STRUCTURAL ledger entry this
+# summit for the correct candidate: #1203 (oldest verified/shipped task without a prior
+# [audit:#NNNN] marker). #1204 is already audited in the fixture (structural
+# [audit:#1204] entry from 2026-06-18) so it must NOT be re-picked.
+# Checking the structural [audit:#1203] marker (not free-text idea content) ensures
+# the evolve.sh log --audit-of path was actually used — only that writes the
+# tab-delimited marker that _audited_ids / retro-candidates count for coverage rotation.
+printf '%s\n' "$new_ledger_lines" | grep -qE '\[audit:#1203\]' || {
+  echo "no structural [audit:#1203] marker in the new summit's ledger — either the wrong candidate was picked or evolve.sh log was called without --audit-of (free-text idea content is not sufficient for coverage tracking)" >&2
+  exit 1
+}
+# Also confirm evolve.sh audited now lists 1203 — structural marker must be parseable.
+bash "$ROOT/scripts/evolve.sh" audited --target . | grep -qE '^1203$' || {
+  echo "evolve.sh audited does not list #1203 despite [audit:#1203] appearing in the ledger — marker format mismatch" >&2
   exit 1
 }
 exit 0

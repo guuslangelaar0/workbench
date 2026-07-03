@@ -119,11 +119,15 @@ Concretely, per `scripts/evolve.sh`, `templates/schemas/personas.schema.json`, a
    framing the trigger cases were written against) and `track: "admin"`, modeled on the
    shipped `templates/evolution/personas.admin-example.json` preset.
 2. **The ledger lives at `.workbench/evolution/ideas-log.md`**, a sibling of the roster —
-   not under `.claude/admin-evolution/`. Entry format (written by `evolve.sh log`, one
-   line, no wrapping): `- [YYYY-MM-DD] <persona> — <idea one-liner> — <disposition>`.
+   not under `.claude/admin-evolution/`. Normal entry format (written by `evolve.sh log`,
+   one line, no wrapping): `- [YYYY-MM-DD] <persona> — <idea one-liner> — <disposition>`.
    `record-summit` heads each summit with `## Summit — <UTC date HH:MM>` (an em dash, not
-   a bare date). Retrospective coverage is tracked by grepping the ledger for the literal
-   phrase `retrospective audit of task #NNNN` — there is no separate tracking file.
+   a bare date). Retrospective audit entries use a STRUCTURAL tab-delimited marker written
+   by `evolve.sh log --audit-of NNNN`: `- [YYYY-MM-DD]<TAB>[audit:#NNNN]<TAB><persona> —
+   <idea> — <disposition>`. Retrospective coverage is tracked by `_audited_ids()` scanning
+   for this structural marker — free text mentioning a task id (e.g. "retrospective audit
+   of task #NNNN" embedded in a normal entry) is never counted as coverage. There is no
+   separate tracking file.
 3. **The "last summit ran at" stamp is `.workbench/evolution/last-summit`** — a plain
    epoch-seconds integer file written by `evolve.sh record-summit`, not an ISO string
    inside a config JSON. `evolve.sh check` computes `age_hours` from it directly.
