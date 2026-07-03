@@ -37,6 +37,7 @@ operations:
   watch ACTOR [--as ACTOR]
   tail --as ACTOR [--provider NAME] [--model NAME]   (reads stream-json on stdin)
   inbox --as ACTOR [--wait] [--since N]   (unread inbound messages; --wait blocks until one arrives)
+  listen-wait --as ACTOR   (blocks on the actor's FIFO, written by `workbench-mesh listen`; falls back to inbox --wait polling if no listen connector is running)
   activity reading|typing|idle [--as ACTOR]   (live engagement indicator on the dashboard)
 
 --as ACTOR identifies this session/process as ACTOR in the posted event,
@@ -502,6 +503,29 @@ for h in hits:
       [ "$wait_flag" = 1 ] || { echo "mesh inbox for $actor: empty"; exit 0; }
       sleep 2
     done
+    ;;
+  listen-wait)
+    # Blocks on the actor's per-actor FIFO written by a running
+    # `workbench-mesh listen` connector — zero CPU cost, instant wake.
+    # Falls back to polling `inbox --wait` if no connector is running
+    # (i.e. the FIFO does not exist yet).
+    if [ "${#AS_ARGS[@]}" -eq 0 ] && [ -z "${WORKBENCH_MESH_ACTOR:-}" ]; then
+      echo "mesh: listen-wait requires --as ACTOR (or export WORKBENCH_MESH_ACTOR)" >&2
+      exit 2
+    fi
+    actor="${AS_ARGS[1]:-$WORKBENCH_MESH_ACTOR}"
+    safe_actor="$(printf '%s' "$actor" | tr ':/' '--')"
+    fifo="$TARGET/.workbench/mesh/inbox-$safe_actor.fifo"
+    if [ -p "$fifo" ]; then
+      # Blocking read on a FIFO costs zero CPU while idle and wakes the
+      # instant `workbench-mesh listen` writes a line — no polling interval
+      # to tune, no latency floor.
+      line="$(head -n 1 "$fifo")"
+      printf 'mesh inbox for %s:\n%s\n' "$actor" "$line"
+      exit 0
+    fi
+    echo "mesh: no listen connector running for $actor (missing $fifo) — falling back to polling inbox --wait" >&2
+    exec "$0" inbox --as "$actor" --wait
     ;;
   open)
     if url="$(metadata_url)"; then

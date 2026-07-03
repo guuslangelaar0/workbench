@@ -221,4 +221,35 @@ chk "state includes close lead action" "printf '%s' \"\$STATE\" | grep -q 'lead-
 chk "state includes availability action" "printf '%s' \"\$STATE\" | grep -q 'availability.set'"
 chk "state includes output chunk" "printf '%s' \"\$STATE\" | grep -q 'output:generator-1'"
 
+echo "== listen-wait FIFO fallback =="
+# Without a running `workbench-mesh listen` connector, listen-wait must fall
+# back to the polling inbox --wait path rather than hanging forever.
+# Pre-seed the seq cursor for fallback-actor so inbox --wait only watches for
+# messages arriving after this point (skipping events from earlier test steps).
+mkdir -p "$TMP/.workbench/mesh"
+FALLBACK_SEQ="$("$BIN" event list --target "$TMP" --home "$HOME_TMP" --since 0 2>/dev/null | python3 -c '
+import json, sys
+top = 0
+for line in sys.stdin:
+    try:
+        e = json.loads(line)
+        top = max(top, e.get("seq", 0))
+    except ValueError:
+        pass
+print(top)
+' 2>/dev/null || echo 0)"
+printf '%s\n' "$FALLBACK_SEQ" > "$TMP/.workbench/mesh/inbox-fallback-actor.seq"
+# Set up a temporary plugin root so mesh.sh can find the debug binary.
+FALLBACK_PLUGIN="$TMP/listen-wait-plugin"
+mkdir -p "$FALLBACK_PLUGIN/bin"
+ln -sf "$BIN" "$FALLBACK_PLUGIN/bin/workbench-mesh"
+LISTEN_WAIT_OUT="$TMP/listen-wait-fallback.out"
+CLAUDE_PLUGIN_ROOT="$FALLBACK_PLUGIN" CLAUDE_PROJECT_DIR="$TMP" WORKBENCH_HOME="$HOME_TMP" \
+  timeout 10 bash "$HERE/scripts/mesh.sh" listen-wait --as fallback-actor > "$LISTEN_WAIT_OUT" 2>&1 &
+lw_pid=$!
+sleep 1
+"$BIN" message --target "$TMP" --home "$HOME_TMP" --to fallback-actor --text "fallback test" --as sender >/dev/null
+wait "$lw_pid" || true
+chk "listen-wait fallback receives message" "grep -q 'fallback test' '$LISTEN_WAIT_OUT'"
+
 [ "$fail" = 0 ] && echo "PASS: mesh-command-center" || { echo "mesh-command-center test failed"; exit 1; }
