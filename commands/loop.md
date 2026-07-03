@@ -19,7 +19,7 @@ Fast natural-language mapping:
 - "Operate this remotely" or "check status/decisions from my phone" means `/workbench:remote`.
 
 1. Start with a reality check: `/workbench:mc` (task counts, in-review vs cap, decisions, build, prod). Trust disk over memory.
-2. Then run the loop from the `orchestration` skill: drain in-review (hard-drain at `cap − 3`) → pick the highest-impact unblocked task → `/workbench:dispatch` it to an engineer → gate and `/workbench:verify` → lifecycle `git mv` → surface honesty triggers to `decisions/` without stopping → checkpoint `SESSION_STATE.md` on cadence (`session-continuity`) → **never stop**; always pick the next task.
+2. Then run the loop from the `orchestration` skill: drain in-review (hard-drain at `cap − 3`) → pick the highest-impact unblocked task → `/workbench:dispatch` it to an engineer (the generic verb — defaults to the `claude-engineer` lane; pass `--engine codex` to route to the `codex-engineer` lane instead) → gate and `/workbench:verify` → lifecycle `git mv` → surface honesty triggers to `decisions/` without stopping → checkpoint `SESSION_STATE.md` on cadence (`session-continuity`) → **never stop**; always pick the next task.
 3. Respect `way_of_working` tiers (models, verification, review, parallelism) and the in-review cap throughout.
 
 Keep 2–3 tasks queued per lane. Surface decisions to `.claude/tasks/decisions/` and keep going — do not park the loop waiting on the human.
