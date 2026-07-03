@@ -49,6 +49,7 @@ impl MeshStore {
                     .format(&Rfc3339)
                     .context("format event timestamp")?,
                 payload,
+                ack_of: None,
             })
         })
     }
@@ -86,6 +87,7 @@ impl MeshStore {
                     .format(&Rfc3339)
                     .context("format audit timestamp")?,
                 payload,
+                ack_of: None,
             })
         })
     }
