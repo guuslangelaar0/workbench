@@ -129,8 +129,9 @@ window.WB = window.WB || {};
     });
     socket.addEventListener('close', () => {
       socket = null;
+      const delay = backoffMs(reconnectAttempt);
       reconnectAttempt += 1;
-      setTimeout(connectSocket, backoffMs(reconnectAttempt));
+      setTimeout(connectSocket, delay);
     });
   }
 
