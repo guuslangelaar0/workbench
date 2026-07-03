@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -18,7 +18,7 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
-use tokio::sync::broadcast;
+use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
 
 use crate::auth;
@@ -123,12 +123,96 @@ fn unknown_actor() -> String {
     "unknown".to_string()
 }
 
+// ---------------------------------------------------------------------------
+// Per-socket mpsc subscription registry
+// ---------------------------------------------------------------------------
+
+struct SocketEntry {
+    tx: mpsc::Sender<EventEnvelope>,
+    rooms: Vec<String>,
+    actor: Option<String>,
+}
+
+/// Registry of per-socket mpsc senders and their current subscription state.
+/// When an event is dispatched it is forwarded to every socket whose room list
+/// contains the event's room, plus to any socket whose `actor` matches the
+/// event's direct `to` field (direct-message delivery, always delivered
+/// regardless of room subscription).
+#[derive(Default)]
+struct ChannelRegistry {
+    sockets: HashMap<u64, SocketEntry>,
+    next_id: u64,
+}
+
+impl ChannelRegistry {
+    fn register(&mut self, tx: mpsc::Sender<EventEnvelope>) -> u64 {
+        let id = self.next_id;
+        self.next_id += 1;
+        self.sockets.insert(
+            id,
+            SocketEntry {
+                tx,
+                rooms: Vec::new(),
+                actor: None,
+            },
+        );
+        id
+    }
+
+    fn unregister(&mut self, id: u64) {
+        self.sockets.remove(&id);
+    }
+
+    fn set_subscription(&mut self, id: u64, rooms: Vec<String>, actor: Option<String>) {
+        if let Some(entry) = self.sockets.get_mut(&id) {
+            entry.rooms = rooms;
+            entry.actor = actor;
+        }
+    }
+
+    /// Fan out one event to every socket that subscribed to its room, plus —
+    /// if the event has a direct recipient (`to`) distinct from the room (a
+    /// DM, not a room broadcast) — to any socket that registered that actor
+    /// identity via the subscribe frame's `actor` field.
+    fn dispatch(&self, event: &EventEnvelope) {
+        let is_dm = event
+            .to
+            .as_deref()
+            .map(|to| to != event.room.as_str())
+            .unwrap_or(false);
+        for entry in self.sockets.values() {
+            let via_room = entry.rooms.contains(&event.room);
+            let via_actor = is_dm && event.to.as_deref() == entry.actor.as_deref();
+            if via_room || via_actor {
+                let _ = entry.tx.try_send(event.clone());
+            }
+        }
+    }
+}
+
+/// RAII guard that unregisters a socket from the channel registry when the
+/// websocket_session future completes (or is cancelled on any return path).
+struct SocketGuard {
+    socket_id: u64,
+    channels: Arc<Mutex<ChannelRegistry>>,
+}
+
+impl Drop for SocketGuard {
+    fn drop(&mut self) {
+        if let Ok(mut registry) = self.channels.lock() {
+            registry.unregister(self.socket_id);
+        }
+    }
+}
+
 #[derive(Clone)]
 struct AppState {
     project_root: PathBuf,
     home: Option<PathBuf>,
     store: Arc<MeshStore>,
-    events_tx: broadcast::Sender<EventEnvelope>,
+    /// Per-socket subscription registry. Events are dispatched here after
+    /// append so only subscribed sockets receive them (room or actor channel).
+    channels: Arc<Mutex<ChannelRegistry>>,
     daemon_token: String,
     local_credential_token: String,
     tail_scan_seq: Arc<AtomicU64>,
@@ -228,12 +312,11 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
     };
     let store = Arc::new(MeshStore::open(&opts.project_root)?);
     let tail_scan_seq = Arc::new(AtomicU64::new(current_store_seq(&store)?));
-    let (events_tx, _) = broadcast::channel(256);
     let state = AppState {
         project_root: opts.project_root.clone(),
         home: opts.home.clone(),
         store,
-        events_tx,
+        channels: Arc::new(Mutex::new(ChannelRegistry::default())),
         daemon_token: metadata.local_token.clone(),
         local_credential_token: credential_token,
         tail_scan_seq,
@@ -465,7 +548,6 @@ async fn ws_handler(
 
 async fn websocket_session(socket: WebSocket, state: AppState, last_seq: u64, token: String) {
     let (mut sender, mut receiver) = socket.split();
-    let mut events_rx = state.events_tx.subscribe();
 
     if require_token(&state, &token).is_err() {
         return;
@@ -485,11 +567,28 @@ async fn websocket_session(socket: WebSocket, state: AppState, last_seq: u64, to
         }
     }
 
+    // Create a per-socket mpsc channel.  The sender is stored in the
+    // ChannelRegistry; the receiver is polled in the select loop.  The guard
+    // unregisters this socket on any exit path (disconnect, revoke, error).
+    //
+    // We chose the mpsc-per-socket approach over select_all over a Vec of
+    // broadcast::Receivers because it avoids rebuilding a borrow-pinned
+    // future Vec on every loop iteration and keeps the select loop simple:
+    // one channel to receive from, one for WS frames.  Task 6 (micro-batch
+    // flush) can intercept events between the registry dispatch and the mpsc
+    // send without touching this loop.
+    let (tx, mut rx) = mpsc::channel::<EventEnvelope>(256);
+    let socket_id = state.channels.lock().unwrap().register(tx);
+    let _guard = SocketGuard {
+        socket_id,
+        channels: state.channels.clone(),
+    };
+
     loop {
         tokio::select! {
-            received = events_rx.recv() => {
-                let Ok(event) = received else {
-                    continue;
+            event = rx.recv() => {
+                let Some(event) = event else {
+                    return;
                 };
                 if require_token(&state, &token).is_err() {
                     return;
@@ -509,6 +608,41 @@ async fn websocket_session(socket: WebSocket, state: AppState, last_seq: u64, to
                     let Ok(role) = require_token(&state, &token) else {
                         return;
                     };
+                    let Ok(control) = serde_json::from_str::<Value>(&text) else {
+                        continue;
+                    };
+                    match control.get("type").and_then(Value::as_str) {
+                        Some("subscribe") => {
+                            let rooms: Vec<String> = control
+                                .get("rooms")
+                                .and_then(Value::as_array)
+                                .map(|arr| {
+                                    arr.iter()
+                                        .filter_map(|v| v.as_str().map(str::to_string))
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            let actor = control
+                                .get("actor")
+                                .and_then(Value::as_str)
+                                .map(str::to_string);
+                            state
+                                .channels
+                                .lock()
+                                .unwrap()
+                                .set_subscription(socket_id, rooms, actor);
+                            continue;
+                        }
+                        Some("ping") => {
+                            let t = control.get("t").cloned().unwrap_or(Value::Null);
+                            let pong = json!({ "v": 1, "type": "pong", "t": t });
+                            if sender.send(Message::Text(pong.to_string())).await.is_err() {
+                                return;
+                            }
+                            continue;
+                        }
+                        _ => {}
+                    }
                     let Ok(request) = serde_json::from_str::<WsEventRequest>(&text) else {
                         continue;
                     };
@@ -558,7 +692,7 @@ fn append_event(state: &AppState, request: EventRequest) -> Result<EventEnvelope
         .map(|seqs| remember_daemon_broadcast_seq(seqs, &state.tail_scan_seq, event.seq))
         .unwrap_or(true);
     if should_broadcast {
-        let _ = state.events_tx.send(event.clone());
+        state.channels.lock().unwrap().dispatch(&event);
     }
     Ok(event)
 }
@@ -725,7 +859,7 @@ async fn tail_store_events_once(state: &AppState) {
             .map(|seqs| seqs.remove(&event.seq))
             .unwrap_or(false);
         if !already_broadcast {
-            let _ = state.events_tx.send(event);
+            state.channels.lock().unwrap().dispatch(&event);
         }
     }
 }
@@ -880,12 +1014,13 @@ mod tests {
     use serde_json::{json, Value};
     use tempfile::TempDir;
     use tokio::net::TcpListener;
-    use tokio::sync::broadcast;
     use tokio::time::sleep;
     use tokio_tungstenite::connect_async;
     use tokio_tungstenite::tungstenite::Message as ClientMessage;
 
-    use super::{read_server_metadata, serve, server_metadata_path, AppState, ServeOptions};
+    use super::{
+        read_server_metadata, serve, server_metadata_path, AppState, ChannelRegistry, ServeOptions,
+    };
     use crate::auth;
     use crate::client;
     use crate::store::MeshStore;
@@ -939,6 +1074,15 @@ mod tests {
         ))
         .await
         .unwrap();
+        // subscribe to the room so that live broadcast traffic is delivered
+        second
+            .send(ClientMessage::Text(
+                json!({ "v": 1, "type": "subscribe", "rooms": ["repo:mesh-service"] })
+                    .to_string(),
+            ))
+            .await
+            .unwrap();
+        sleep(Duration::from_millis(50)).await;
 
         first
             .send(ClientMessage::Text(
@@ -1447,12 +1591,11 @@ mod tests {
             auth::issue_invite_credential(project.path(), &invite.token, "macbook").unwrap();
         let store = Arc::new(MeshStore::open(project.path()).unwrap());
         let last_seq = store.list_events_since(0).unwrap().last().unwrap().seq;
-        let (events_tx, _) = broadcast::channel(256);
         let state = AppState {
             project_root: project.path().to_path_buf(),
             home: Some(home.path().to_path_buf()),
             store: store.clone(),
-            events_tx,
+            channels: std::sync::Arc::new(std::sync::Mutex::new(ChannelRegistry::default())),
             daemon_token: "daemon-token".to_string(),
             local_credential_token: auth::local_project_token(
                 project.path(),
@@ -1481,6 +1624,17 @@ mod tests {
         );
         let (mut mutating_socket, _) = connect_async(&ws_url).await.unwrap();
         let (mut listening_socket, _) = connect_async(&ws_url).await.unwrap();
+
+        // Subscribe the listening socket so it will receive the dispatch below
+        // (needed to trigger the token-revoke check on the receive path).
+        listening_socket
+            .send(ClientMessage::Text(
+                json!({ "v": 1, "type": "subscribe", "rooms": ["repo:mesh-remote"] })
+                    .to_string(),
+            ))
+            .await
+            .unwrap();
+        sleep(Duration::from_millis(50)).await;
 
         auth::revoke_device(project.path(), "macbook", "auth:owner").unwrap();
 
@@ -1513,7 +1667,9 @@ mod tests {
                 json!({ "text": "broadcast after revoke" }),
             )
             .unwrap();
-        let _ = state.events_tx.send(server_event);
+        // dispatch to the registry so the (subscribed) listening_socket is
+        // notified; it checks the token, finds it revoked, and closes.
+        state.channels.lock().unwrap().dispatch(&server_event);
         assert_revoked_socket_closed_without_text(&mut listening_socket).await;
 
         server.abort();
@@ -1942,6 +2098,14 @@ mod tests {
         ))
         .await
         .unwrap();
+        // subscribe to the room that the CLI will write to
+        socket
+            .send(ClientMessage::Text(
+                json!({ "v": 1, "type": "subscribe", "rooms": ["lead:checkout"] }).to_string(),
+            ))
+            .await
+            .unwrap();
+        sleep(Duration::from_millis(50)).await;
 
         client::send_message(
             project.path().to_path_buf(),
@@ -1970,12 +2134,11 @@ mod tests {
         let local_credential_token =
             auth::local_project_token(project.path(), Some(home.path().to_path_buf())).unwrap();
         let store = Arc::new(MeshStore::open(project.path()).unwrap());
-        let (events_tx, _) = broadcast::channel(256);
         let state = AppState {
             project_root: project.path().to_path_buf(),
             home: Some(home.path().to_path_buf()),
             store: store.clone(),
-            events_tx,
+            channels: Arc::new(Mutex::new(ChannelRegistry::default())),
             daemon_token: "daemon-token".to_string(),
             local_credential_token,
             tail_scan_seq: Arc::new(AtomicU64::new(0)),
@@ -2001,6 +2164,15 @@ mod tests {
         ))
         .await
         .unwrap();
+        // subscribe to the room so that dispatched events are delivered
+        socket
+            .send(ClientMessage::Text(
+                json!({ "v": 1, "type": "subscribe", "rooms": ["repo:mesh-service"] })
+                    .to_string(),
+            ))
+            .await
+            .unwrap();
+        sleep(Duration::from_millis(50)).await;
 
         store
             .append_event(
@@ -2067,12 +2239,11 @@ mod tests {
                 serde_json::json!({ "task_id": "2001" }),
             )
             .unwrap();
-        let (events_tx, _) = broadcast::channel(256);
         let state = AppState {
             project_root: project.path().to_path_buf(),
             home: Some(home.path().to_path_buf()),
             store,
-            events_tx,
+            channels: Arc::new(Mutex::new(ChannelRegistry::default())),
             daemon_token: "daemon-token".to_string(),
             local_credential_token: auth::local_project_token(
                 project.path(),
@@ -2126,6 +2297,139 @@ mod tests {
         ));
 
         assert!(seqs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn subscription_filters_room_traffic_but_always_delivers_direct_messages() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Service");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let owner_token =
+            auth::local_project_token(project.path(), Some(home.path().to_path_buf())).unwrap();
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+            started_by: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+
+        // socket A subscribes only to repo:a; socket B subscribes only to repo:b
+        let (mut a, _) = connect_async(format!(
+            "ws://{}:{}/ws?token={}&last_seq=0",
+            metadata.host, metadata.port, metadata.local_token
+        ))
+        .await
+        .unwrap();
+        a.send(ClientMessage::Text(
+            json!({ "v": 1, "type": "subscribe", "rooms": ["repo:a"] }).to_string(),
+        ))
+        .await
+        .unwrap();
+
+        let (mut b, _) = connect_async(format!(
+            "ws://{}:{}/ws?token={}&last_seq=0",
+            metadata.host, metadata.port, metadata.local_token
+        ))
+        .await
+        .unwrap();
+        b.send(ClientMessage::Text(
+            json!({ "v": 1, "type": "subscribe", "rooms": ["repo:b"] }).to_string(),
+        ))
+        .await
+        .unwrap();
+
+        // give the server a beat to register both subscriptions before posting
+        sleep(Duration::from_millis(50)).await;
+
+        let client = Client::new();
+        let base = format!("http://{}:{}", metadata.host, metadata.port);
+        client
+            .post(format!("{base}/api/events"))
+            .bearer_auth(&owner_token)
+            .json(&json!({ "type": "message.sent", "room": "repo:b", "from": "session:lead", "payload": { "text": "for b only" } }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+
+        // B receives it
+        let received = read_ws_json(&mut b).await;
+        assert_eq!(received["room"], "repo:b");
+
+        // A does not — post a repo:a event afterward and confirm A gets THAT
+        // one next (i.e. it never silently received the repo:b traffic first)
+        client
+            .post(format!("{base}/api/events"))
+            .bearer_auth(&owner_token)
+            .json(&json!({ "type": "message.sent", "room": "repo:a", "from": "session:lead", "payload": { "text": "for a only" } }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+        let received_a = read_ws_json(&mut a).await;
+        assert_eq!(received_a["room"], "repo:a");
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn direct_messages_always_deliver_regardless_of_room_subscription() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Service");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+        let owner_token =
+            auth::local_project_token(project.path(), Some(home.path().to_path_buf())).unwrap();
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+            started_by: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+
+        // socket subscribes to no rooms but identifies itself as session:worker
+        let (mut worker, _) = connect_async(format!(
+            "ws://{}:{}/ws?token={}&last_seq=0",
+            metadata.host, metadata.port, metadata.local_token
+        ))
+        .await
+        .unwrap();
+        worker
+            .send(ClientMessage::Text(
+                json!({ "v": 1, "type": "subscribe", "rooms": [], "actor": "session:worker" })
+                    .to_string(),
+            ))
+            .await
+            .unwrap();
+        sleep(Duration::from_millis(50)).await;
+
+        let client = Client::new();
+        let base = format!("http://{}:{}", metadata.host, metadata.port);
+        client
+            .post(format!("{base}/api/events"))
+            .bearer_auth(&owner_token)
+            .json(&json!({ "type": "message.sent", "room": "direct:session:worker", "from": "session:lead", "to": "session:worker", "payload": { "text": "dm" } }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+
+        let received = read_ws_json(&mut worker).await;
+        assert_eq!(received["to"], "session:worker");
+
+        server.abort();
     }
 
     async fn wait_for_metadata(project: &Path) -> super::ServerMetadata {
