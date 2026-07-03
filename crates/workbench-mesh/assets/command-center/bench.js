@@ -195,7 +195,9 @@ window.WB = window.WB || {};
       autoGrow();
       closeMenu();
       updateHint();
-      const room = r.to ? (WB.AGENTS.find((a) => a.id === r.to).room) : (roomFilter === 'all' ? 'team' : roomFilter);
+      // Direct sends use the CLI convention: an actor's direct room is named
+      // after the actor (room_for_target), not whatever room it last posted in.
+      const room = r.to ? r.to : (roomFilter === 'all' ? 'team' : roomFilter);
       const m = { room: room, who: 'you (operator)', kind: 'msg', text: t, ts: Date.now(), to: r.to || null, via: r.to ? null : r.via };
       WB.CHAT.push(m);
       const rm = WB.ROOMS.find((x) => x.id === room);
@@ -416,9 +418,9 @@ window.WB = window.WB || {};
       if (!t) return;
       input.value = '';
       autoGrow();
-      const m = { room: a.room, who: 'you (operator)', kind: 'msg', text: t, ts: Date.now(), to: a.id };
+      const m = { room: a.id, who: 'you (operator)', kind: 'msg', text: t, ts: Date.now(), to: a.id };
       WB.CHAT.push(m);
-      const rm = WB.ROOMS.find((x) => x.id === a.room);
+      const rm = WB.ROOMS.find((x) => x.id === a.id);
       if (rm) rm.events += 1;
       if (WB.api) WB.api.sendChat(m);
       feed.appendChild(chatTermLine(m));
