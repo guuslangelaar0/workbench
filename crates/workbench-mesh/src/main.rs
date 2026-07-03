@@ -36,6 +36,9 @@ enum Command {
     /// Tail a session's stream-json output into output:<actor> as
     /// output.chunk events, teeing every stdin line through to stdout.
     Tail(TailArgs),
+    /// Publish a lightweight activity signal (reading/typing/idle) for
+    /// live engagement indicators on the dashboard.
+    Activity(ActivityArgs),
     Actor(ActorCommand),
     Snapshot(SnapshotCommand),
 }
@@ -386,6 +389,18 @@ struct TailArgs {
 }
 
 #[derive(Debug, Args)]
+struct ActivityArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    /// reading | typing | idle
+    state: String,
+    #[arg(long = "as")]
+    as_actor: Option<String>,
+}
+
+#[derive(Debug, Args)]
 struct WatchArgs {
     #[arg(long)]
     target: PathBuf,
@@ -505,6 +520,9 @@ async fn main() -> Result<()> {
                 args.model,
             )
             .await
+        }
+        Command::Activity(args) => {
+            client::set_activity(args.target, args.home, args.state, args.as_actor).await
         }
         Command::Actor(actor) => run_actor(actor).await,
         Command::Snapshot(snapshot) => run_snapshot(snapshot),

@@ -1,12 +1,20 @@
 {
-  "description": "workbench continuity hooks — re-ground on session start, checkpoint before compaction, coord presence",
+  "description": "workbench continuity hooks \u2014 re-ground on session start, checkpoint before compaction, coord presence",
   "hooks": {
     "SessionStart": [
       {
         "matcher": "startup|resume|compact",
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/ground-session.sh\"", "timeout": 10 },
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/mesh-context.sh\"", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/ground-session.sh\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/mesh-context.sh\"",
+            "timeout": 10
+          }
         ]
       }
     ],
@@ -14,7 +22,11 @@
       {
         "matcher": "manual|auto",
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/precompact-checkpoint.sh\"", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/precompact-checkpoint.sh\"",
+            "timeout": 10
+          }
         ]
       }
     ],
@@ -22,7 +34,11 @@
       {
         "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit",
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/coord-ping.sh\"", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/coord-ping.sh\"",
+            "timeout": 10
+          }
         ]
       }
     ],
@@ -30,7 +46,11 @@
       {
         "matcher": "permission_prompt|idle_prompt",
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/notify.sh\"", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/notify.sh\"",
+            "timeout": 10
+          }
         ]
       }
     ],
@@ -38,44 +58,85 @@
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/remote-guard.sh\"", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/remote-guard.sh\"",
+            "timeout": 10
+          }
         ]
       }
     ],
     "UserPromptSubmit": [
       {
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/intent-router.sh\"", "timeout": 10 },
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/lead-purpose-nudge.sh\"", "timeout": 10 },
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/mesh-context.sh\"", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/intent-router.sh\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/lead-purpose-nudge.sh\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/mesh-context.sh\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/mesh-mirror-prompt.sh\"",
+            "timeout": 5
+          }
         ]
       }
     ],
     "TeammateIdle": [
       {
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/teammate-idle-guard.sh\"", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/teammate-idle-guard.sh\"",
+            "timeout": 10
+          }
         ]
       }
     ],
     "StopFailure": [
       {
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/stopfailure-recover.sh\"", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/stopfailure-recover.sh\"",
+            "timeout": 10
+          }
         ]
       }
     ],
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/usage-meter.sh\"", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/usage-meter.sh\"",
+            "timeout": 10
+          }
         ]
       }
     ],
     "SubagentStop": [
       {
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/usage-meter.sh\"", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/usage-meter.sh\"",
+            "timeout": 10
+          }
         ]
       }
     ]

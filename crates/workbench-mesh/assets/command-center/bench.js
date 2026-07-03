@@ -34,6 +34,11 @@ window.WB = window.WB || {};
     return n;
   }
   function toolChip(a, heat) {
+    // fresh engagement beats the last-tool chip: reading/typing is what the
+    // actor is doing RIGHT NOW, between messages
+    const act = WB.eff.activity(a);
+    if (act === 'typing') return el('span', { class: 'st-tool', html: svgIcon('pencil', 10) + ' typing…' });
+    if (act === 'reading') return el('span', { class: 'st-tool', html: svgIcon('eye', 10) + ' reading' });
     if (heat === 'stale' || heat === 'dead') return el('span', { class: 'st-tool idle', html: svgIcon('moon', 10) + ' quiet' });
     if (!a.tool) return el('span', { class: 'st-tool idle', html: svgIcon('coffee', 10) + ' idle' });
     return el('span', { class: 'st-tool', html: svgIcon(TOOL_ICON[a.tool] || 'terminal', 10) + ' ' + WB.ui.esc(a.tool) });
@@ -205,12 +210,14 @@ window.WB = window.WB || {};
       if (WB.api) WB.api.sendChat(m);
       if (chatMatches(m)) { scroll.appendChild(msgNode(m)); scroll.scrollTop = scroll.scrollHeight; }
     };
+    const typing = el('div', { class: 'typing-line', id: 'typing-line' });
     const col = el('div', { class: 'chat-col' }, [
       el('div', { class: 'chat-head' }, [
         el('div', { class: 't-eyebrow', text: 'Team chat' }),
         chips,
       ]),
       scroll,
+      typing,
       el('div', { class: 'composer' }, [
         input,
         el('button', { class: 'send', 'aria-label': 'Send', html: svgIcon('arrow-right', 15), onclick: send }),
@@ -219,6 +226,7 @@ window.WB = window.WB || {};
     ]);
     updateHint();
     renderChatList(scroll);
+    renderTypingLine();
     return col;
   }
 
@@ -542,6 +550,23 @@ window.WB = window.WB || {};
     },
   };
 
+  /* ── typing line: who is engaging right now, between messages ── */
+  function renderTypingLine() {
+    const line = document.getElementById('typing-line');
+    if (!line) return;
+    const engaged = WB.AGENTS.map((a) => ({ a, act: WB.eff.activity(a) })).filter((x) => x.act);
+    line.replaceChildren();
+    for (const { a, act } of engaged) {
+      const n = leadName(a.id);
+      n.style.fontWeight = '600';
+      line.appendChild(el('span', { class: 'tl-item' }, [
+        pulse(WB.eff.heat(a)),
+        n,
+        el('span', { text: ' is ' + (act === 'typing' ? 'typing…' : 'reading') }),
+      ]));
+    }
+  }
+
   /* ── live wiring (guarded by DOM presence) ── */
   WB.sim.on('output', ({ agent: id, line }) => {
     const a = agent(id);
@@ -585,4 +610,13 @@ window.WB = window.WB || {};
     const rail = document.getElementById('foryou');
     if (rail) WB.renderForYou(rail, { footNote: 'Decisions queue here without blocking the loop — the lead moves on to unblocked work and checks back.' });
   });
+  WB.sim.on('heartbeat', (a) => {
+    renderTypingLine();
+    const st = document.querySelector('.station[data-agent="' + a.id + '"]');
+    if (st) {
+      const tc = st.querySelector('.st-tool');
+      if (tc) tc.replaceWith(toolChip(a, WB.eff.heat(a)));
+    }
+  });
+  WB.sim.on('tick', (t) => { if (t % 3 === 0) renderTypingLine(); });
 })(window.WB);

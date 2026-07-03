@@ -80,6 +80,9 @@
 .sysline { align-self: center; display: flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); padding: 2px 0; animation: msgIn 320ms var(--ease) backwards; }
 .sysline .icon { color: var(--amber-deep); }
 
+.typing-line { min-height: 16px; display: flex; gap: 14px; align-items: center; padding: 2px 16px 4px; font-family: var(--font-mono); font-size: 10px; color: var(--amber-deep); flex-shrink: 0; }
+.typing-line .tl-item { display: inline-flex; align-items: center; gap: 6px; animation: msgIn 240ms var(--ease); }
+.typing-line .pulse { width: 6px; height: 6px; }
 .composer { padding: var(--space-md) 14px 6px; border-top: 1px solid var(--line); display: flex; gap: var(--space-sm); flex-shrink: 0; align-items: flex-end; position: relative; }
 .route-hint { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 9.5px; color: var(--ink-4); padding: 6px 16px 11px; flex-shrink: 0; }
 .route-hint b { color: var(--amber-deep); font-weight: 500; }

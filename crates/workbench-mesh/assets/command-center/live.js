@@ -110,7 +110,7 @@ window.WB = window.WB || {};
     });
     socket.addEventListener('close', () => {
       socket = null;
-      setTimeout(connectSocket, 5000);
+      setTimeout(connectSocket, 1500);
     });
   }
 
@@ -169,6 +169,7 @@ window.WB = window.WB || {};
       if (Array.isArray(p.capabilities)) a.caps = p.capabilities;
       if (p.provider) a.provider = p.provider;
       if (p.model) a.model = p.model;
+      if (p.activity) { a.activity = p.activity; a.activityTs = when; }
       if (!quiet) sim.emit('heartbeat', a);
     } else if (ev.from !== SELF) {
       // any non-presence activity still proves the actor is alive
@@ -328,7 +329,7 @@ window.WB = window.WB || {};
     tickN += 1;
     sim.t = tickN;
     // liveness: if nothing has been heard for 15s and the socket is gone, poll
-    if (token && !socket && tickN % 5 === 0) loadState();
+    if (token && !socket && tickN % 2 === 0) loadState();
     if (token && lastContact && Date.now() - lastContact > 30000 && !socket) setHostState('down');
     recomputeDerived();
     sim.emit('tick', tickN);

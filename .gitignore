@@ -6,3 +6,4 @@
 /target/
 /.workbench/mesh/
 /.workbench/release/
+.claude/worktrees/

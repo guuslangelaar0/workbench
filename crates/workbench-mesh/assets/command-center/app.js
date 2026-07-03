@@ -43,6 +43,13 @@ window.WB = window.WB || {};
         sub: 'Started by ' + H.startedBy + '. The daemon is a background process — it would survive that session ending.',
       };
     },
+    // Fresh engagement signal (reading/typing) — decays after 12s so a
+    // stale indicator never lies about liveness.
+    activity(a) {
+      if (!a.activity || a.activity === 'idle') return null;
+      if (Date.now() - (a.activityTs || 0) > 12000) return null;
+      return a.activity;
+    },
     benchCount() {
       if (WB.state.hostState === 'down') return null;
       return WB.AGENTS.filter((a) => { const h = WB.eff.heat(a); return h === 'hot' || h === 'idle'; }).length;

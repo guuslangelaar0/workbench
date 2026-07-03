@@ -538,6 +538,29 @@ pub async fn tail_stream(
     Ok(())
 }
 
+/// Publish a lightweight activity signal (reading/typing/idle) so dashboards
+/// can show live engagement between full messages. Rides presence.heartbeat
+/// with a minimal payload — no platform/capability recomputation.
+pub async fn set_activity(
+    project_root: PathBuf,
+    home: Option<PathBuf>,
+    state: String,
+    from: Option<String>,
+) -> Result<()> {
+    let event = append_or_post_event(
+        &project_root,
+        home,
+        "presence.heartbeat",
+        "presence",
+        &resolve_actor(from.as_deref()),
+        None,
+        json!({ "activity": state }),
+    )
+    .await?;
+    println!("activity: {} seq={}", state, event.seq);
+    Ok(())
+}
+
 pub async fn watch_actor(
     project_root: PathBuf,
     home: Option<PathBuf>,

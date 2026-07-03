@@ -37,6 +37,7 @@ operations:
   watch ACTOR [--as ACTOR]
   tail --as ACTOR [--provider NAME] [--model NAME]   (reads stream-json on stdin)
   inbox --as ACTOR [--wait] [--since N]   (unread inbound messages; --wait blocks until one arrives)
+  activity reading|typing|idle [--as ACTOR]   (live engagement indicator on the dashboard)
 
 --as ACTOR identifies this session/process as ACTOR in the posted event,
 instead of the shared default "session:lead". Set this (or export
@@ -430,6 +431,10 @@ case "$cmd" in
   watch)
     require_arg "actor" "${1:-}"
     exec "$BIN" watch "${PROJECT_ARGS[@]}" "$1" "${AS_ARGS[@]}"
+    ;;
+  activity)
+    require_arg "activity state" "${1:-}"
+    exec "$BIN" activity "${PROJECT_ARGS[@]}" "$1" "${AS_ARGS[@]}"
     ;;
   tail)
     # tail reads stream-json on stdin and needs an actor identity to name its
