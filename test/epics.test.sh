@@ -58,5 +58,26 @@ rm -f "$C/.claude/epics/readme.md"
 # --- validation: bad status rejected ---
 chk "epic-new rejects bad status" "! bash '$HERE/scripts/epic-new.sh' --title x --status bogus --target '$C' >/dev/null 2>&1"
 
+# --- epic-close.sh: refuses while a linked task is not yet terminal, then succeeds ---
+# at this point $EID has 2 linked tasks: $TID (verified) and the "Link expiry" task (backlog)
+CLOSE_OUT="$(bash "$HERE/scripts/epic-close.sh" "$EID" --target "$C" 2>&1)"; CLOSE_RC=$?
+chk "epic-close refuses with a non-terminal child" "[ '$CLOSE_RC' -ne 0 ]"
+chk "epic-close lists the blocking task"           "printf '%s' \"\$CLOSE_OUT\" | grep -q 'backlog'"
+chk "epic status still open after refusal"         "grep -qE '^\\*\\*Status:\\*\\* open' '$EF'"
+
+# move the remaining linked task ("Link expiry") to verified too, then close should succeed
+LID="$(basename "$C"/.claude/tasks/backlog/*link-expiry*.md .md | sed 's/-.*//')"
+bash "$HERE/scripts/task-move.sh" "$LID" in-development --target "$C" >/dev/null 2>&1
+bash "$HERE/scripts/task-move.sh" "$LID" in-review --target "$C" >/dev/null 2>&1
+bash "$HERE/scripts/task-move.sh" "$LID" verified --target "$C" >/dev/null 2>&1
+
+CLOSE_OK="$(bash "$HERE/scripts/epic-close.sh" "$EID" --target "$C" 2>&1)"; CLOSE_OK_RC=$?
+chk "epic-close succeeds once all children terminal" "[ '$CLOSE_OK_RC' -eq 0 ]"
+chk "epic status rewritten to done"                  "grep -qE '^\\*\\*Status:\\*\\* done' '$EF'"
+chk "epic-close is idempotent on an already-done epic" "bash '$HERE/scripts/epic-close.sh' '$EID' --target '$C' >/dev/null 2>&1"
+
+# unknown epic id is an error
+chk "epic-close unknown id exits non-zero" "! bash '$HERE/scripts/epic-close.sh' 9999 --target '$C' >/dev/null 2>&1"
+
 rm -rf "$S" "$C"
 [ "$fail" = 0 ] && echo "PASS: epics" || { echo "epics test failed"; exit 1; }

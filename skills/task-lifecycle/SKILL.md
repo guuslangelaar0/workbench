@@ -10,6 +10,8 @@ Tasks are markdown files under `.claude/tasks/`. **Status is the subdirectory th
 ## States
 The baseline is `backlog → in-development → in-review → verified`, plus `decisions/` (needs the human; the lead never blocks on it). The exact set is **derived from the project's maturity level** — it is not stored in config. Solo drops `in-review`; deploy-gated levels (Crew, Fleet) add `staged` then `shipped` (`verified → staged → shipped` — locally-verified work parks in `staged/` for build-on-staging + smoke; only a prod deploy reaches `shipped/`), and Fleet additionally has `release-candidate`. Get the project's actual stage dirs from its level via `wb_level_lifecycle <level>` (in `scripts/levels.sh`), or just `ls .claude/tasks/`.
 
+A decision leaves `decisions/` via `/workbench:decision resolve <id> [--outcome "<text>"]` → `scripts/decision-resolve.sh`, once the human has answered it — not by hand-editing the file. It appends a `## Resolution` section (resolved-at timestamp + outcome) and moves the file to `backlog/` by default (a file-declared `**Resolution-target:**`, or an explicit `--to <state>`, overrides that), the same git-mv + `**Status:**`-rewrite mechanism `task-move.sh` uses everywhere else.
+
 ## Create a task
 Use `/workbench:task "<title>"`, or directly:
 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-new.sh" --title "<t>" --target "${CLAUDE_PROJECT_DIR}" [--track T] [--repos "a,b"] [--estimate "~1 day"]`
@@ -27,7 +29,7 @@ When the `decomposition` dial is grouped (pair = light-epics, crew = epics, flee
 
 - **Create:** `/workbench:epic "<title>"` → `scripts/epic-new.sh`. Epics draw from the **same** `.claude/tasks/_next-id` counter as tasks, so an epic ID and a task ID are never the same number.
 - **Link:** a task joins an epic via `**Epic:** <epic-id>` in its header — set at creation with `/workbench:task "<t>" --epic <id>`, or added by hand.
-- **Status:** an epic is `open` until you mark it `done` (edit the file when all its child tasks are verified/shipped). Progress (`done/total` child tasks) rolls up live in `/workbench:mc` and `/workbench:epic list` — it is derived by scanning task `**Epic:**` fields, not stored.
+- **Status:** an epic is `open` until it is **closed**: `/workbench:epic close <id>` → `scripts/epic-close.sh`. It scans every task file for `**Epic:** <id>`, resolves this project's terminal states from its level (`wb_level_lifecycle` in `scripts/levels.sh` — `verified`/`shipped`, whichever the level has), and only rewrites `**Status:**` to `done` if every linked task is terminal; otherwise it refuses (non-zero exit, lists the blocking task IDs). No force override — never hand-edit an epic's status to `done`. Progress (`done/total` child tasks) rolls up live in `/workbench:mc` and `/workbench:epic list` — it is derived by scanning task `**Epic:**` fields, not stored.
 
 Epics are a grouping lens, not a lifecycle stage: child tasks still flow through the normal stages independently.
 

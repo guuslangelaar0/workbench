@@ -56,8 +56,10 @@ Read `_next-id`, use it, write `id + 1` back, commit both together.
 ```
 backlog/ -> in-development/ -> in-review/ -> verified/
                  ^_______________________| (LOCAL verification fails -> back to in-development)
-decisions/  (created any time the agent needs the human; answered -> moved to backlog/)
+decisions/  (created any time the agent needs the human; answered -> `/workbench:decision resolve <id>` -> moved to backlog/)
 ```
+
+Epics (when this project's level groups tasks) close the same way: `/workbench:epic close <id>` refuses unless every linked task has reached a terminal stage (verified/shipped) — never hand-edit an epic's `**Status:**` to `done`.
 
 ## In-review cap
 
