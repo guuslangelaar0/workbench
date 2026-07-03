@@ -67,7 +67,7 @@ window.WB = window.WB || {};
   function chatMatches(m) { return roomFilter === 'all' || m.room === roomFilter || m.room === 'team'; }
   function renderChatList(scroll, visibleCount) {
     scroll.replaceChildren();
-    const matched = WB.CHAT.filter(chatMatches).slice().sort((a, b) => (a.seq || 0) - (b.seq || 0));
+    const matched = WB.CHAT.filter(chatMatches).slice().sort((a, b) => (a.seq ?? Infinity) - (b.seq ?? Infinity));
     const page = visibleCount != null ? matched.slice(-visibleCount) : matched;
     for (const m of page) scroll.appendChild(msgNode(m));
     scroll.scrollTop = scroll.scrollHeight;
@@ -125,7 +125,7 @@ window.WB = window.WB || {};
         el('button', { class: 'room-chip' + (roomFilter === r ? ' on' : ''), text: r, onclick: (e) => {
           roomFilter = r;
           e.target.parentNode.querySelectorAll('.room-chip').forEach((c) => c.classList.toggle('on', c === e.target));
-          renderChatList(scroll, visibleCount);
+          reseedWindow();
           updateHint();
         } })));
     const input = el('textarea', { rows: '1', placeholder: 'Message the team… (@name for one lead · shift+enter for a new line)' });
@@ -229,6 +229,17 @@ window.WB = window.WB || {};
     let visibleCount = 0;
     let oldestLoadedSeq = null;
     let loadingOlder = false;
+    // Seed (or re-seed after a room-filter switch) the pagination cursor and
+    // visibleCount from the current chatMatches() result set.  Called once at
+    // mount and again whenever roomFilter changes so oldestLoadedSeq always
+    // refers to the active room's window, not a stale one from a previous room.
+    function reseedWindow() {
+      const seeded = WB.CHAT.filter(chatMatches).slice().sort((a, b) => (a.seq ?? Infinity) - (b.seq ?? Infinity));
+      const seededWindow = seeded.length > 50 ? seeded.slice(-50) : seeded;
+      visibleCount = Math.min(50, seeded.length);
+      oldestLoadedSeq = seededWindow.length ? seededWindow[0].seq : null;
+      renderChatList(scroll, visibleCount);
+    }
     scroll.addEventListener('scroll', () => {
       if (loadingOlder || scroll.scrollTop > 150) return;
       if (oldestLoadedSeq == null) return;
@@ -246,11 +257,7 @@ window.WB = window.WB || {};
       }).catch(() => { loadingOlder = false; });
     });
     updateHint();
-    const initialMatched = WB.CHAT.filter(chatMatches).slice().sort((a, b) => (a.seq || 0) - (b.seq || 0));
-    const initialWindow = initialMatched.length > 50 ? initialMatched.slice(-50) : initialMatched;
-    visibleCount = Math.min(50, initialMatched.length);
-    oldestLoadedSeq = initialWindow.length ? initialWindow[0].seq : null;
-    renderChatList(scroll, visibleCount);
+    reseedWindow();
     renderTypingLine();
     return col;
   }
