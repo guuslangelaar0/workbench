@@ -28,8 +28,17 @@ done
 [ -n "$LAUNCH" ]  || LAUNCH="(no target date)"
 case "$PROFILE" in minimal|full) ;; *) echo "init.sh: --profile must be minimal|full" >&2; exit 64 ;; esac
 case "$HOOKS_MODE" in enabled|disabled) ;; *) echo "init.sh: --hooks must be enabled|disabled" >&2; exit 64 ;; esac
-# default level: fleet for full profile, solo for minimal
-[ -n "$LEVEL" ] || { [ "$PROFILE" = full ] && LEVEL="fleet" || LEVEL="solo"; }
+# default level: solo for minimal. full has NO silent default — it must be
+# given an explicit --level, because the historical default (fleet) is the
+# heaviest possible lifecycle/dial preset and silently landing a brand-new
+# project on it is a footgun, not a convenience.
+if [ -z "$LEVEL" ]; then
+  if [ "$PROFILE" = full ]; then
+    echo "init.sh: --profile full requires an explicit --level (solo|pair|crew|fleet) — refusing to silently default to fleet, the heaviest preset. Pick a level explicitly." >&2
+    exit 64
+  fi
+  LEVEL="solo"
+fi
 wb_level_index "$LEVEL" >/dev/null || { echo "init.sh: --level must be solo|pair|crew|fleet" >&2; exit 64; }
 
 VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PLUGIN_ROOT/.claude-plugin/plugin.json" | head -1)"

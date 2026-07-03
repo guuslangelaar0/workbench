@@ -6,7 +6,7 @@ fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
 jmode() { python3 -c "import json,sys;d=json.load(open(sys.argv[1]));print(next(f['mode'] for f in d['files'] if f['path']==sys.argv[2]))" "$1" "$2"; }
 
-bash "$HERE/scripts/init.sh" --name "Acme" --mission "Private & fast." --target "$TMP" >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --level fleet --name "Acme" --mission "Private & fast." --target "$TMP" >/dev/null 2>&1
 
 chk "SOUL.md rendered"        "[ -f '$TMP/.claude/SOUL.md' ]"
 chk "SOUL has project name"   "grep -q 'Acme' '$TMP/.claude/SOUL.md'"
@@ -18,12 +18,12 @@ chk "manifest has SOUL merge" "[ \"\$(jmode '$TMP/.workbench/manifest.json' '.cl
 chk "manifest coord managed"  "[ \"\$(jmode '$TMP/.workbench/manifest.json' 'scripts/coord/wb-coord')\" = managed ]"
 chk "manifest _next-id once"  "[ \"\$(jmode '$TMP/.workbench/manifest.json' '.claude/tasks/_next-id')\" = once ]"
 echo "0042" > "$TMP/.claude/tasks/_next-id"
-bash "$HERE/scripts/init.sh" --name "Acme" --mission "x" --target "$TMP" >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --level fleet --name "Acme" --mission "x" --target "$TMP" >/dev/null 2>&1
 chk "re-run preserves _next-id" "[ \"\$(cat '$TMP/.claude/tasks/_next-id')\" = 0042 ]"
 
 # git pre-commit guard actually installs into a real git repo
 G="$(mktemp -d)"; ( cd "$G" && git init -q )
-bash "$HERE/scripts/init.sh" --name "HookTest" --mission "x" --target "$G" >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --level fleet --name "HookTest" --mission "x" --target "$G" >/dev/null 2>&1
 chk "pre-commit guard installed" "[ -f '$G/.git/hooks/pre-commit' ] && grep -q 'wb-coord commit guard' '$G/.git/hooks/pre-commit'"
 rm -rf "$G"
 

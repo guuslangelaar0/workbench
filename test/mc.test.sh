@@ -8,7 +8,7 @@ trap 'rm -rf "$TMP"' EXIT
 fail=0
 chk() { if eval "$2"; then echo "ok: $1"; else echo "FAIL: $1" >&2; fail=1; fi; }
 
-bash "$HERE/scripts/init.sh" --name "Acme" --mission "Test." --target "$TMP" --profile full >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --name "Acme" --mission "Test." --target "$TMP" --profile full --level fleet >/dev/null 2>&1
 bash "$HERE/scripts/task-new.sh" --title "Dash Task" --estimate "~2h" --target "$TMP" >/dev/null
 bash "$HERE/scripts/task-move.sh" 0001 in-review --target "$TMP" >/dev/null
 JOB_OUT="$(bash "$HERE/scripts/job.sh" start codex-engineer 0001 --target "$TMP" --owner codex --runtime-mode background --summary 'Codex is editing files.')"
