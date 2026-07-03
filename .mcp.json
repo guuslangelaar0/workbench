@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "workbench-mesh": {
+      "command": "node",
+      "args": ["./scripts/mesh-channel.js"],
+      "env": { "WORKBENCH_MESH_ACTOR": "guus-lead" }
+    }
+  }
+}

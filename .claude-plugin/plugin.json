@@ -22,6 +22,23 @@
     "claude-code"
   ],
   "dependencies": [
-    { "name": "superpowers", "marketplace": "claude-plugins-official", "version": ">=6.1.0" }
+    {
+      "name": "superpowers",
+      "marketplace": "claude-plugins-official",
+      "version": ">=6.1.0"
+    }
+  ],
+  "mcpServers": {
+    "workbench-mesh": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/scripts/mesh-channel.js"
+      ]
+    }
+  },
+  "channels": [
+    {
+      "server": "workbench-mesh"
+    }
   ]
 }
