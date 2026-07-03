@@ -323,6 +323,15 @@ struct AvailabilityArgs {
     reason: Option<String>,
     #[arg(long = "as")]
     as_actor: Option<String>,
+    /// Overrides platform auto-detection ("macos"/"linux"/"windows"). Only
+    /// needed when a session should be dispatched as a different platform
+    /// than the OS it's literally running on (rare).
+    #[arg(long)]
+    platform: Option<String>,
+    /// Extra dispatch capability beyond the platform's defaults (e.g. a GPU
+    /// box, a specific SDK). Repeatable.
+    #[arg(long = "capability")]
+    capabilities: Vec<String>,
 }
 
 #[derive(Debug, Args)]
@@ -334,6 +343,10 @@ struct DoingArgs {
     text: String,
     #[arg(long = "as")]
     as_actor: Option<String>,
+    #[arg(long)]
+    platform: Option<String>,
+    #[arg(long = "capability")]
+    capabilities: Vec<String>,
 }
 
 #[derive(Debug, Args)]
@@ -423,11 +436,21 @@ async fn main() -> Result<()> {
                 args.state,
                 args.reason,
                 args.as_actor,
+                args.platform,
+                args.capabilities,
             )
             .await
         }
         Command::Doing(args) => {
-            client::set_doing(args.target, args.home, args.text, args.as_actor).await
+            client::set_doing(
+                args.target,
+                args.home,
+                args.text,
+                args.as_actor,
+                args.platform,
+                args.capabilities,
+            )
+            .await
         }
         Command::Watch(args) => {
             client::watch_actor(args.target, args.home, args.actor, args.as_actor).await

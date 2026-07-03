@@ -31,14 +31,20 @@ operations:
   message TARGET TEXT... [--as ACTOR]
   ask TARGET QUESTION... [--as ACTOR]
   handoff TASK_ID TARGET [--as ACTOR]
-  availability STATE [--reason TEXT] [--as ACTOR]
-  doing TEXT... [--as ACTOR]
+  availability STATE [--reason TEXT] [--as ACTOR] [--platform NAME] [--capability VALUE]...
+  doing TEXT... [--as ACTOR] [--platform NAME] [--capability VALUE]...
   watch ACTOR [--as ACTOR]
 
 --as ACTOR identifies this session/process as ACTOR in the posted event,
 instead of the shared default "session:lead". Set this (or export
 WORKBENCH_MESH_ACTOR) whenever more than one real session is expected to
 post into the same room/mesh, so senders are distinguishable.
+
+availability/doing auto-detect this session's OS (macos/linux/windows) and
+its default dispatch capabilities (e.g. macOS gets ios-simulator). --platform
+overrides auto-detection; --capability (repeatable) adds project-specific
+extras on top. A lead reading these can route iOS QA only to macos sessions,
+Windows-native work only to windows sessions, and so on.
 EOF
 }
 
@@ -164,23 +170,38 @@ cmd="${1:-}"
 [ -n "$cmd" ] || { usage; exit 2; }
 shift || true
 
-# Pull a `--as ACTOR` pair out of the remaining args, wherever it appears, so
-# it doesn't get swallowed by commands that greedily join the rest of the
-# args as message/question text (e.g. `message room hello --as actor:x`).
-# Leaves AS_ARGS empty (not passed to the binary) when no --as was given, so
-# the binary's own WORKBENCH_MESH_ACTOR/default fallback still applies.
+# Pull `--as ACTOR`, `--platform NAME`, and repeatable `--capability VALUE`
+# out of the remaining args, wherever they appear, so they don't get
+# swallowed by commands that greedily join the rest of the args as
+# message/question/doing text (e.g. `doing "fixing tests" --platform macos`).
+# Leaves the *_ARGS arrays empty (nothing passed to the binary) when the
+# corresponding flag wasn't given, so the binary's own auto-detection
+# (WORKBENCH_MESH_ACTOR / std::env::consts::OS) still applies.
 AS_ARGS=()
+PLATFORM_ARGS=()
+CAP_ARGS=()
 if [ "$#" -gt 0 ]; then
   rest=()
   i=1
   while [ "$i" -le "$#" ]; do
     arg="${!i}"
-    if [ "$arg" = "--as" ]; then
-      i=$((i + 1))
-      AS_ARGS=(--as "${!i:-}")
-    else
-      rest+=("$arg")
-    fi
+    case "$arg" in
+      --as)
+        i=$((i + 1))
+        AS_ARGS=(--as "${!i:-}")
+        ;;
+      --platform)
+        i=$((i + 1))
+        PLATFORM_ARGS=(--platform "${!i:-}")
+        ;;
+      --capability)
+        i=$((i + 1))
+        CAP_ARGS+=(--capability "${!i:-}")
+        ;;
+      *)
+        rest+=("$arg")
+        ;;
+    esac
     i=$((i + 1))
   done
   set -- "${rest[@]}"
@@ -312,11 +333,11 @@ case "$cmd" in
     ;;
   availability)
     require_arg "availability state" "${1:-}"
-    exec "$BIN" availability "${PROJECT_ARGS[@]}" "$@" "${AS_ARGS[@]}"
+    exec "$BIN" availability "${PROJECT_ARGS[@]}" "$@" "${AS_ARGS[@]}" "${PLATFORM_ARGS[@]}" "${CAP_ARGS[@]}"
     ;;
   doing)
     require_arg "doing text" "${1:-}"
-    exec "$BIN" doing "${PROJECT_ARGS[@]}" "$*" "${AS_ARGS[@]}"
+    exec "$BIN" doing "${PROJECT_ARGS[@]}" "$*" "${AS_ARGS[@]}" "${PLATFORM_ARGS[@]}" "${CAP_ARGS[@]}"
     ;;
   watch)
     require_arg "actor" "${1:-}"

@@ -40,6 +40,60 @@ fn resolve_actor_from(explicit: Option<&str>, env_value: Option<&str>) -> String
     DEFAULT_ACTOR.to_string()
 }
 
+/// Normalizes Rust's `std::env::consts::OS` ("macos"/"linux"/"windows"/...)
+/// to the small set of platform names Workbench cares about for dispatch
+/// decisions, defaulting unrecognized values to "unknown" rather than
+/// leaking a raw, unstable string into the protocol.
+fn detect_platform() -> String {
+    normalize_platform(std::env::consts::OS)
+}
+
+fn normalize_platform(raw: &str) -> String {
+    match raw {
+        "macos" => "macos",
+        "windows" => "windows",
+        "linux" => "linux",
+        _ => "unknown",
+    }
+    .to_string()
+}
+
+/// Capabilities a platform brings for dispatch purposes — e.g. only macOS
+/// can run the iOS Simulator, so an iOS QA task should never be handed to a
+/// Linux/Windows session. Auto-derived from platform; `--capability` on the
+/// CLI can add project-specific extras (a GPU box, a specific SDK) on top.
+fn default_capabilities(platform: &str) -> Vec<String> {
+    match platform {
+        "macos" => vec![
+            "macos-native".to_string(),
+            "ios-simulator".to_string(),
+            "android-emulator".to_string(),
+        ],
+        "windows" => vec!["windows-native".to_string()],
+        "linux" => vec![
+            "linux-native".to_string(),
+            "android-emulator".to_string(),
+        ],
+        _ => Vec::new(),
+    }
+}
+
+/// Combines the platform's auto-derived capabilities with any project- or
+/// session-specific extras from `--capability`, de-duplicated and sorted so
+/// repeated heartbeats produce a stable payload (easier to diff/test, and
+/// avoids the dashboard flickering on ordering alone).
+fn merge_capabilities(platform: &str, extra: Vec<String>) -> Vec<String> {
+    let mut caps = default_capabilities(platform);
+    for c in extra {
+        let c = c.trim();
+        if !c.is_empty() && !caps.iter().any(|existing| existing == c) {
+            caps.push(c.to_string());
+        }
+    }
+    caps.sort();
+    caps
+}
+
 pub async fn status(project_root: PathBuf, home: Option<PathBuf>) -> Result<()> {
     auth::require_local_project_credential(&project_root, home.clone())?;
     let token = auth::local_project_token(&project_root, home)?;
@@ -321,7 +375,11 @@ pub async fn set_availability(
     state: String,
     reason: Option<String>,
     from: Option<String>,
+    platform: Option<String>,
+    extra_capabilities: Vec<String>,
 ) -> Result<()> {
+    let platform = platform.unwrap_or_else(detect_platform);
+    let capabilities = merge_capabilities(&platform, extra_capabilities);
     let event = append_or_post_event(
         &project_root,
         home,
@@ -329,7 +387,12 @@ pub async fn set_availability(
         "presence",
         &resolve_actor(from.as_deref()),
         None,
-        json!({ "availability": state, "reason": reason }),
+        json!({
+            "availability": state,
+            "reason": reason,
+            "platform": platform,
+            "capabilities": capabilities,
+        }),
     )
     .await?;
     println!("availability: updated seq={}", event.seq);
@@ -341,7 +404,11 @@ pub async fn set_doing(
     home: Option<PathBuf>,
     text: String,
     from: Option<String>,
+    platform: Option<String>,
+    extra_capabilities: Vec<String>,
 ) -> Result<()> {
+    let platform = platform.unwrap_or_else(detect_platform);
+    let capabilities = merge_capabilities(&platform, extra_capabilities);
     let event = append_or_post_event(
         &project_root,
         home,
@@ -349,7 +416,11 @@ pub async fn set_doing(
         "presence",
         &resolve_actor(from.as_deref()),
         None,
-        json!({ "current_step": text }),
+        json!({
+            "current_step": text,
+            "platform": platform,
+            "capabilities": capabilities,
+        }),
     )
     .await?;
     println!("doing: updated seq={}", event.seq);
@@ -515,7 +586,10 @@ mod tests {
     use crate::auth;
     use crate::store::MeshStore;
 
-    use super::{job_events, resolve_actor_from, send_message, DEFAULT_ACTOR};
+    use super::{
+        default_capabilities, job_events, merge_capabilities, normalize_platform,
+        resolve_actor_from, send_message, set_doing, DEFAULT_ACTOR,
+    };
 
     #[test]
     fn remote_metadata_url_rejects_non_http_scheme() {
@@ -698,6 +772,79 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].from, "actor:generator-1");
         assert_ne!(events[0].from, DEFAULT_ACTOR);
+    }
+
+    #[test]
+    fn default_capabilities_are_platform_specific_and_exclusive() {
+        let macos = default_capabilities("macos");
+        let windows = default_capabilities("windows");
+        let linux = default_capabilities("linux");
+
+        // Only macOS can run the iOS Simulator - dispatch must never see it
+        // offered by Windows or Linux sessions.
+        assert!(macos.contains(&"ios-simulator".to_string()));
+        assert!(!windows.contains(&"ios-simulator".to_string()));
+        assert!(!linux.contains(&"ios-simulator".to_string()));
+
+        assert!(windows.contains(&"windows-native".to_string()));
+        assert!(linux.contains(&"linux-native".to_string()));
+        assert!(default_capabilities("unknown").is_empty());
+    }
+
+    #[test]
+    fn merge_capabilities_dedupes_and_sorts_without_dropping_platform_defaults() {
+        let merged = merge_capabilities(
+            "macos",
+            vec![
+                "gpu".to_string(),
+                "ios-simulator".to_string(), // duplicate of a platform default
+                "  ".to_string(),            // blank must be ignored
+                "gpu".to_string(),           // duplicate extra
+            ],
+        );
+        assert_eq!(
+            merged,
+            vec!["android-emulator", "gpu", "ios-simulator", "macos-native"]
+        );
+    }
+
+    #[test]
+    fn normalize_platform_maps_unknown_raw_values_to_unknown() {
+        assert_eq!(normalize_platform("macos"), "macos");
+        assert_eq!(normalize_platform("windows"), "windows");
+        assert_eq!(normalize_platform("linux"), "linux");
+        assert_eq!(normalize_platform("freebsd"), "unknown");
+    }
+
+    #[tokio::test]
+    async fn doing_reports_platform_and_capabilities_in_payload() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "worker.cred", "mesh-client", "worker");
+
+        set_doing(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "reviewing PR".to_string(),
+            Some("actor:reviewer".to_string()),
+            Some("linux".to_string()),
+            vec!["docker".to_string()],
+        )
+        .await
+        .unwrap();
+
+        let events = MeshStore::open(project.path())
+            .unwrap()
+            .list_events_since(0)
+            .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].payload["platform"], "linux");
+        let caps = events[0].payload["capabilities"].as_array().unwrap();
+        let caps: Vec<&str> = caps.iter().map(|v| v.as_str().unwrap()).collect();
+        assert!(caps.contains(&"linux-native"));
+        assert!(caps.contains(&"docker"));
+        assert!(!caps.contains(&"ios-simulator"));
     }
 
     fn write_project_config(project: &std::path::Path, name: &str) {
