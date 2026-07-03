@@ -169,7 +169,7 @@ fn ensure_fifo(project_root: &Path, actor: &str) -> Result<PathBuf> {
         // bitmask; no invariants beyond that are required.
         let result = unsafe { libc_mkfifo(cpath.as_ptr(), 0o600) };
         if result != 0 {
-            anyhow::bail!("mkfifo({}) failed", path.display());
+            anyhow::bail!("mkfifo({}) failed: {}", path.display(), std::io::Error::last_os_error());
         }
     }
     Ok(path)
@@ -180,10 +180,18 @@ fn ensure_fifo(project_root: &Path, actor: &str) -> Result<PathBuf> {
 // crate dependency for what is a single, stable system call.  If `libc` is
 // ever added to the workspace for other reasons, replace this block with a
 // direct call to `libc::mkfifo` and remove the declaration.
+//
+// `mode_t` width is platform-specific: u16 on macOS, u32 on Linux and other
+// POSIX systems.  The alias ensures the FFI signature matches each target.
+#[cfg(target_os = "macos")]
+type ModeT = u16;
+#[cfg(all(unix, not(target_os = "macos")))]
+type ModeT = u32;
+
 #[cfg(unix)]
 extern "C" {
     #[link_name = "mkfifo"]
-    fn libc_mkfifo(path: *const std::os::raw::c_char, mode: u32) -> i32;
+    fn libc_mkfifo(path: *const std::os::raw::c_char, mode: ModeT) -> i32;
 }
 
 /// Write a single inbox-hit line to the actor's FIFO.
