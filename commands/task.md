@@ -14,7 +14,7 @@ Natural intent mapping:
 - If the repo/code location is missing or ambiguous, still create the task. Put "locate affected repo/code path" in the notes or acceptance criteria; do not refuse to file the bug because the fix target is unclear.
 - "Would be cool", "for later", or speculative ideas belong in `/workbench:suggest add`, not here.
 
-1. Treat `$ARGUMENTS` as the task title (plus any optional `--epic` / `--track` / `--repos` / `--estimate` the user passed). If no title is present, ask for a one-line title (and optionally epic / track / repos / estimate).
+1. Treat `$ARGUMENTS` as the task title (plus any optional `--epic` / `--track` / `--repos` / `--estimate` the user passed). If no title is present, don't fail or dump usage — run a short wizard: use AskUserQuestion for a one-line title, then (optionally) epic / track / estimate, offering discovered candidates as options (open epic IDs from `.claude/epics/`, existing `**Track:**` values in the backlog); confirm the assembled `task-new.sh` invocation, then run it.
 2. Run the creator with your Bash tool:
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-new.sh" --title "<title>" --target "${CLAUDE_PROJECT_DIR}" [--epic <epic-id>] [--track <t>] [--repos "<a,b>"] [--estimate "<e>"]`
    It allocates the next ID from `_next-id`, renders the canonical task template, and bumps the counter. `--epic <id>` links the task to an epic (see `/workbench:epic`); its progress then rolls up in `/workbench:mc`.

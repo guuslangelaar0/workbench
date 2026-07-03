@@ -10,7 +10,7 @@ Use creation for natural requests like "should we choose A or B?", "big architec
 
 ## Create — default, when `$ARGUMENTS` is not `resolve ...`
 
-1. Treat `$ARGUMENTS` as the decision title plus any context. If no title is present, derive a concise one-line title from the user's fork; only ask if the fork is genuinely unclear.
+1. Treat `$ARGUMENTS` as the decision title plus any context. If no title is present, derive a concise one-line title from the user's fork; if invoked bare with no fork to derive from, don't fail — run a short wizard: use AskUserQuestion for the decision title and the known options/tradeoffs (offer forks recently discussed or found in task `## Notes` as candidates), confirm, then create.
 2. Run the creator with your Bash tool:
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/task-new.sh" --title "<title>" --state decisions --target "${CLAUDE_PROJECT_DIR}" --verification "human decision recorded"`
 3. Append a short `## Options` section to the created file with the known options, tradeoffs, and the default recommendation if one is obvious. Keep it compact.

@@ -1,12 +1,14 @@
 ---
 description: Coordinate Claude sessions/leads/workers over the local/LAN Workbench Mesh command center
 argument-hint: "[start|stop|status|who|open|invite|connect|devices|revoke-device|room|message|ask|handoff|availability|doing|watch|tail|inbox]"
-allowed-tools: ["Bash", "Read"]
+allowed-tools: ["Bash", "Read", "AskUserQuestion"]
 ---
 
 Use this when the user asks to connect another Claude session, bring in another device, open a channel between leads, ask another lead/worker for status/help, hand off work, show who is working, or open the command center.
 
 Run `${CLAUDE_PLUGIN_ROOT}/scripts/mesh.sh $ARGUMENTS`.
+
+Wizard on missing required values: bare `/workbench:mesh` routes naturally per the outcomes below, but an operation invoked with required pieces missing (`connect URL TOKEN [DEVICE]`; `invite` role/ttl; `message`/`ask`/`handoff` targets; `revoke-device DEVICE`; `tail --as`) must not fail or dump usage — use AskUserQuestion for exactly the missing values (for `connect`, offer to read a pending invite's connect lines when `.workbench/mesh/server.json` exists, and always ask for the device name; for message/ask/handoff/revoke targets, offer live candidates from `who`/`devices`), confirm the assembled command, then run it.
 
 Prefer natural outcome routing:
 - "talk to my MacBook Claude" -> status, start with `start --lan` if no LAN mesh is running, create `invite --role worker --ttl-seconds 900`, then show `/workbench:mesh connect URL TOKEN <device>` using hostname/mDNS and raw IP forms.

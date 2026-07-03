@@ -1,6 +1,6 @@
 ---
 description: Dispatch a task to a native Claude engineer lane — the default engine-specific implementation `/workbench:dispatch` routes to
-allowed-tools: ["Bash", "Read", "Task", "TodoWrite"]
+allowed-tools: ["Bash", "Read", "Task", "TodoWrite", "AskUserQuestion"]
 argument-hint: "<id> [--worktree [name]|--shared] [--background|--wait] [lane/repo]"
 ---
 
@@ -8,7 +8,7 @@ Dispatch a task to a Claude engineer lane. Use this when the user says "dispatch
 
 You are still the Workbench lead. The `engineer` subagent (Task tool, `subagent_type: engineer`) is the engineer. You own task lifecycle, review, and verification after it returns.
 
-1. Parse `$ARGUMENTS`: the task `<id>` (4-digit) and an optional lane/repo hint. If no explicit ID was supplied, do not guess and do not spawn a lane. Run `/workbench:mc` or `deps.sh ready` and tell the user which task is actually ready.
+1. Parse `$ARGUMENTS`: the task `<id>` (4-digit) and an optional lane/repo hint. If no explicit ID was supplied, do not guess and do not spawn a lane yet — run a short wizard instead: get candidates from `deps.sh ready`, use AskUserQuestion to pick the task, confirm the assembled dispatch, then continue with that ID.
    - `--worktree [name]`: prefer a native Claude Code worktree lane. Use the given name or `wb-<id>-<slug>`.
    - `--shared`: avoid a persistent/background worktree and use the normal foreground Task-tool path. The engineer agent can still run in Claude's temporary `isolation: worktree` sandbox.
    - `--background`: for a native CLI lane, launch it with `claude --worktree <name> --bg --agent engineer "<prompt>"`.

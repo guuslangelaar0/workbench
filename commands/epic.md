@@ -1,6 +1,6 @@
 ---
 description: Create/list epics for big multi-part efforts, themes, initiatives, or fleet-level decomposition into related tasks
-allowed-tools: ["Bash", "Read"]
+allowed-tools: ["Bash", "Read", "AskUserQuestion"]
 argument-hint: "[\"<title>\"] [--theme <theme>] | list | close <id>"
 ---
 
@@ -46,4 +46,4 @@ It scans `.claude/tasks/**/*.md` for every task carrying `**Epic:** <epic-id>`, 
 
 Report either the closed epic ID, or the blocking task list verbatim so the user knows what still needs to land.
 
-Do not create an epic until you have a title. If the project is unconfigured, defer to `/workbench:setup` first.
+Do not create an epic until you have a title — but if the user asked to create one without a title (or `close` without an id), don't fail or dump usage: run a short wizard — use AskUserQuestion per missing value (offer candidate epic names derived from related backlog task clusters, or open epic IDs for `close`), confirm the assembled command, then run it. If the project is unconfigured, defer to `/workbench:setup` first.

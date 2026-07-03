@@ -1,6 +1,6 @@
 ---
 description: Designate this session a topic lead — scope task-picking to one Track and announce ownership to other live sessions
-allowed-tools: ["Bash", "Read"]
+allowed-tools: ["Bash", "Read", "AskUserQuestion"]
 argument-hint: "<topic>"
 ---
 
@@ -8,7 +8,7 @@ Make THIS session the lead for one topic/track, so several teamleads can run in 
 
 This is a convenience wrapper around `/workbench:lead set "<purpose>" --mode track --track <topic>`: it makes the identical `lead.sh set --mode track` call, but also runs the liveness check (`wb-coord ping`/`who`) below to detect whether another live session already leads this track — `lead set` alone does not check for that collision.
 
-1. Parse the `<topic>` from `$ARGUMENTS` (e.g. `storage`, `mobile`, `web`). If none was given, ask which track this session should lead.
+1. Parse the `<topic>` from `$ARGUMENTS` (e.g. `storage`, `mobile`, `web`). If none was given, don't fail or dump usage — run a short wizard: use AskUserQuestion offering the distinct `**Track:**` values found in `.claude/tasks/backlog/` (minus tracks other live leads already own per `wb-coord who`) as options, confirm, then proceed.
 2. Announce ownership by setting your coord label, then look at who else is live:
    - `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lead.sh" set --target "${CLAUDE_PROJECT_DIR}" --session-id "<session-id>" --mode track --track "<topic>" --purpose "lead <topic> track"`
    - `bash "${CLAUDE_PROJECT_DIR}/scripts/coord/wb-coord" ping "lead:<topic>"`

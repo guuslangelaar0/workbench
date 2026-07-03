@@ -1,6 +1,6 @@
 ---
 description: Dispatch a task to a native Codex engineer lane through the OpenAI Codex plugin
-allowed-tools: ["Bash", "Read", "Agent", "TodoWrite"]
+allowed-tools: ["Bash", "Read", "Agent", "TodoWrite", "AskUserQuestion"]
 argument-hint: "<id> [--background|--wait|--reconcile] [--fresh|--resume] [--model <model|spark>] [--effort <none|minimal|low|medium|high|xhigh>] [lane/repo]"
 ---
 
@@ -20,7 +20,7 @@ The disk lease commands are `lane.sh start`, `lane.sh status`, and `lane.sh beat
    - `--reconcile`: do not launch a new Codex lane; inspect the existing Codex lane/task state and decide whether it is ready for Workbench verification
    - if both `--background` and `--wait` are present, stop and ask the user to choose one
    - treat remaining text as a lane/repo hint
-   - if no task id is present, ask for the task id
+   - if no task id is present, don't fail or dump usage — run a short wizard: get unblocked candidates from `deps.sh ready`, use AskUserQuestion to pick the task, confirm the assembled dispatch, then continue with that id
 
 2. If `--reconcile` was passed:
    - run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/job.sh" latest <id> --target "${CLAUDE_PROJECT_DIR}"` to find the newest Workbench job for the task

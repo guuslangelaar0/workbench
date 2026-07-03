@@ -6,7 +6,7 @@ argument-hint: "\"<title>\" [--type bug|feature|follow-up]"
 
 Park work that does not belong to the current lead purpose. Follow the `lead-purpose` skill.
 
-1. Resolve the title and type from `$ARGUMENTS`. Default type is `follow-up`; use `bug` for defects and `feature` for new capability ideas. If the title is missing, ask for one short title. `--type feature` is for a feature idea the user has already decided to commit to the backlog as real work — a maybe-later idea that isn't committed yet belongs in `/workbench:suggest add` instead, not here.
+1. Resolve the title and type from `$ARGUMENTS`. Default type is `follow-up`; use `bug` for defects and `feature` for new capability ideas. If the title is missing, don't fail or dump usage — run a short wizard: use AskUserQuestion for one short title (offer a candidate derived from the tangent just discussed) and the type (`bug`/`feature`/`follow-up` as options), confirm, then continue. `--type feature` is for a feature idea the user has already decided to commit to the backlog as real work — a maybe-later idea that isn't committed yet belongs in `/workbench:suggest add` instead, not here.
 2. Read the current lead purpose:
 
    ```bash
