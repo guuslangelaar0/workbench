@@ -81,6 +81,30 @@ impl MeshStore {
             .find(|event| event.seq == seq))
     }
 
+    /// Cursor pagination for the chat pane: the last `limit` events in
+    /// `room` (or across all rooms if `room` is None) with seq strictly less
+    /// than `before` (or unbounded if `before` is None), newest-first. Reads
+    /// the whole log like `list_events_since` — event logs at this scale
+    /// (a dev mesh, not a production message queue) are small enough that a
+    /// dedicated index isn't justified yet.
+    pub fn list_events_page(
+        &self,
+        room: Option<&str>,
+        before: Option<u64>,
+        limit: usize,
+    ) -> Result<Vec<EventEnvelope>> {
+        let ceiling = before.unwrap_or(u64::MAX);
+        let mut matching: Vec<EventEnvelope> = self
+            .list_events_since(0)?
+            .into_iter()
+            .filter(|event| event.seq < ceiling)
+            .filter(|event| room.is_none_or(|r| event.room == r))
+            .collect();
+        matching.sort_by(|left, right| right.seq.cmp(&left.seq));
+        matching.truncate(limit);
+        Ok(matching)
+    }
+
     pub fn append_audit(&self, action: &str, actor: &str, payload: Value) -> Result<EventEnvelope> {
         validate_event_type(action)?;
         let path = self.root.join("audit.jsonl");
@@ -364,5 +388,36 @@ mod tests {
 
         let missing = store.get_event(appended.seq + 100).unwrap();
         assert!(missing.is_none());
+    }
+
+    #[test]
+    fn list_events_page_windows_by_room_and_before_newest_first() {
+        let project = TempDir::new().unwrap();
+        let store = MeshStore::open(project.path()).unwrap();
+        for i in 0..5 {
+            store
+                .append_event("message.sent", "repo:workbench", "session:lead", None, json!({ "text": format!("a{i}") }))
+                .unwrap();
+            store
+                .append_event("message.sent", "repo:other", "session:lead", None, json!({ "text": format!("b{i}") }))
+                .unwrap();
+        }
+        // 10 events total, seqs 1..=10, alternating repo:workbench / repo:other
+
+        let page = store.list_events_page(Some("repo:workbench"), None, 2).unwrap();
+        assert_eq!(page.len(), 2);
+        assert_eq!(page[0].payload["text"], "a4"); // newest first
+        assert_eq!(page[1].payload["text"], "a3");
+
+        let older = store
+            .list_events_page(Some("repo:workbench"), Some(page[1].seq), 2)
+            .unwrap();
+        assert_eq!(older.len(), 2);
+        assert_eq!(older[0].payload["text"], "a2");
+        assert_eq!(older[1].payload["text"], "a1");
+
+        let unfiltered = store.list_events_page(None, None, 3).unwrap();
+        assert_eq!(unfiltered.len(), 3);
+        assert_eq!(unfiltered[0].payload["text"], "b4");
     }
 }
