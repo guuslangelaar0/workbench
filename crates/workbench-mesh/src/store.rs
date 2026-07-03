@@ -9,7 +9,7 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::protocol::{validate_event_room, validate_event_type, EventEnvelope};
+use crate::protocol::{validate_ack, validate_event_room, validate_event_type, EventEnvelope};
 
 pub struct MeshStore {
     root: PathBuf,
@@ -47,6 +47,10 @@ impl MeshStore {
     ) -> Result<EventEnvelope> {
         validate_event_type(event_type)?;
         validate_event_room(event_type, room)?;
+        if let Some(seq) = ack_of {
+            let referenced = self.get_event(seq)?;
+            validate_ack(ack_of, event_type, from, to, room, referenced.as_ref())?;
+        }
         let path = self.root.join("events.jsonl");
         append_locked_jsonl(&path, |seq| {
             Ok(EventEnvelope {
@@ -400,6 +404,70 @@ mod tests {
 
         let missing = store.get_event(appended.seq + 100).unwrap();
         assert!(missing.is_none());
+    }
+
+    #[test]
+    fn append_event_with_ack_validates_at_store_level() {
+        let project = TempDir::new().unwrap();
+        let store = MeshStore::open(project.path()).unwrap();
+
+        // Post the message that will be acked — addressed to session:worker
+        let sent = store
+            .append_event(
+                "message.sent",
+                "repo:workbench",
+                "session:lead",
+                Some("session:worker"),
+                json!({ "text": "hi" }),
+            )
+            .unwrap();
+
+        // Valid: actual addressee posts a message.delivered receipt
+        let ack = store
+            .append_event_with_ack(
+                "message.delivered",
+                "repo:workbench",
+                "session:worker",
+                None,
+                json!({}),
+                Some(sent.seq),
+            )
+            .unwrap();
+        assert_eq!(ack.ack_of, Some(sent.seq));
+        assert_eq!(ack.event_type, "message.delivered");
+
+        // Invalid: ack_of references a seq that does not exist
+        let err = store
+            .append_event_with_ack(
+                "message.delivered",
+                "repo:workbench",
+                "session:worker",
+                None,
+                json!({}),
+                Some(99999),
+            )
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("ack_of references an unknown seq"),
+            "unexpected error: {err:#}"
+        );
+
+        // Invalid: non-ack event_type with ack_of set
+        let err = store
+            .append_event_with_ack(
+                "message.sent",
+                "repo:workbench",
+                "session:worker",
+                None,
+                json!({ "text": "should fail" }),
+                Some(sent.seq),
+            )
+            .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("ack_of is only valid on message.delivered/message.read"),
+            "unexpected error: {err:#}"
+        );
     }
 
     #[test]
