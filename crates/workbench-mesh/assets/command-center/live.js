@@ -91,27 +91,70 @@ window.WB = window.WB || {};
         firstLoad = false;
         recomputeDerived(); // ends in deriveHostState — sets healthy/orphaned from live presence
         if (WB.app) { WB.app.refreshChrome(); WB.app.rerenderSurface(); }
+        WB.live.subscribe(defaultRooms());
         connectSocket();
       })
       .catch(() => setHostState('down'));
+  }
+
+  let reconnectAttempt = 0;
+  function backoffMs(attempt) {
+    if (attempt === 0) return 250;
+    const capped = Math.min(250 * Math.pow(2, Math.min(attempt, 6)), 5000);
+    return capped + Math.random() * (capped / 5);
   }
 
   function connectSocket() {
     if (!token || socket) return;
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     socket = new WebSocket(proto + '//' + window.location.host + '/ws?token=' + encodeURIComponent(token) + '&last_seq=' + sim.seq);
+    socket.addEventListener('open', () => {
+      reconnectAttempt = 0;
+      sendSubscribe();
+    });
     socket.addEventListener('message', (e) => {
       lastContact = Date.now();
       let payload = null;
       try { payload = JSON.parse(e.data); } catch (err) { return; }
-      if (!payload || payload.type === 'ack' || !payload.seq) return;
+      if (!payload) return;
+      if (payload.type === 'ack' || payload.type === 'pong') { handleControlFrame(payload); return; }
+      if (payload.type === 'batch' && Array.isArray(payload.events)) {
+        for (const ev of payload.events) { if (ev.seq) ingest(ev, false); }
+        recomputeDerived();
+        return;
+      }
+      if (!payload.seq) return;
       ingest(payload, false);
       recomputeDerived();
     });
     socket.addEventListener('close', () => {
       socket = null;
-      setTimeout(connectSocket, 1500);
+      reconnectAttempt += 1;
+      setTimeout(connectSocket, backoffMs(reconnectAttempt));
     });
+  }
+
+  function handleControlFrame(payload) {
+    // ack: no-op here — optimistic-send reconciliation (Task 14) consumes it
+    // pong: RTT measurement (Task 15) consumes it
+  }
+
+  let subscribedRooms = [];
+  function sendSubscribe() {
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({ v: 1, type: 'subscribe', rooms: subscribedRooms, actor: SELF }));
+  }
+  WB.live = WB.live || {};
+  WB.live.subscribe = function (rooms) {
+    subscribedRooms = rooms.slice();
+    sendSubscribe();
+  };
+
+  function defaultRooms() {
+    const rooms = new Set(['team', 'presence']);
+    for (const r of WB.ROOMS) { if (!r.output) rooms.add(r.id); }
+    rooms.add(SELF);
+    return Array.from(rooms);
   }
 
   /* ── projection ── */
