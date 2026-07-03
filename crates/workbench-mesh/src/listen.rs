@@ -27,6 +27,14 @@ fn ws_url(metadata: &ServerMetadata, token: &str) -> String {
 
 fn is_inbound_for(actor: &str, event: &Value) -> bool {
     let event_type = event.get("type").and_then(Value::as_str).unwrap_or("");
+    // Receipts are signals, never themselves acked — this guard prevents an ack
+    // cascade when two connectors share a room: without it, Connector B would
+    // see the `message.delivered` that Connector A posted for the original
+    // message, treat it as inbound, and post its own ack, triggering Connector
+    // A to ack *that*, and so on without bound.
+    if event_type == "message.delivered" || event_type == "message.read" {
+        return false;
+    }
     if !(event_type.starts_with("message.") || event_type == "task.handoff") {
         return false;
     }
@@ -311,6 +319,29 @@ mod tests {
             "room": "presence",
         });
         assert!(!is_inbound_for("session:worker", &unrelated));
+    }
+
+    #[test]
+    fn receipt_event_types_are_never_treated_as_inbound() {
+        // Both message.delivered and message.read must be excluded
+        // unconditionally — even when they come from a different actor in a
+        // subscribed room — so two connectors sharing a room cannot cascade acks
+        // at each other.
+        let delivered = json!({
+            "type": "message.delivered",
+            "from": "some-other-actor",
+            "room": "repo:workbench",
+            "ack_of": 5,
+        });
+        assert!(!is_inbound_for("session:worker", &delivered));
+
+        let read = json!({
+            "type": "message.read",
+            "from": "some-other-actor",
+            "room": "team",
+            "ack_of": 7,
+        });
+        assert!(!is_inbound_for("session:worker", &read));
     }
 
     #[test]

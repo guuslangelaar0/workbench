@@ -604,8 +604,6 @@ async fn websocket_session(socket: WebSocket, state: AppState, last_seq: u64, to
                 if require_token(&state, &token).is_err() {
                     return;
                 }
-                // Drain the channel for up to ~16ms so that events that arrive
-                // in quick succession are coalesced into a single batch frame.
                 let mut batch = vec![first_event];
                 let deadline = tokio::time::Instant::now() + Duration::from_millis(16);
                 // Drain the channel for up to ~16ms so events that arrive in quick

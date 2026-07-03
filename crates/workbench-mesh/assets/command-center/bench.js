@@ -104,7 +104,7 @@ window.WB = window.WB || {};
       const roomSummary = roomReceiptSummary(m);
       if (roomSummary) tsRow.appendChild(roomSummary);
     }
-    return el('div', { class: 'msg' + (me ? ' me' : '') }, [
+    return el('div', { class: 'msg' + (me ? ' me' : ''), 'data-seq': m.seq != null ? String(m.seq) : '' }, [
       el('div', { class: 'who' }, [nameSpan, el('span', { class: 'room-tag', text: ' ' + tag })]),
       bubble,
       tsRow,
@@ -676,12 +676,25 @@ window.WB = window.WB || {};
       if (pinned) feed.scrollTop = feed.scrollHeight;
     }
   });
-  WB.sim.on('receipt', () => {
-    // Re-render the visible chat list so tick glyphs update. Receipts are rare
-    // (one per sent message), so a full replaceChildren pass is fine.
+  WB.sim.on('receipt', (seq) => {
+    // Update only the affected message's tick in-place — a full list re-render
+    // would jump the viewport to the bottom on every ack, breaking the UX for
+    // users scrolled up reading history.  If the message isn't in the current
+    // mounted window (outside the paginated view) we no-op; its tick will be
+    // correct the next time renderChatList renders it from WB.RECEIPTS.
     const scroll = document.getElementById('chat-scroll');
     if (!scroll) return;
-    renderChatList(scroll);
+    const row = scroll.querySelector('.msg[data-seq="' + seq + '"]');
+    if (!row) return;
+    const tsRow = row.querySelector('.ts');
+    if (!tsRow) return;
+    tsRow.querySelectorAll('.tick, .seen-by').forEach((n) => n.remove());
+    const m = WB.CHAT.find((c) => c.seq === seq);
+    if (!m) return;
+    const glyph = receiptGlyph(m);
+    if (glyph) tsRow.appendChild(glyph);
+    const roomSummary = roomReceiptSummary(m);
+    if (roomSummary) tsRow.appendChild(roomSummary);
   });
   WB.sim.on('chat', (m) => {
     const scroll = document.getElementById('chat-scroll');
