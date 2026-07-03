@@ -24,6 +24,7 @@ window.WB = window.WB || {};
     },
   };
   WB.sim = sim;
+  WB.RECEIPTS = WB.RECEIPTS || {};
 
   /* ── auth ── */
   const params = new URLSearchParams(window.location.search);
@@ -237,6 +238,14 @@ window.WB = window.WB || {};
       if (!quiet) sim.emit('chat', m);
     }
 
+    // delivery/seen receipts
+    if ((type === 'message.delivered' || type === 'message.read') && ev.ack_of) {
+      const r = WB.RECEIPTS[ev.ack_of] = WB.RECEIPTS[ev.ack_of] || { deliveredBy: new Set(), seenBy: new Set() };
+      if (type === 'message.delivered') r.deliveredBy.add(ev.from);
+      else r.seenBy.add(ev.from);
+      if (!quiet) sim.emit('receipt', ev.ack_of);
+    }
+
     // per-agent output feed
     if (type === 'output.chunk' && ev.room.startsWith('output:')) {
       const id = ev.room.slice('output:'.length);
@@ -396,7 +405,20 @@ window.WB = window.WB || {};
       pendingSelf.push(m.text);
       const type = m.kind === 'ask' ? 'message.request_status' : m.kind === 'handoff' ? 'task.handoff' : 'message.sent';
       const payload = m.kind === 'handoff' ? { task_id: m.text } : { text: m.text };
-      return post(type, m.room === 'team' ? 'repo:workbench' : m.room, payload, m.to || undefined);
+      return post(type, m.room === 'team' ? 'repo:workbench' : m.room, payload, m.to || undefined).then((data) => {
+        if (data && data.seq) {
+          // Backfill the real server-assigned seq onto the object already pushed
+          // into WB.CHAT by bench.js's send(). Without this the optimistic entry
+          // has seq=undefined and the sort comparator (using ?? Infinity) keeps it
+          // pinned to the end forever — correct now but wrong once any later real
+          // message arrives.
+          m.seq = data.seq;
+          WB.RECEIPTS[data.seq] = WB.RECEIPTS[data.seq] || { deliveredBy: new Set(), seenBy: new Set() };
+          WB.RECEIPTS[data.seq].serverReceivedAt = Date.now();
+          sim.emit('receipt', data.seq);
+        }
+        return data;
+      });
     },
     loadOlder(room, beforeSeq) {
       const params = new URLSearchParams({ room: room, before: String(beforeSeq), limit: '50' });

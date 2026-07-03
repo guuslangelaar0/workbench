@@ -6,6 +6,7 @@ window.WB = window.WB || {};
   let roomFilter = 'all';
   WB.FEEDLOG = {};
   WB.SNAPSHOTS = {};
+  WB.RECEIPTS = WB.RECEIPTS || {};
 
   const TOOL_ICON = { Bash: 'terminal', Edit: 'pencil', Read: 'file-code', Git: 'git', Test: 'check-circle', Screenshot: 'camera' };
 
@@ -45,6 +46,23 @@ window.WB = window.WB || {};
   }
 
   /* ── chat ── */
+  function receiptGlyph(m) {
+    if (!m.seq) return null;
+    const r = WB.RECEIPTS[m.seq];
+    if (!r) return el('span', { class: 'tick tick-sent', title: 'sent', text: '✓' });
+    if (r.seenBy && r.seenBy.size) return el('span', { class: 'tick tick-seen', title: 'seen', text: '✓✓' });
+    if (r.deliveredBy && r.deliveredBy.size) return el('span', { class: 'tick tick-delivered', title: 'delivered', text: '✓✓' });
+    if (r.serverReceivedAt) return el('span', { class: 'tick tick-received', title: 'sent', text: '✓' });
+    return null;
+  }
+  function roomReceiptSummary(m) {
+    if (!m.seq || m.to) return null; // room aggregate only applies to non-DM posts
+    const r = WB.RECEIPTS[m.seq];
+    const seenCount = r && r.seenBy ? r.seenBy.size : 0;
+    if (!seenCount) return null;
+    const total = WB.AGENTS.filter((a) => WB.eff.heat(a) !== 'dead').length || 1;
+    return el('span', { class: 'seen-by', text: 'seen by ' + seenCount + '/' + total });
+  }
   function msgNode(m) {
     if (m.kind === 'handoff') {
       return el('div', { class: 'sysline', html: svgIcon('arrow-right', 12) + ' <b>' + WB.ui.esc(m.who) + '</b>&nbsp;handoff — ' + WB.ui.esc(m.text) });
@@ -58,18 +76,31 @@ window.WB = window.WB || {};
     else if (m.room === 'team') tag = '→ team' + (m.via ? ' · via ' + m.via : '');
     else tag = '→ ' + m.room + (me && m.via ? ' · via ' + m.via : '');
     const nameSpan = me ? el('span', { text: m.who }) : leadName(m.who);
+    const tsRow = el('div', { class: 'ts' }, [document.createTextNode(clock(m.ts))]);
+    if (me) {
+      const glyph = receiptGlyph(m);
+      if (glyph) tsRow.appendChild(glyph);
+      const roomSummary = roomReceiptSummary(m);
+      if (roomSummary) tsRow.appendChild(roomSummary);
+    }
     return el('div', { class: 'msg' + (me ? ' me' : '') }, [
       el('div', { class: 'who' }, [nameSpan, el('span', { class: 'room-tag', text: ' ' + tag })]),
       bubble,
-      el('div', { class: 'ts', text: clock(m.ts) }),
+      tsRow,
     ]);
   }
   function chatMatches(m) { return roomFilter === 'all' || m.room === roomFilter || m.room === 'team'; }
+  const CHAT_MOUNT_CAP = 150;
   function renderChatList(scroll, visibleCount) {
     scroll.replaceChildren();
     const matched = WB.CHAT.filter(chatMatches).slice().sort((a, b) => (a.seq ?? Infinity) - (b.seq ?? Infinity));
-    const page = visibleCount != null ? matched.slice(-visibleCount) : matched;
-    for (const m of page) scroll.appendChild(msgNode(m));
+    const cap = visibleCount != null ? Math.min(visibleCount, CHAT_MOUNT_CAP) : CHAT_MOUNT_CAP;
+    const page = matched.slice(-cap);
+    for (const m of page) {
+      const node = msgNode(m);
+      node.classList.add('cv-row');
+      scroll.appendChild(node);
+    }
     scroll.scrollTop = scroll.scrollHeight;
   }
   // Routing: the host lead fronts everything by default; @name targets a
@@ -620,6 +651,13 @@ window.WB = window.WB || {};
       while (feed.children.length > 80) feed.removeChild(feed.firstChild);
       if (pinned) feed.scrollTop = feed.scrollHeight;
     }
+  });
+  WB.sim.on('receipt', () => {
+    // Re-render the visible chat list so tick glyphs update. Receipts are rare
+    // (one per sent message), so a full replaceChildren pass is fine.
+    const scroll = document.getElementById('chat-scroll');
+    if (!scroll) return;
+    renderChatList(scroll);
   });
   WB.sim.on('chat', (m) => {
     const scroll = document.getElementById('chat-scroll');

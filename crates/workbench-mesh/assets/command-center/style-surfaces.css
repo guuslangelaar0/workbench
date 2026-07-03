@@ -377,3 +377,24 @@ body[data-density="compact"] .foryou, body[data-density="compact"] .drail { widt
 body[data-density="compact"] .ev { padding: 5px 16px; }
 body[data-density="compact"] .fl { padding: 2px 0; }
 body[data-density="compact"] .session-meta { width: 280px; }
+
+/* ── chat DOM mount cap + content-visibility ── */
+.cv-row {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 68px; /* single-line .msg estimate: .who ~16px + .bubble ~38px + .ts ~14px */
+}
+/* ── receipt ticks ── */
+.tick {
+  margin-left: 6px;
+  font-size: 11px;
+  letter-spacing: -1px;
+  color: var(--ink-3, #8a8f98);
+}
+.tick-seen, .tick-delivered {
+  color: var(--amber-deep, #b8860b);
+}
+.seen-by {
+  margin-left: 8px;
+  font-size: 10px;
+  color: var(--ink-3, #8a8f98);
+}
