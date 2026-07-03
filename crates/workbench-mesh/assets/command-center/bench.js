@@ -65,10 +65,11 @@ window.WB = window.WB || {};
     ]);
   }
   function chatMatches(m) { return roomFilter === 'all' || m.room === roomFilter || m.room === 'team'; }
-  function renderChatList(scroll) {
+  function renderChatList(scroll, visibleCount) {
     scroll.replaceChildren();
-    const matched = WB.CHAT.filter(chatMatches);
-    for (const m of matched) scroll.appendChild(msgNode(m));
+    const matched = WB.CHAT.filter(chatMatches).slice().sort((a, b) => (a.seq || 0) - (b.seq || 0));
+    const page = visibleCount != null ? matched.slice(-visibleCount) : matched;
+    for (const m of page) scroll.appendChild(msgNode(m));
     scroll.scrollTop = scroll.scrollHeight;
   }
   // Routing: the host lead fronts everything by default; @name targets a
@@ -124,7 +125,7 @@ window.WB = window.WB || {};
         el('button', { class: 'room-chip' + (roomFilter === r ? ' on' : ''), text: r, onclick: (e) => {
           roomFilter = r;
           e.target.parentNode.querySelectorAll('.room-chip').forEach((c) => c.classList.toggle('on', c === e.target));
-          renderChatList(scroll);
+          renderChatList(scroll, visibleCount);
           updateHint();
         } })));
     const input = el('textarea', { rows: '1', placeholder: 'Message the team… (@name for one lead · shift+enter for a new line)' });
@@ -225,6 +226,7 @@ window.WB = window.WB || {};
       ]),
       hint,
     ]);
+    let visibleCount = 0;
     let oldestLoadedSeq = null;
     let loadingOlder = false;
     scroll.addEventListener('scroll', () => {
@@ -237,15 +239,18 @@ window.WB = window.WB || {};
       WB.api.loadOlder(room, before).then((evs) => {
         loadingOlder = false;
         if (!evs.length) return;
+        visibleCount += evs.length;
         oldestLoadedSeq = Math.min(...evs.map((e) => e.seq));
-        renderChatList(scroll);
+        renderChatList(scroll, visibleCount);
         scroll.scrollTop = scroll.scrollHeight - prevHeight; // preserve viewport position
       }).catch(() => { loadingOlder = false; });
     });
     updateHint();
-    renderChatList(scroll);
-    const initialMatched = WB.CHAT.filter(chatMatches);
-    oldestLoadedSeq = initialMatched.length ? Math.min(...initialMatched.map((m) => m.seq)) : null;
+    const initialMatched = WB.CHAT.filter(chatMatches).slice().sort((a, b) => (a.seq || 0) - (b.seq || 0));
+    const initialWindow = initialMatched.length > 50 ? initialMatched.slice(-50) : initialMatched;
+    visibleCount = Math.min(50, initialMatched.length);
+    oldestLoadedSeq = initialWindow.length ? initialWindow[0].seq : null;
+    renderChatList(scroll, visibleCount);
     renderTypingLine();
     return col;
   }
