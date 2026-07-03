@@ -2675,4 +2675,38 @@ mod tests {
             .unwrap()
             .to_string()
     }
+
+    #[tokio::test]
+    async fn app_level_ping_receives_matching_pong() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Service");
+        auth::bootstrap(project.path(), Some(home.path().to_path_buf())).unwrap();
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+            started_by: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+
+        let (mut socket, _) = connect_async(format!(
+            "ws://{}:{}/ws?token={}&last_seq=0",
+            metadata.host, metadata.port, metadata.local_token
+        ))
+        .await
+        .unwrap();
+        socket
+            .send(ClientMessage::Text(json!({ "v": 1, "type": "ping", "t": 12345 }).to_string()))
+            .await
+            .unwrap();
+        let pong = read_ws_json(&mut socket).await;
+        assert_eq!(pong["type"], "pong");
+        assert_eq!(pong["t"], 12345);
+
+        server.abort();
+    }
 }
