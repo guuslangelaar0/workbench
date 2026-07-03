@@ -43,6 +43,9 @@ enum Command {
     Ack(AckArgs),
     Actor(ActorCommand),
     Snapshot(SnapshotCommand),
+    /// Connect to the mesh server as ACTOR, subscribe to its rooms, ack
+    /// every inbound message, and wake a FIFO reader on each delivery.
+    Listen(ListenArgs),
 }
 
 #[derive(Debug, Args)]
@@ -424,6 +427,18 @@ struct AckArgs {
 }
 
 #[derive(Debug, Args)]
+struct ListenArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+    /// Actor identity to listen as. Falls back to the WORKBENCH_MESH_ACTOR
+    /// env var, then "session:lead".
+    #[arg(long = "as")]
+    as_actor: Option<String>,
+}
+
+#[derive(Debug, Args)]
 struct WatchArgs {
     #[arg(long)]
     target: PathBuf,
@@ -561,6 +576,13 @@ async fn main() -> Result<()> {
         }
         Command::Actor(actor) => run_actor(actor).await,
         Command::Snapshot(snapshot) => run_snapshot(snapshot),
+        Command::Listen(args) => {
+            let actor = args.as_actor.unwrap_or_else(|| {
+                std::env::var("WORKBENCH_MESH_ACTOR")
+                    .unwrap_or_else(|_| "session:lead".to_string())
+            });
+            workbench_mesh::listen::run_once(&args.target, args.home, &actor).await
+        }
     }
 }
 
