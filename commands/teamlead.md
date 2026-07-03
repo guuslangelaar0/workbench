@@ -6,6 +6,8 @@ argument-hint: "<topic>"
 
 Make THIS session the lead for one topic/track, so several teamleads can run in one project without colliding. Follow the `coordination` skill.
 
+This is a convenience wrapper around `/workbench:lead set "<purpose>" --mode track --track <topic>`: it makes the identical `lead.sh set --mode track` call, but also runs the liveness check (`wb-coord ping`/`who`) below to detect whether another live session already leads this track — `lead set` alone does not check for that collision.
+
 1. Parse the `<topic>` from `$ARGUMENTS` (e.g. `storage`, `mobile`, `web`). If none was given, ask which track this session should lead.
 2. Announce ownership by setting your coord label, then look at who else is live:
    - `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lead.sh" set --target "${CLAUDE_PROJECT_DIR}" --session-id "<session-id>" --mode track --track "<topic>" --purpose "lead <topic> track"`

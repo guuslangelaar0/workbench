@@ -12,6 +12,11 @@ Fast natural-language mapping:
 - First check `/workbench:mc` and the in-review cap. If the queue is at/over hard-drain, report that cap pressure and verify/drain instead of opening new work.
 - Use `deps.sh ready` / `deps.sh blocked`; never dispatch a task whose `**Blocked-by:**` dependency is unfinished.
 - For a brand-new committed feature with no task yet, create `/workbench:task` first, then come back here.
+- "How's the loop doing?", "what's our expectancy/grade?", or "score the loop" means `/workbench:score`.
+- "Dispatch this to Codex", "use Codex as the engineer", or "give task <id> to Codex" means `/workbench:codex-engineer <id>`.
+- "Convene the panel", "run a summit", or "what should we build next?" means `/workbench:evolve` (see the replenishment step below for when the loop triggers it automatically).
+- "Keep the loop alive across crashes/stalls" or "set up a supervisor" means `/workbench:supervise`.
+- "Operate this remotely" or "check status/decisions from my phone" means `/workbench:remote`.
 
 1. Start with a reality check: `/workbench:mc` (task counts, in-review vs cap, decisions, build, prod). Trust disk over memory.
 2. Then run the loop from the `orchestration` skill: drain in-review (hard-drain at `cap − 3`) → pick the highest-impact unblocked task → `/workbench:dispatch` it to an engineer → gate and `/workbench:verify` → lifecycle `git mv` → surface honesty triggers to `decisions/` without stopping → checkpoint `SESSION_STATE.md` on cadence (`session-continuity`) → **never stop**; always pick the next task.
