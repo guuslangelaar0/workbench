@@ -11,7 +11,7 @@
     {
       "name": "workbench",
       "description": "Scaffolds and maintains a complete AI-orchestrated way of working that grows with your product. Slash commands under /workbench:*.",
-      "version": "0.9.0",
+      "version": "0.10.0",
       "author": { "name": "Guus Langelaar", "email": "guus@devidee.nl" },
       "category": "productivity",
       "source": "."

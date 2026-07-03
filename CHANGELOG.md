@@ -6,6 +6,16 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-03
+
+The mesh command center release. The dashboard served by `workbench-mesh serve`
+becomes the five-surface command center designed in the Claude Design "Workbench"
+project, wired to the live event log instead of simulated data, and gains the
+output tailer that streams real Claude/Codex sessions onto the bench. Proven by a
+full live acceptance run on real processes: multi-session messaging with
+provider/model tagging, two concurrent tailers, LAN enrollment and revocation of a
+second machine, and the @mention composer exercised through the real browser UI.
+
 ### Added
 - **Mesh command center v2** — the dashboard served by `workbench-mesh serve` is now the redesigned five-surface command center handed off from the Claude Design "Workbench" project (`preview/Workbench Command Center.html`): **Bench** (per-device stations with heartbeat pulses, team chat with `@name` autocomplete and host-lead routing, a per-agent session focus view that interleaves live output and direct messages as one terminal scrollback, and a "For you" rail for decisions/stale leads/cap pressure), **Board** (drag-and-drop lifecycle lanes with in-review cap meter and a parallel Decisions rail), **Host** (host node + topology, single-point-of-failure honesty, enrollment with one-time invite tokens, devices, audit), **Ops** (jobs/leads/workers/rooms/task-reassign plus the live event rail), and **Docs** (maturity ladder with recommend-only level previews, dial table, C4 view, how-to guides, commands reference, FAQ). Light/dark themes follow the system with a manual override; warm paper/ink OKLCH tokens per the design system.
 - The design prototype's simulated data layer (`sim.js`) is replaced by a real one (`live.js`): every collection is projected from the real event log over the existing HTTP/WebSocket API, and every dashboard action posts a real event — chat/ask/handoff (`message.*`, `task.handoff`), decision approve/deny (`decision.answer`), task reassign/transition (`task.reassigned`, `task.status`), job stop/retry, lead adopt/close, and real invite create/revoke + device revoke through `/api/invites` and `/api/devices/revoke`.
