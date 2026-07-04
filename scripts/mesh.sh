@@ -21,7 +21,7 @@ usage() {
 usage: mesh.sh <operation> [args]
 
 operations:
-  start [--local|--lan] [--port N] [--pid-file PATH] [--as ACTOR]
+  start [--local|--lan] [--bind local|lan] [--port N] [--pid-file PATH] [--as ACTOR]
   stop [--pid-file PATH]
   status | who | jobs | open
   invite [--role ROLE] [--ttl-seconds N] [--max-uses N]
@@ -37,6 +37,7 @@ operations:
   watch ACTOR [--as ACTOR]
   tail --as ACTOR [--provider NAME] [--model NAME]   (reads stream-json on stdin)
   inbox --as ACTOR [--wait] [--since N]   (unread inbound messages; --wait blocks until one arrives)
+  listen --as ACTOR         (starts the workbench-mesh listen connector in the foreground; run it backgrounded for listen-wait/inbox --wait to benefit from instant FIFO wake)
   listen-wait --as ACTOR   (blocks on the actor's FIFO, written by `workbench-mesh listen`; falls back to inbox --wait polling if no listen connector is running)
   activity reading|typing|idle [--as ACTOR]   (live engagement indicator on the dashboard)
 
@@ -63,6 +64,9 @@ start always writes a pid file so it can be stopped later — pass --pid-file
 to choose the path explicitly (test harnesses do this), otherwise it defaults
 to <target>/.workbench/mesh/server.pid, next to server.json. stop reads that
 same default (or an explicit --pid-file) and sends SIGTERM, never SIGKILL.
+
+start's --bind local|lan is equivalent to --local/--lan; any other value is
+rejected before the success banner prints.
 EOF
 }
 
@@ -297,7 +301,10 @@ case "$cmd" in
           ;;
         --bind)
           require_arg "--bind value" "${2:-}"
-          mode="$2"
+          case "$2" in
+            local|lan) mode="$2" ;;
+            *) echo "mesh: --bind must be 'local' or 'lan' (got '$2')" >&2; exit 2 ;;
+          esac
           shift 2
           ;;
         --port)
@@ -563,6 +570,17 @@ for h in hits:
       [ "$wait_flag" = 1 ] || { echo "mesh inbox for $actor: empty"; exit 0; }
       sleep 2
     done
+    ;;
+  listen)
+    # Starts the `workbench-mesh listen` connector in the foreground — the
+    # process `listen-wait`'s FIFO fast path depends on. Run this as a
+    # long-lived background task (nohup/tmux/&) for it to have any effect;
+    # it blocks until killed.
+    if [ "${#AS_ARGS[@]}" -eq 0 ] && [ -z "${WORKBENCH_MESH_ACTOR:-}" ]; then
+      echo "mesh: listen requires --as ACTOR (or export WORKBENCH_MESH_ACTOR)" >&2
+      exit 2
+    fi
+    exec "$BIN" listen "${PROJECT_ARGS[@]}" "${AS_ARGS[@]}" "$@"
     ;;
   listen-wait)
     # Blocks on the actor's per-actor FIFO written by a running

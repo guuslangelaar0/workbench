@@ -291,4 +291,49 @@ ACK_EVENTS="$(curl -fsS "http://127.0.0.1:$PORT/api/events?since=0" -H "Authoriz
 READ_FOUND="$(printf '%s' "$ACK_EVENTS" | python3 -c 'import json,sys; events=json.load(sys.stdin).get("events",[]); print("yes" if any(e.get("type")=="message.read" and e.get("ack_of")=='"$SENT_SEQ"' for e in events) else "no")')"
 chk "activity --ack-of posts a message.read receipt" "[ '$READ_FOUND' = yes ]"
 
+echo "== start --bind rejects an invalid mode before the success banner =="
+BIND_PLUGIN="$TMP/bind-validate-plugin"
+mkdir -p "$BIND_PLUGIN/bin"
+ln -sf "$BIN" "$BIND_PLUGIN/bin/workbench-mesh"
+BIND_PROJECT="$TMP/bind-validate-project"
+mkdir -p "$BIND_PROJECT"
+BIND_OUT="$TMP/bind-invalid.out"
+BIND_RC=0
+CLAUDE_PLUGIN_ROOT="$BIND_PLUGIN" CLAUDE_PROJECT_DIR="$BIND_PROJECT" WORKBENCH_HOME="$HOME_TMP" \
+  bash "$HERE/scripts/mesh.sh" start --bind bogus >"$BIND_OUT" 2>&1 || BIND_RC=$?
+chk "start --bind bogus exits non-zero" "[ '$BIND_RC' -ne 0 ]"
+chk "start --bind bogus prints the rejection message" "grep -q \"bind must be 'local' or 'lan'\" '$BIND_OUT'"
+chk "start --bind bogus never prints the success banner" "! grep -q 'Workbench mesh will listen on' '$BIND_OUT'"
+
+BIND_OK_PROJECT="$TMP/bind-validate-ok-project"
+mkdir -p "$BIND_OK_PROJECT"
+BIND_OK_OUT="$TMP/bind-valid.out"
+CLAUDE_PLUGIN_ROOT="$BIND_PLUGIN" CLAUDE_PROJECT_DIR="$BIND_OK_PROJECT" WORKBENCH_HOME="$HOME_TMP" \
+  timeout 2 bash "$HERE/scripts/mesh.sh" start --bind local --port 0 >"$BIND_OK_OUT" 2>&1
+chk "start --bind local (valid mode) still prints the success banner" "grep -q 'Workbench mesh will listen on this machine only' '$BIND_OK_OUT'"
+
+echo "== listen forwards --as ACTOR to the workbench-mesh listen connector =="
+LISTEN_PLUGIN="$TMP/listen-plugin"
+mkdir -p "$LISTEN_PLUGIN/bin"
+ln -sf "$BIN" "$LISTEN_PLUGIN/bin/workbench-mesh"
+LISTEN_PROJECT="$TMP/listen-project"
+mkdir -p "$LISTEN_PROJECT"
+LISTEN_OUT="$TMP/listen-forward.out"
+LISTEN_RC=0
+CLAUDE_PLUGIN_ROOT="$LISTEN_PLUGIN" CLAUDE_PROJECT_DIR="$LISTEN_PROJECT" WORKBENCH_HOME="$HOME_TMP" \
+  timeout 4 bash "$HERE/scripts/mesh.sh" listen --as someone >"$LISTEN_OUT" 2>&1 || LISTEN_RC=$?
+# No server is running for $LISTEN_PROJECT, so the Rust connector's reconnect
+# loop (workbench-mesh listen) retries forever until `timeout` kills it (rc
+# 124) — that failure mode (visible as "listen: connection error ...,
+# reconnecting" on stderr) proves the wrapper forwarded --target/--as
+# correctly and the process is doing real reconnect work, not choking on
+# argument parsing in the shell wrapper itself.
+chk "listen reaches the Rust binary's reconnect loop" "grep -q 'listen: connection error' '$LISTEN_OUT'"
+chk "listen does not fail on a shell-wrapper argument error" "! grep -qi 'requires --as\|unknown operation' '$LISTEN_OUT'"
+chk "listen keeps running until timeout kills it (rc 124)" "[ '$LISTEN_RC' -eq 124 ]"
+LISTEN_NO_ACTOR_RC=0
+CLAUDE_PLUGIN_ROOT="$LISTEN_PLUGIN" CLAUDE_PROJECT_DIR="$LISTEN_PROJECT" WORKBENCH_HOME="$HOME_TMP" \
+  bash "$HERE/scripts/mesh.sh" listen >"$TMP/listen-no-actor.out" 2>&1 || LISTEN_NO_ACTOR_RC=$?
+chk "listen without --as (and no WORKBENCH_MESH_ACTOR) fails fast" "[ '$LISTEN_NO_ACTOR_RC' -ne 0 ] && grep -q 'listen requires --as ACTOR' '$TMP/listen-no-actor.out'"
+
 [ "$fail" = 0 ] && echo "PASS: mesh-command-center" || { echo "mesh-command-center test failed"; exit 1; }

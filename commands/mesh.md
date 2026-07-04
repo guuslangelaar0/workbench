@@ -1,6 +1,6 @@
 ---
 description: Coordinate Claude sessions/leads/workers over the local/LAN Workbench Mesh command center
-argument-hint: "[start|stop|status|who|jobs|open|invite|connect|devices|revoke-device|room|message|ask|handoff|availability|activity|doing|watch|tail|inbox|listen-wait]"
+argument-hint: "[start|stop|status|who|jobs|open|invite|connect|devices|revoke-device|room|message|ask|handoff|availability|activity|doing|watch|tail|inbox|listen|listen-wait]"
 allowed-tools: ["Bash", "Read", "AskUserQuestion"]
 ---
 
@@ -18,8 +18,9 @@ Prefer natural outcome routing:
 - "ask worker status" -> `ask <actor> <question>` because individual actors use status/help requests.
 - "stream this session's output to the mesh" / "show what this agent is doing live on the bench" -> pipe the session's stream-json through `tail --as <actor>`, e.g. `claude -p "fix the bug" --output-format stream-json --verbose | ${CLAUDE_PLUGIN_ROOT}/scripts/mesh.sh tail --as generator-1 --provider claude --model sonnet` (Codex: `codex exec --json ... | mesh.sh tail --as <actor> --provider codex --model <model>`). It tees stdin through unchanged, so it drops into an existing pipeline without swallowing output.
 - "tag my presence with the model/provider I'm running" -> pass `--provider <claude|codex>` and `--model <name>` on `availability`/`doing` (or export `WORKBENCH_MESH_PROVIDER` / `WORKBENCH_MESH_MODEL`); they default to "unknown" and show up on the dashboard so a lead can route by engine.
-- "show who is hosting the mesh" -> `start --as <actor>` stamps the host actor into the server metadata; that name surfaces on the command center's Host surface.
+- "show who is hosting the mesh" -> `start --as <actor>` stamps the host actor into the server metadata; that name surfaces on the command center's Host surface. `start --bind local|lan` is equivalent to `--local`/`--lan`, when the caller prefers spelling the mode as a flag value.
 - "always respond when someone messages me on the mesh" -> arm `mesh.sh inbox --as <actor> --wait` as a background task; it exits when a message arrives (the harness re-invokes the session on completion — a push channel), reply, then re-arm. One-shot `inbox --as <actor>` drains unread messages.
+- "start a connector so I get instant wake instead of polling" -> `listen --as <actor>` runs the `workbench-mesh listen` connector in the foreground (background it with `&`/nohup/tmux); once running, `listen-wait --as <actor>` and `inbox --as <actor> --wait` pick up its instant FIFO wake instead of polling.
 - "show me the team" -> who/status.
 - "show connected devices" -> `devices`.
 - "revoke the MacBook device" -> `revoke-device macbook`.
