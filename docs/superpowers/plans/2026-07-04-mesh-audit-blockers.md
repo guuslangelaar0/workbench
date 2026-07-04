@@ -40,7 +40,9 @@
 
 **The bug:** the scanner walks every argument front-to-back and treats a literal `--as`/`--platform`/`--capability`/`--provider`/`--model` token *anywhere* as a real flag — including inside unquoted free-text message/question/doing content. `mesh.sh message audit-room-1 please use --as flag correctly` silently becomes `from=flag`, text `"please use correctly"`.
 
-**The fix:** scan for these flags only from the **end** of the argument list backward, stripping a trailing run of recognized `flag value` pairs. Real flags are always meant to trail the free text per this script's own documented usage (`message TARGET TEXT... [--as ACTOR]`) — scanning from the end means a flag-shaped token buried in the *middle* of a message is never touched, and only a genuine trailing flag (or a message whose literal last two words happen to look like one) can still collide, which is a far narrower window than the current bug (any occurrence anywhere).
+**The fix (corrected — an earlier draft of this task was found wrong by a live test run and must NOT be used):** a pure trailing-scan applied to *every* operation breaks `listen-wait`'s fallback path, which `exec`s into `inbox --as ACTOR --wait` — since `--wait` trails `--as ACTOR` there, a trailing-only scan stops at `--wait` (not a recognized flag) before ever reaching `--as` further left, and the actor is never extracted. Confirmed live: `bash scripts/mesh.sh listen-wait --as fallback-actor` regressed to `mesh: inbox requires --as ACTOR` under a blanket trailing-scan.
+
+Only `message`, `ask`, and `doing` actually join their remaining args into **unbounded free text** — every other operation (`inbox`, `listen-wait`, `room`, `watch`, `handoff`, `availability`, `tail`, `activity`, `start`) takes a bounded number of positional args plus these flags in any relative order, so front-to-back scanning is safe and necessary for them (it's what correctly handles `--as X --wait` regardless of order). Branch the pre-scan on `$cmd` (already known before the scanner runs, since `cmd="${1:-}"` + `shift` happen first): trailing-scan for `message`/`ask`/`doing` only, the original front-to-back scan for everything else.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -75,46 +77,96 @@ Expected: FAIL — the current scanner truncates the message and spoofs the send
 Replace lines 194-239 of `scripts/mesh.sh` (the whole comment block through `fi`) with:
 
 ```bash
-# Pull a *trailing* run of `--as ACTOR`, `--platform NAME`,
-# `--capability VALUE` (repeatable), `--provider NAME`, `--model NAME` off
-# the END of the argument list only — never from the middle. Every
-# documented usage of these flags has them trail the operation's free-text
-# argument (e.g. `message TARGET TEXT... [--as ACTOR]`), so scanning
-# backward from the end and stopping at the first non-flag token means a
-# flag-shaped word buried inside a message/question/doing string (e.g.
-# "please use --as flag correctly") is never mistaken for a real flag —
-# only a genuine trailing flag (or a message whose literal last two words
-# happen to collide) can still match, which is a much narrower window
-# than scanning the whole list front-to-back.
+# Pull `--as ACTOR`, `--platform NAME`, repeatable `--capability VALUE`,
+# `--provider NAME`, `--model NAME` out of the remaining args.
+#
+# message/ask/doing join their remaining args into UNBOUNDED free-text
+# message/question/doing content, so for those three operations only, scan
+# for these flags from the END of the argument list backward, stripping a
+# trailing run of recognized `flag value` pairs — never from the middle.
+# Every documented usage of these flags on these three ops has them trail
+# the free text (e.g. `message TARGET TEXT... [--as ACTOR]`), so this means
+# a flag-shaped word buried INSIDE a message (e.g. "please use --as flag
+# correctly") is never mistaken for a real flag; only a genuine trailing
+# flag (or a message whose literal last two words happen to collide) can
+# still match — a much narrower window than the bug this replaces.
+#
+# Every other operation takes a bounded number of positional args plus
+# these flags in any relative order (e.g. `inbox --as ACTOR --wait`, where
+# --wait trails --as) — for those, front-to-back scanning is safe (there is
+# no free-text tail to protect) and must be preserved, since a trailing-only
+# scan would stop at --wait before ever reaching --as further left.
 AS_ARGS=()
 PLATFORM_ARGS=()
 CAP_ARGS=()
 PROVIDER_ARGS=()
 MODEL_ARGS=()
-if [ "$#" -gt 0 ]; then
-  rest=("$@")
-  while [ "${#rest[@]}" -ge 2 ]; do
-    last=$((${#rest[@]} - 1))
-    flag="${rest[$((last - 1))]}"
-    value="${rest[$last]}"
-    case "$flag" in
-      --as) AS_ARGS=(--as "$value") ;;
-      --platform) PLATFORM_ARGS=(--platform "$value") ;;
-      --capability) CAP_ARGS=(--capability "$value" "${CAP_ARGS[@]:-}") ;;
-      --provider) PROVIDER_ARGS=(--provider "$value") ;;
-      --model) MODEL_ARGS=(--model "$value") ;;
-      *) break ;;
-    esac
-    keep=$((${#rest[@]} - 2))
-    if [ "$keep" -gt 0 ]; then
-      rest=("${rest[@]:0:$keep}")
-    else
-      rest=()
+case "$cmd" in
+  message|ask|doing)
+    if [ "$#" -gt 0 ]; then
+      rest=("$@")
+      while [ "${#rest[@]}" -ge 2 ]; do
+        last=$((${#rest[@]} - 1))
+        flag="${rest[$((last - 1))]}"
+        value="${rest[$last]}"
+        case "$flag" in
+          --as) AS_ARGS=(--as "$value") ;;
+          --platform) PLATFORM_ARGS=(--platform "$value") ;;
+          --capability) CAP_ARGS=(--capability "$value" "${CAP_ARGS[@]}") ;;
+          --provider) PROVIDER_ARGS=(--provider "$value") ;;
+          --model) MODEL_ARGS=(--model "$value") ;;
+          *) break ;;
+        esac
+        keep=$((${#rest[@]} - 2))
+        if [ "$keep" -gt 0 ]; then
+          rest=("${rest[@]:0:$keep}")
+        else
+          rest=()
+        fi
+      done
+      set -- "${rest[@]}"
     fi
-  done
-  set -- "${rest[@]}"
-fi
+    ;;
+  *)
+    if [ "$#" -gt 0 ]; then
+      rest=()
+      i=1
+      while [ "$i" -le "$#" ]; do
+        arg="${!i}"
+        case "$arg" in
+          --as)
+            i=$((i + 1))
+            AS_ARGS=(--as "${!i:-}")
+            ;;
+          --platform)
+            i=$((i + 1))
+            PLATFORM_ARGS=(--platform "${!i:-}")
+            ;;
+          --capability)
+            i=$((i + 1))
+            CAP_ARGS+=(--capability "${!i:-}")
+            ;;
+          --provider)
+            i=$((i + 1))
+            PROVIDER_ARGS=(--provider "${!i:-}")
+            ;;
+          --model)
+            i=$((i + 1))
+            MODEL_ARGS=(--model "${!i:-}")
+            ;;
+          *)
+            rest+=("$arg")
+            ;;
+        esac
+        i=$((i + 1))
+      done
+      set -- "${rest[@]}"
+    fi
+    ;;
+esac
 ```
+
+This is operation-aware: trailing-scan for `message`/`ask`/`doing` (protects free text), front-to-back for everything else (preserves `inbox --as ACTOR --wait`-style ordering-independent flag parsing). Also add a regression check for the `listen-wait` fallback case specifically in Step 4 below — it's the exact scenario the earlier flawed draft broke.
 
 - [ ] **Step 4: Run the new test to verify it passes, then the full suite**
 
