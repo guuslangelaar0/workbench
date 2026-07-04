@@ -30,4 +30,5 @@ DRIVER_RC=$?
 cat "$TMP/driver.out"
 chk "driver completed" "[ '$DRIVER_RC' = 0 ]"
 chk "reply tool invoked stub with target, text and actor" "grep -q 'message repo:demo Reply from the session --as test-lead' '$TMP/replies.log'"
+chk "ack events (message.delivered/message.read) excluded from the bridge" "grep -q 'ok: ack events (message.delivered/message.read) are excluded' '$TMP/driver.out'"
 [ "$fail" = 0 ] && echo "PASS: mesh-channel" || { echo "mesh-channel test failed"; cat "$TMP/driver.err" >&2; exit 1; }

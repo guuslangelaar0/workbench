@@ -388,11 +388,17 @@ body[data-density="compact"] .session-meta { width: 280px; }
   margin-left: 6px;
   font-size: 11px;
   letter-spacing: -1px;
-  color: var(--ink-3, #8a8f98);
 }
-.tick-seen, .tick-delivered {
-  color: var(--amber-deep, #b8860b);
-}
+/* sent: our optimistic write, not yet echoed by the server — faintest. */
+.tick-sent { color: var(--ink-4, #b3b8c0); }
+/* received: server has it (echoed back) but no peer receipt yet. */
+.tick-received { color: var(--ink-3, #8a8f98); }
+/* delivered: at least one peer's client has it. */
+.tick-delivered { color: var(--amber-deep, #b8860b); }
+/* seen: at least one peer has read it — same hue as delivered (the ✓✓
+   glyph already distinguishes the delivered/seen pair from sent/received),
+   bolded for a stronger "read" cue within that pair. */
+.tick-seen { color: var(--amber-deep, #b8860b); font-weight: 600; }
 .seen-by {
   margin-left: 8px;
   font-size: 10px;

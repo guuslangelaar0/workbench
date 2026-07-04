@@ -75,14 +75,19 @@ async function waitFor(pred, ms) {
     JSON.stringify({ seq: 4, type: "output.chunk", room: "output:x", from: "x", payload: { kind: "message", summary: "not a message type" } }),
     JSON.stringify({ seq: 5, type: "message.sent", room: "repo:demo", from: "intruder", payload: { text: "not on the sender allowlist" } }),
     JSON.stringify({ seq: 6, type: "message.request_status", room: "presence", from: "critic-1", to: "test-lead", payload: { question: "status?" } }),
+    JSON.stringify({ seq: 7, type: "message.delivered", room: "repo:demo", from: "test-lead", ack_of: 2, payload: {} }),
+    JSON.stringify({ seq: 8, type: "message.read", room: "repo:demo", from: "test-lead", ack_of: 2, payload: {} }),
   ].join("\n") + "\n");
 
   await waitFor(() => inbox.length >= 2, 6000);
+  await sleep(500); // let any (incorrect) extra bridged events for seq 7/8 land before asserting the count
   chk("exactly the two inbound events injected", inbox.length === 2, JSON.stringify(inbox));
   chk("channel event carries content and sender/room meta",
     inbox.some((n) => n.content === "hello lead" && n.meta.sender === "ui:operator" && n.meta.room === "repo:demo"));
   chk("direct ask injected with sender meta",
     inbox.some((n) => n.content === "status?" && n.meta.sender === "critic-1"));
+  chk("ack events (message.delivered/message.read) are excluded, not merely empty-payload no-ops",
+    !inbox.some((n) => n.meta.seq === "7" || n.meta.seq === "8"), JSON.stringify(inbox));
 
   // 4. reply tool round-trip through the stub
   send({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "mesh_reply", arguments: { target: "repo:demo", text: "Reply from the session" } } });

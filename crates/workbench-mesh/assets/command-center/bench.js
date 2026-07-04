@@ -604,10 +604,17 @@ window.WB = window.WB || {};
       target: t ? t.id + ' — ' + t.title : a.doing,
       confirmLabel: 'Post handoff',
       onConfirm: () => {
-        const m = { room: a.room, who: 'you (operator)', kind: 'handoff', text: (t ? t.id + ' ' : '') + '→ next available session', ts: Date.now() };
+        // The optimistic bubble renders under the agent's own room (where the
+        // operator is looking) but the actual posted event always targets the
+        // canonical handoff room + `to`, matching the CLI's convention
+        // (client.rs's handoff_task hardcodes room "tasks" with `to` set) —
+        // the two don't have to match: local room is a UX choice, the posted
+        // room is the wire contract wb-coord's claim flow relies on.
+        const handoffRoom = WB.HANDOFF_ROOM || 'tasks';
+        const m = { room: a.room, who: 'you (operator)', kind: 'handoff', text: (t ? t.id + ' ' : '') + '→ next available session', ts: Date.now(), to: a.id };
         WB.CHAT.push(m);
-        if (WB.api) WB.api.post('task.handoff', a.room, { task_id: t ? String(t.id) : a.doing });
-        toast('Handoff posted to ' + a.room, 'mesh handoff' + (t ? ' ' + t.id : ''));
+        if (WB.api) WB.api.post('task.handoff', handoffRoom, { task_id: t ? String(t.id) : a.doing }, a.id);
+        toast('Handoff posted to ' + handoffRoom, 'mesh handoff' + (t ? ' ' + t.id : ''));
       },
     });
   }

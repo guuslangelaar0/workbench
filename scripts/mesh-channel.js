@@ -87,6 +87,10 @@ function poll() {
     try { e = JSON.parse(line); } catch { continue; }
     if (!e.seq || e.seq <= cursor) continue;
     top = Math.max(top, e.seq);
+    // Ack events ride on message.* types but must never be bridged out as
+    // chat — exclude them explicitly rather than relying on the empty-payload
+    // `text` check below to accidentally filter them.
+    if ((e.type || "") === "message.delivered" || (e.type || "") === "message.read") continue;
     if (!/^(message\.|task\.handoff)/.test(e.type || "")) continue;
     if (e.from === ACTOR) continue;
     if (SENDER_ALLOWLIST.length && !SENDER_ALLOWLIST.includes(e.from)) continue;

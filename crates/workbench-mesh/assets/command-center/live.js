@@ -26,6 +26,11 @@ window.WB = window.WB || {};
   WB.sim = sim;
   WB.RECEIPTS = WB.RECEIPTS || {};
   WB.RTT = null;
+  // The one room the CLI (`wb mesh handoff`, client.rs's handoff_task) and the
+  // dashboard's Hand Off action must agree on — wb-coord's claim flow expects
+  // handoffs to land in a single well-known room regardless of which side
+  // posted them.
+  WB.HANDOFF_ROOM = 'tasks';
 
   /* ── auth ── */
   const params = new URLSearchParams(window.location.search);
