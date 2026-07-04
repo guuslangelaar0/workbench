@@ -2078,8 +2078,16 @@ mod tests {
     async fn remote_client_message_posts_to_cached_daemon() {
         let project = TempDir::new().unwrap();
         let host_home = TempDir::new().unwrap();
+        // The joining client must use its own separate project checkout — it
+        // must not reuse the host's project directory, which already has local
+        // server metadata. Using the same directory would (correctly) be
+        // refused by accept_remote_invite as of the clobber guard.
+        let join_project = TempDir::new().unwrap();
         let join_home = TempDir::new().unwrap();
         write_project_config(project.path(), "Mesh Remote");
+        // The joining checkout must declare the same project name so that
+        // accept_remote_invite's project-ID check passes.
+        write_project_config(join_project.path(), "Mesh Remote");
         auth::bootstrap(project.path(), Some(host_home.path().to_path_buf())).unwrap();
         let owner_token =
             auth::local_project_token(project.path(), Some(host_home.path().to_path_buf()))
@@ -2105,7 +2113,7 @@ mod tests {
         let base = format!("http://{}:{}", metadata.host, metadata.port);
 
         client::accept_remote_invite(
-            project.path().to_path_buf(),
+            join_project.path().to_path_buf(),
             Some(join_home.path().to_path_buf()),
             base.clone(),
             invite.token,
@@ -2114,7 +2122,7 @@ mod tests {
         .await
         .unwrap();
         client::send_message(
-            project.path().to_path_buf(),
+            join_project.path().to_path_buf(),
             Some(join_home.path().to_path_buf()),
             "repo:mesh-remote".to_string(),
             "hello from laptop".to_string(),

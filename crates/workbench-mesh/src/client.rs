@@ -167,6 +167,16 @@ pub async fn accept_remote_invite(
     token: String,
     device: String,
 ) -> Result<()> {
+    if let Ok(existing) = read_server_metadata(&project_root) {
+        if existing.mode == "local" || existing.mode == "lan" {
+            anyhow::bail!(
+                "{} already hosts its own mesh server (mode: {}) — connect refuses to overwrite its metadata. \
+                 Run this from a different project checkout, or stop the local server first if it's actually abandoned.",
+                project_root.display(),
+                existing.mode
+            );
+        }
+    }
     let metadata = remote_metadata_from_url(&url)?;
     let local_project = auth::project_id_for(&project_root)?;
     let response = Client::new()
@@ -1206,6 +1216,50 @@ mod tests {
             .unwrap();
         assert_eq!(events[0].event_type, "presence.heartbeat");
         assert_eq!(events[0].payload["activity"], "typing");
+    }
+
+    #[tokio::test]
+    async fn accept_remote_invite_refuses_when_project_already_hosts_a_local_server() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        // Simulate an already-running local server by writing its metadata directly —
+        // this is exactly what `serve()` does on startup.
+        crate::server::write_server_metadata(
+            project.path(),
+            &crate::server::ServerMetadata {
+                mode: "local".to_string(),
+                host: "127.0.0.1".to_string(),
+                port: 44444,
+                hostname: "test-host".to_string(),
+                mdns: "test-host.local".to_string(),
+                lan_ips: vec![],
+                local_token: "real-local-token".to_string(),
+                started_by: "test-lead".to_string(),
+                started_at: "2026-07-04T00:00:00Z".to_string(),
+            },
+        )
+        .unwrap();
+
+        let err = super::accept_remote_invite(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "http://127.0.0.1:9999".to_string(),
+            "wb_invite_fake".to_string(),
+            "some-device".to_string(),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(
+            err.to_string().contains("already hosts its own"),
+            "unexpected error: {err:#}"
+        );
+
+        // The original local metadata must be completely untouched.
+        let after = crate::server::read_server_metadata(project.path()).unwrap();
+        assert_eq!(after.mode, "local");
+        assert_eq!(after.local_token, "real-local-token");
     }
 
     #[tokio::test]
