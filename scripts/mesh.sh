@@ -610,7 +610,6 @@ for h in hits:
       token="$(metadata_field local_token)"
       if [ -n "$token" ]; then
         printf 'Command center: %s/?token=%s\n' "$url" "$token"
-        printf 'token (for Authorization: Bearer, if needed): %s\n' "$token"
       else
         printf 'Command center: %s\n' "$url"
         echo "mesh: no local_token found in $TARGET/.workbench/mesh/server.json — the server may need a restart"
