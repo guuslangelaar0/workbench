@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -354,6 +355,17 @@ pub async fn send_message(
     text: String,
     from: Option<String>,
 ) -> Result<()> {
+    // Gate on credentials *before* touching the store at all: the
+    // known-actors snapshot below opens the local store (creating its
+    // files as a side effect) even for a read-only scan, so it must not
+    // run ahead of the same auth check `append_or_post_event` performs —
+    // otherwise a rejected send (bad/missing credential) would still leave
+    // mesh files behind.
+    auth::require_local_mutating_project_credential(&project_root, home.clone())?;
+    // Snapshot whether `to` has any *prior* history before this event lands —
+    // see `unknown_actor_warning`'s doc comment for why this must be taken
+    // before, not after, the send.
+    let warning = unknown_actor_warning(&project_root, home.clone(), &to).await;
     let event = append_or_post_event(
         &project_root,
         home,
@@ -365,6 +377,7 @@ pub async fn send_message(
     )
     .await?;
     println!("message: sent seq={}", event.seq);
+    emit_unknown_actor_warning(warning);
     Ok(())
 }
 
@@ -375,6 +388,10 @@ pub async fn ask_status(
     question: String,
     from: Option<String>,
 ) -> Result<()> {
+    // See `send_message` for why the auth gate must run before the
+    // known-actors snapshot touches the store.
+    auth::require_local_mutating_project_credential(&project_root, home.clone())?;
+    let warning = unknown_actor_warning(&project_root, home.clone(), &to).await;
     let event = append_or_post_event(
         &project_root,
         home,
@@ -386,6 +403,7 @@ pub async fn ask_status(
     )
     .await?;
     println!("ask: sent seq={}", event.seq);
+    emit_unknown_actor_warning(warning);
     Ok(())
 }
 
@@ -704,6 +722,18 @@ pub async fn watch_actor(
     actor: String,
     from: Option<String>,
 ) -> Result<()> {
+    // The dashboard's chat ingest falls back to an empty string when a
+    // `message.sent` payload has no `text` (live.js: `p.text || p.question
+    // || ...`), so without a `text` field this rendered as a blank bubble.
+    // The bubble is attributed to `from` (the watcher), so the text reads
+    // as that actor's own action: "<watcher> is checking in on <actor>'s
+    // work" — third-person, matching `task.handoff`'s "<who> handoff —
+    // <task_id>" convention for system-generated activity lines.
+    //
+    // See `send_message` for why the auth gate must run before the
+    // known-actors snapshot touches the store.
+    auth::require_local_mutating_project_credential(&project_root, home.clone())?;
+    let warning = unknown_actor_warning(&project_root, home.clone(), &actor).await;
     let event = append_or_post_event(
         &project_root,
         home,
@@ -711,10 +741,15 @@ pub async fn watch_actor(
         &room_for_target(&actor),
         &resolve_actor(from.as_deref()),
         Some(&actor),
-        json!({ "intent": "watch", "actor": actor }),
+        json!({
+            "intent": "watch",
+            "actor": actor.clone(),
+            "text": format!("is checking in on {actor}'s work"),
+        }),
     )
     .await?;
     println!("watch: added seq={}", event.seq);
+    emit_unknown_actor_warning(warning);
     Ok(())
 }
 
@@ -806,6 +841,74 @@ async fn append_or_post_event(
         }
     }
     MeshStore::open(project_root)?.append_event(event_type, room, from, to, payload)
+}
+
+/// Best-effort lookup of actors with any prior history in this mesh —
+/// powers only the non-blocking "unknown target" warning below, never a
+/// send-time gate. Follows the same local-vs-remote dispatch as
+/// `append_or_post_event`: scan the local store directly in local/lan
+/// mode, or ask the remote daemon's `/api/state` in remote mode.
+async fn known_actors(
+    project_root: &std::path::Path,
+    home: Option<PathBuf>,
+) -> Result<BTreeSet<String>> {
+    if let Ok(metadata) = read_server_metadata(project_root) {
+        if metadata.mode == "remote" {
+            let token = auth::local_project_token(project_root, home)?;
+            let state = get_state(&metadata, &token).await?;
+            let actors = state
+                .get("actors")
+                .and_then(Value::as_array)
+                .map(|values| {
+                    values
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default();
+            return Ok(actors);
+        }
+    }
+    MeshStore::open(project_root)?.known_actors()
+}
+
+/// Best-effort, non-blocking: computes the "unknown target" warning message
+/// for `to`, or `None` if `to` is already known (or the check itself
+/// failed — e.g. an unreachable remote daemon). Returns the message rather
+/// than printing it directly, so callers control exactly when it's
+/// surfaced and tests can assert on it without capturing stderr.
+///
+/// MUST be snapshotted *before* the event is posted, not after: the event
+/// about to be sent will itself name `to` as its addressee, so a scan taken
+/// after the post would always find `to` "known" (it's the recipient of the
+/// very event just appended) and the warning would never fire. Taking the
+/// snapshot first captures only genuinely prior history. Any error from the
+/// lookup is swallowed here — it must never propagate as a send failure,
+/// and the caller must go on to post the event regardless of this result.
+/// There is no actor-registration step in this system, so a hard reject
+/// here would break the first legitimate message to a brand-new actor.
+async fn unknown_actor_warning(
+    project_root: &std::path::Path,
+    home: Option<PathBuf>,
+    to: &str,
+) -> Option<String> {
+    let known = known_actors(project_root, home).await.ok()?;
+    if known.contains(to) {
+        return None;
+    }
+    Some(format!(
+        "mesh: note — '{to}' has no prior activity in this mesh; double-check the name"
+    ))
+}
+
+/// Prints a warning computed by `unknown_actor_warning`, if any. Call only
+/// after the corresponding send has already succeeded, so the warning never
+/// appears in place of (or ahead of) a successful "sent" confirmation.
+fn emit_unknown_actor_warning(warning: Option<String>) {
+    if let Some(warning) = warning {
+        eprintln!("{warning}");
+    }
 }
 
 async fn get_state(metadata: &crate::server::ServerMetadata, token: &str) -> Result<Value> {
@@ -1474,5 +1577,166 @@ mod tests {
             .find(|e| e.event_type == "message.delivered")
             .unwrap();
         assert_eq!(ack.ack_of, Some(sent.seq));
+    }
+
+    #[tokio::test]
+    async fn watch_posts_a_non_empty_text_payload() {
+        // The dashboard's chat ingest (live.js) falls back to an empty
+        // string when `message.sent` has no `text`, rendering a blank
+        // bubble. Guard against regressing back to that.
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "worker.cred", "mesh-client", "worker");
+
+        super::watch_actor(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "actor:worker".to_string(),
+            Some("actor:lead".to_string()),
+        )
+        .await
+        .unwrap();
+
+        let events = MeshStore::open(project.path())
+            .unwrap()
+            .list_events_since(0)
+            .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "message.sent");
+        let text = events[0]
+            .payload
+            .get("text")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        assert!(
+            !text.is_empty(),
+            "watch's payload must carry a non-empty text field, got: {:?}",
+            events[0].payload
+        );
+        assert!(text.contains("actor:worker"));
+    }
+
+    #[tokio::test]
+    async fn unknown_actor_warning_fires_for_a_never_seen_target_and_send_still_succeeds() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "worker.cred", "mesh-client", "worker");
+
+        // `actor:brandnew` has never appeared in this mesh's event log.
+        let result = super::send_message(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "actor:brandnew".to_string(),
+            "hello".to_string(),
+            Some("actor:lead".to_string()),
+        )
+        .await;
+
+        // CORE REGRESSION GUARD: a warning about an unrecognized target must
+        // never become a send failure. There is no actor-registration step
+        // in this mesh, so the very first legitimate message to a brand-new
+        // actor must always succeed.
+        assert!(
+            result.is_ok(),
+            "send must succeed even for an unknown actor: {result:?}"
+        );
+
+        let events = MeshStore::open(project.path())
+            .unwrap()
+            .list_events_since(0)
+            .unwrap();
+        assert_eq!(events.len(), 1, "the event must still be appended");
+        assert_eq!(events[0].to.as_deref(), Some("actor:brandnew"));
+    }
+
+    #[tokio::test]
+    async fn unknown_actor_warning_does_not_fire_for_a_target_with_prior_history() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "worker.cred", "mesh-client", "worker");
+
+        // Give `actor:worker` prior history before we probe it.
+        MeshStore::open(project.path())
+            .unwrap()
+            .append_event(
+                "message.sent",
+                "direct:actor:worker",
+                "actor:worker",
+                Some("actor:lead"),
+                json!({ "text": "hi from worker" }),
+            )
+            .unwrap();
+
+        let warning = super::unknown_actor_warning(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "actor:worker",
+        )
+        .await;
+        assert!(
+            warning.is_none(),
+            "a target with prior history must not produce a warning, got: {warning:?}"
+        );
+
+        // Sending to it must still succeed as always.
+        let result = super::send_message(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "actor:worker".to_string(),
+            "second message".to_string(),
+            Some("actor:lead".to_string()),
+        )
+        .await;
+        assert!(
+            result.is_ok(),
+            "send to a known actor must succeed: {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn unknown_actor_warning_reflects_history_prior_to_this_send_not_after() {
+        // Regression guard for a subtle self-contamination bug: a naive
+        // "check known_actors *after* posting" would always find `to`
+        // "known", because the event just posted itself names `to` as its
+        // addressee. The check must reflect history that existed *before*
+        // this particular send.
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "worker.cred", "mesh-client", "worker");
+
+        let warning_before_first_send = super::unknown_actor_warning(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "actor:brandnew",
+        )
+        .await;
+        assert!(warning_before_first_send.is_some());
+
+        super::send_message(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "actor:brandnew".to_string(),
+            "hello".to_string(),
+            Some("actor:lead".to_string()),
+        )
+        .await
+        .unwrap();
+
+        // A *second* send to the same actor now correctly finds prior
+        // history (from the first send) and should not warn again.
+        let warning_on_second_send = super::unknown_actor_warning(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "actor:brandnew",
+        )
+        .await;
+        assert!(
+            warning_on_second_send.is_none(),
+            "after one prior send, the actor must be recognized as known"
+        );
     }
 }

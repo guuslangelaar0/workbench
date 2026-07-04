@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -144,6 +145,35 @@ impl MeshStore {
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Actors with any prior history in this mesh's event log — either as
+    /// the sender (`from`) of some event, or the direct addressee (`to`,
+    /// excluding room broadcasts where `to == room`). Convenience wrapper
+    /// around `actors_in` for callers that haven't already loaded the
+    /// event log (e.g. the CLI's best-effort unknown-target warning).
+    pub fn known_actors(&self) -> Result<BTreeSet<String>> {
+        Ok(Self::actors_in(&self.list_events_since(0)?))
+    }
+
+    /// Pure scan shared by `known_actors` and the server's `state_json`
+    /// actor listing, so a caller that already holds the loaded events
+    /// (like `state_json`) can reuse the same logic without re-reading the
+    /// log a second time.
+    pub fn actors_in(events: &[EventEnvelope]) -> BTreeSet<String> {
+        let mut actors = BTreeSet::new();
+        for event in events {
+            actors.insert(event.from.clone());
+            // `to == room` is a room broadcast (message <room>), not a
+            // direct recipient — counting it would list room names as
+            // actors.
+            if let Some(to) = &event.to {
+                if *to != event.room {
+                    actors.insert(to.clone());
+                }
+            }
+        }
+        actors
     }
 }
 

@@ -799,17 +799,10 @@ fn state_json(state: &AppState, role: &str) -> Result<Value> {
     } else {
         Vec::new()
     };
-    let mut actors = BTreeSet::new();
-    for event in &events {
-        actors.insert(event.from.clone());
-        // `to == room` is a room broadcast (message <room>), not a direct
-        // recipient — counting it would list room names as actors in `who`.
-        if let Some(to) = &event.to {
-            if *to != event.room {
-                actors.insert(to.clone());
-            }
-        }
-    }
+    // Shared with the CLI's best-effort unknown-target warning via
+    // `MeshStore::actors_in` — see its doc comment for the `to == room`
+    // room-broadcast exclusion.
+    let actors = MeshStore::actors_in(&events);
     Ok(json!({
         "event_count": events.len(),
         "connected_actor_count": actors.len(),
