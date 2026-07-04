@@ -160,6 +160,25 @@ pub async fn bench(project_root: PathBuf, home: Option<PathBuf>, messages: u64) 
     Ok(())
 }
 
+const REMOTE_ERROR_MAX_LEN: usize = 200;
+
+/// A remote (possibly hostile or compromised) mesh server can put anything it
+/// wants in the `error` field of an invite-accept response, and that string
+/// flows straight into a message printed to the connecting user's terminal —
+/// and often into a Claude session transcript driving `connect`. Strip every
+/// control character (ANSI/OSC escapes, terminal title spoofing, OSC 52
+/// clipboard injection, etc.) and cap the length so a hostile server can't
+/// inject terminal sequences or flood the screen with an unbounded string.
+fn sanitize_remote_error_message(message: &str) -> String {
+    let filtered: String = message.chars().filter(|c| !c.is_control()).collect();
+    let truncated: String = filtered.chars().take(REMOTE_ERROR_MAX_LEN).collect();
+    if filtered.chars().count() > REMOTE_ERROR_MAX_LEN {
+        format!("{truncated}... (truncated)")
+    } else {
+        truncated
+    }
+}
+
 pub async fn accept_remote_invite(
     project_root: PathBuf,
     home: Option<PathBuf>,
@@ -196,7 +215,8 @@ pub async fn accept_remote_invite(
             .get("error")
             .and_then(Value::as_str)
             .unwrap_or("request failed");
-        anyhow::bail!("remote invite rejected ({status}): {message}");
+        let sanitized = sanitize_remote_error_message(message);
+        anyhow::bail!("remote invite rejected ({status}): {sanitized}");
     }
     let credential: auth::ProjectCredential = response
         .json()
@@ -839,8 +859,56 @@ mod tests {
 
     use super::{
         default_capabilities, job_events, merge_capabilities, normalize_platform,
-        resolve_actor_from, send_message, set_activity, set_availability, set_doing, DEFAULT_ACTOR,
+        resolve_actor_from, sanitize_remote_error_message, send_message, set_activity,
+        set_availability, set_doing, DEFAULT_ACTOR,
     };
+
+    #[test]
+    fn sanitize_remote_error_message_strips_control_characters() {
+        let hostile = "\x1b[31mFAKE\x07 prompt \x1b]52;c;ZXZpbA==\x07 injection";
+        let sanitized = sanitize_remote_error_message(hostile);
+        assert!(
+            !sanitized.chars().any(|c| c.is_control()),
+            "sanitized message still contains control characters: {sanitized:?}"
+        );
+        assert!(sanitized.contains("FAKE"));
+        assert!(sanitized.contains("injection"));
+    }
+
+    #[test]
+    fn sanitize_remote_error_message_truncates_long_input_with_marker() {
+        let long_message = "a".repeat(500);
+        let sanitized = sanitize_remote_error_message(&long_message);
+        assert!(
+            sanitized.len() <= 200 + "... (truncated)".len(),
+            "sanitized message not bounded: {} chars",
+            sanitized.len()
+        );
+        assert!(sanitized.ends_with("... (truncated)"));
+        let content = sanitized.strip_suffix("... (truncated)").unwrap();
+        assert_eq!(content.chars().count(), 200);
+        assert!(content.chars().all(|c| c == 'a'));
+    }
+
+    #[test]
+    fn sanitize_remote_error_message_leaves_short_clean_input_untouched() {
+        let sanitized = sanitize_remote_error_message("token expired");
+        assert_eq!(sanitized, "token expired");
+    }
+
+    #[test]
+    fn sanitize_remote_error_message_combines_control_stripping_and_truncation() {
+        // 300 chars of control-character noise interleaved with junk, well
+        // over the 200-char cap once stripped down to visible characters.
+        let hostile_and_long: String = "\x1b[31mFAKE\x07 "
+            .chars()
+            .chain("x".repeat(300).chars())
+            .collect();
+        let sanitized = sanitize_remote_error_message(&hostile_and_long);
+        assert!(!sanitized.chars().any(|c| c.is_control()));
+        assert!(sanitized.ends_with("... (truncated)"));
+        assert!(sanitized.len() <= 200 + "... (truncated)".len());
+    }
 
     #[test]
     fn remote_metadata_url_rejects_non_http_scheme() {

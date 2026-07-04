@@ -176,6 +176,19 @@ chk(
   "expected the existing tick handler to periodically re-render #audit-body so timestamps keep advancing"
 );
 
+// Security hardening: a token handed off via ?token=... must not linger in
+// the browser's address bar / history after it's cached in localStorage.
+chk(
+  "live.js scrubs a URL-supplied token via history.replaceState",
+  /if \(tokenFromUrl && window\.history && window\.history\.replaceState\) \{\s*\n\s*window\.history\.replaceState\(null, '', window\.location\.pathname \+ window\.location\.hash\);/.test(live),
+  "expected the token-capture block to call history.replaceState(null, '', pathname + hash) when the token came from the URL"
+);
+chk(
+  "live.js does not re-derive the token from location.search after the URL is scrubbed",
+  (live.match(/window\.location\.search/g) || []).length === 1,
+  "location.search should only be read once, before the URL is scrubbed"
+);
+
 if (failures) {
   console.error(failures + " harness check(s) failed");
   process.exit(1);

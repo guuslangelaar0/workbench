@@ -29,8 +29,16 @@ window.WB = window.WB || {};
 
   /* ── auth ── */
   const params = new URLSearchParams(window.location.search);
-  let token = params.get('token') || window.localStorage.getItem('meshCommandToken') || '';
+  const tokenFromUrl = params.get('token');
+  let token = tokenFromUrl || window.localStorage.getItem('meshCommandToken') || '';
   if (token) window.localStorage.setItem('meshCommandToken', token);
+  // A token handed off via ?token=... only needs to make that one trip. Once
+  // it's cached in localStorage, scrub it from the address bar so it doesn't
+  // linger in browser history / autocomplete forever. Skip this when the
+  // token came purely from localStorage (nothing in the URL to strip).
+  if (tokenFromUrl && window.history && window.history.replaceState) {
+    window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+  }
   function headers(json) {
     const h = {};
     if (token) h.Authorization = 'Bearer ' + token;
