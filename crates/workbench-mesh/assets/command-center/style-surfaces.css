@@ -442,7 +442,15 @@ body[data-density="compact"] .session-meta { width: 280px; }
   .host-grid,
   .two-col,
   .three-col {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Host: prevent the topology diagram from overflowing on narrow screens. */
+  .topo-inner {
+    flex-direction: column;
+  }
+  .dev-col {
+    width: auto;
   }
 
   /* Ops: stack the event rail below the main content instead of beside it. */
@@ -466,6 +474,7 @@ body[data-density="compact"] .session-meta { width: 280px; }
     border-bottom: 1px solid var(--line);
     position: static;
     height: auto;
+    align-self: stretch;
   }
   .whatis-cols,
   .proj-callouts,
