@@ -333,6 +333,7 @@ struct AvailabilityArgs {
     target: PathBuf,
     #[arg(long)]
     home: Option<PathBuf>,
+    /// available | busy | blocked | lead | unknown
     state: String,
     #[arg(long)]
     reason: Option<String>,

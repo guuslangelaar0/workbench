@@ -143,12 +143,13 @@ window.WB = window.WB || {};
     WB.api.createInvite(role, ttlSeconds).then((data) => {
       const token = data.token;
       const id = 'inv-' + token.slice(0, 6);
+      WB.INVITES.push({ id: id, role: role, ttl: ttlSeconds, createdBy: 'you', token: token });
+      renderEnroll(body); // list is driven off WB.INVITES — refresh now so the new invite shows immediately, not gated on Copy
       const box = el('div', {}, [
         el('div', { class: 'inv-token' }, [
           el('code', { text: token }),
           el('button', { class: 'btn', style: 'font-size:11px; flex-shrink:0;', html: svgIcon('copy', 11) + ' Copy', onclick: () => {
             navigator.clipboard && navigator.clipboard.writeText(token);
-            WB.INVITES.push({ id: id, role: role, ttl: ttlSeconds, createdBy: 'you', token: token });
             toast('Token copied — it will not be shown again');
             renderEnroll(body);
           } }),

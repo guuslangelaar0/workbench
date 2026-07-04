@@ -661,7 +661,7 @@ window.WB = window.WB || {};
       line.appendChild(el('span', { class: 'tl-item' }, [
         pulse(WB.eff.heat(a)),
         n,
-        el('span', { text: ' is ' + (act === 'typing' ? 'typing…' : 'reading') }),
+        el('span', { text: ' is ' + (act === 'typing' ? 'typing…' : act === 'reading' ? 'reading' : WB.ui.esc(act)) }),
       ]));
     }
   }

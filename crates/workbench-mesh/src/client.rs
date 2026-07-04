@@ -416,6 +416,13 @@ pub async fn set_availability(
     provider: Option<String>,
     model: Option<String>,
 ) -> Result<()> {
+    const VALID_AVAILABILITY_STATES: &[&str] = &["available", "busy", "blocked", "lead", "unknown"];
+    if !VALID_AVAILABILITY_STATES.contains(&state.as_str()) {
+        anyhow::bail!(
+            "invalid availability state '{state}' — must be one of: {}",
+            VALID_AVAILABILITY_STATES.join(", ")
+        );
+    }
     let platform = platform.unwrap_or_else(detect_platform);
     let capabilities = merge_capabilities(&platform, extra_capabilities);
     let provider = resolve_identity_field(provider, "WORKBENCH_MESH_PROVIDER");
@@ -566,6 +573,13 @@ pub async fn set_activity(
     from: Option<String>,
     ack_of: Option<u64>,
 ) -> Result<()> {
+    const VALID_ACTIVITY_STATES: &[&str] = &["typing", "reading", "idle"];
+    if !VALID_ACTIVITY_STATES.contains(&state.as_str()) {
+        anyhow::bail!(
+            "invalid activity state '{state}' — must be one of: {}",
+            VALID_ACTIVITY_STATES.join(", ")
+        );
+    }
     let actor = resolve_actor(from.as_deref());
     let event = match ack_of {
         Some(seq) => {
@@ -825,7 +839,7 @@ mod tests {
 
     use super::{
         default_capabilities, job_events, merge_capabilities, normalize_platform,
-        resolve_actor_from, send_message, set_activity, set_doing, DEFAULT_ACTOR,
+        resolve_actor_from, send_message, set_activity, set_availability, set_doing, DEFAULT_ACTOR,
     };
 
     #[test]
@@ -1223,6 +1237,91 @@ mod tests {
             .unwrap();
         assert_eq!(events[0].event_type, "presence.heartbeat");
         assert_eq!(events[0].payload["activity"], "typing");
+    }
+
+    #[tokio::test]
+    async fn set_activity_rejects_unknown_state() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "worker.cred", "mesh-client", "worker");
+
+        let error = set_activity(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "sleeping".to_string(),
+            Some("session:worker".to_string()),
+            None,
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains("invalid activity state"));
+
+        let events = MeshStore::open(project.path())
+            .unwrap()
+            .list_events_since(0)
+            .unwrap();
+        assert!(events.is_empty(), "rejected activity must not be posted");
+    }
+
+    #[tokio::test]
+    async fn set_availability_accepts_dashboard_recognized_states() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "worker.cred", "mesh-client", "worker");
+
+        set_availability(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "busy".to_string(),
+            None,
+            Some("session:worker".to_string()),
+            Some("linux".to_string()),
+            vec![],
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let events = MeshStore::open(project.path())
+            .unwrap()
+            .list_events_since(0)
+            .unwrap();
+        assert_eq!(events[0].payload["availability"], "busy");
+    }
+
+    #[tokio::test]
+    async fn set_availability_rejects_unknown_state() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "worker.cred", "mesh-client", "worker");
+
+        let error = set_availability(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "vacationing".to_string(),
+            None,
+            Some("session:worker".to_string()),
+            Some("linux".to_string()),
+            vec![],
+            None,
+            None,
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains("invalid availability state"));
+
+        let events = MeshStore::open(project.path())
+            .unwrap()
+            .list_events_since(0)
+            .unwrap();
+        assert!(
+            events.is_empty(),
+            "rejected availability must not be posted"
+        );
     }
 
     #[tokio::test]
