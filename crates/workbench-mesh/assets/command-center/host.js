@@ -334,10 +334,25 @@ window.WB = window.WB || {};
     const topo = document.getElementById('topo');
     if (topo) drawLines(topo);
   });
-  WB.sim.on('tick', () => {
+  // Live audit-panel refresh: a new invite/device/decision event lands in
+  // WB.AUDIT via live.js's WS handler, which emits 'audit-update' right after
+  // — re-render immediately if the panel is mounted (same document.getElementById
+  // lookup convention used by setHold/revokeDevice/removeDevice above).
+  WB.sim.on('audit-update', () => {
+    const audit = document.getElementById('audit-body');
+    if (audit) renderAudit(audit);
+  });
+  WB.sim.on('tick', (n) => {
     for (const inv of WB.INVITES) {
       const cell = document.querySelector('[data-inv-ttl="' + inv.id + '"]');
       if (cell) cell.textContent = fmtTtl(inv.ttl);
+    }
+    // Also refresh the audit panel every ~30s (tick fires every 1s) so its
+    // relative timestamps ("3m ago") keep advancing even with no new events —
+    // reuses the existing tick cadence instead of a second setInterval.
+    if (n % 30 === 0) {
+      const audit = document.getElementById('audit-body');
+      if (audit) renderAudit(audit);
     }
   });
 })(window.WB);

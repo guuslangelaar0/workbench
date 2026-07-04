@@ -334,6 +334,7 @@ window.WB = window.WB || {};
     if (/^(invite|device)\./.test(type) || type === 'decision.answer') {
       WB.AUDIT.unshift({ off: Math.max(0, Math.round((Date.now() - when) / 60000)), icon: railIcon[type] || 'shield', text: type + ' — ' + (p.role || p.device || p.decision || '') + ' by ' + displayWho(ev.from) });
       if (WB.AUDIT.length > 40) WB.AUDIT.pop();
+      sim.emit('audit-update');
     }
   }
 

@@ -262,8 +262,22 @@ window.WB = window.WB || {};
       WB.CHAT.push(m);
       const rm = WB.ROOMS.find((x) => x.id === room);
       if (rm) rm.events += 1;
-      if (WB.api) WB.api.sendChat(m);
-      if (chatMatches(m)) { scroll.appendChild(msgNode(m)); scroll.scrollTop = scroll.scrollHeight; }
+      let node = null;
+      if (chatMatches(m)) { node = msgNode(m); scroll.appendChild(node); scroll.scrollTop = scroll.scrollHeight; }
+      // Backfill the optimistic bubble's data-seq once the server assigns the
+      // real seq, so the 'receipt' handler's querySelector('[data-seq=...]')
+      // lookup can find this exact row instead of only fixing it on the next
+      // full re-render. WB.api.sendChat's own .then (in live.js) already
+      // fired sim.emit('receipt', seq) by the time this callback runs — at
+      // that moment data-seq was still '' so the receipt handler's lookup
+      // no-op'd — so re-emit 'receipt' here, now that the row is findable,
+      // to actually paint the tick glyph.
+      if (WB.api) WB.api.sendChat(m).then(() => {
+        if (node && m.seq != null) {
+          node.dataset.seq = String(m.seq);
+          WB.sim.emit('receipt', m.seq);
+        }
+      });
     };
     const typing = el('div', { class: 'typing-line', id: 'typing-line' });
     const col = el('div', { class: 'chat-col' }, [

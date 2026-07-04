@@ -141,6 +141,41 @@ chk("data.js starts with empty roster", sources["data.js"].includes("WB.AGENTS =
 chk("host.js offers observer role", sources["host.js"].includes("'observer'"));
 chk("no retired viewer role", !MODULES.some((m) => sources[m].includes("'viewer'")));
 
+// Live-update fixes (Important/Minor Fix 7): the sender's own chat tick and
+// the Host audit panel must both update in place from live WS events, not
+// only on the next full re-render/tab-switch/local action.
+const bench = sources["bench.js"];
+chk(
+  "bench.js backfills data-seq once sendChat's server ack resolves",
+  /WB\.api\.sendChat\(m\)\.then\(\(\)\s*=>\s*\{\s*\n\s*if\s*\(node\s*&&\s*m\.seq\s*!=\s*null\)\s*\{\s*\n\s*node\.dataset\.seq\s*=\s*String\(m\.seq\);/.test(bench),
+  "expected send() to keep the optimistic node reference and patch node.dataset.seq once WB.api.sendChat(m) resolves"
+);
+chk(
+  "bench.js re-emits 'receipt' after the data-seq patch so the tick glyph actually paints",
+  /node\.dataset\.seq = String\(m\.seq\);\s*\n\s*WB\.sim\.emit\('receipt', m\.seq\);/.test(bench),
+  "sim.emit('receipt', seq) already fires inside live.js's sendChat().then() before data-seq is patched, so the handler's querySelector no-ops the first time — re-emitting after the patch is required to actually render the tick"
+);
+chk(
+  "bench.js creates the optimistic message node before awaiting sendChat",
+  /let node = null;\s*\n\s*if \(chatMatches\(m\)\) \{ node = msgNode\(m\);/.test(bench),
+  "node must exist before the .then() closure captures it"
+);
+chk(
+  "live.js emits audit-update when a new audit entry lands",
+  /WB\.AUDIT\.unshift\(\{[^}]*\}\);\s*\n\s*if \(WB\.AUDIT\.length > 40\) WB\.AUDIT\.pop\(\);\s*\n\s*sim\.emit\('audit-update'\);/.test(live),
+  "expected sim.emit('audit-update') right after the WB.AUDIT.unshift/pop block"
+);
+chk(
+  "host.js subscribes to audit-update and re-renders the mounted panel",
+  /WB\.sim\.on\('audit-update', \(\) => \{\s*\n\s*const audit = document\.getElementById\('audit-body'\);\s*\n\s*if \(audit\) renderAudit\(audit\);/.test(sources["host.js"]),
+  "expected WB.sim.on('audit-update', ...) to look up #audit-body and call renderAudit"
+);
+chk(
+  "host.js also refreshes the audit panel on the periodic tick",
+  /WB\.sim\.on\('tick', \(n\) => \{[\s\S]*?if \(n % 30 === 0\) \{\s*\n\s*const audit = document\.getElementById\('audit-body'\);\s*\n\s*if \(audit\) renderAudit\(audit\);/.test(sources["host.js"]),
+  "expected the existing tick handler to periodically re-render #audit-body so timestamps keep advancing"
+);
+
 if (failures) {
   console.error(failures + " harness check(s) failed");
   process.exit(1);
