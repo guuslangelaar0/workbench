@@ -14,6 +14,12 @@ bash "$HERE/scripts/init.sh" --name "MeshOps" --mission "Test." --target "$TMP" 
 BIN="$HERE/target/debug/workbench-mesh"
 "$BIN" auth bootstrap --target "$TMP" --home "$HOME_TMP" >/dev/null
 
+NO_SERVER_OUT="$(CLAUDE_PLUGIN_ROOT="$HERE" CLAUDE_PROJECT_DIR="$TMP" WORKBENCH_HOME="$HOME_TMP" bash "$HERE/scripts/mesh.sh" status 2>&1)"
+NO_SERVER_RC=$?
+chk "status before any server started prints friendly no-server message" "printf '%s' \"\$NO_SERVER_OUT\" | grep -q 'run /workbench:mesh start first'"
+chk "status before any server started does not leak a raw backend error" "! printf '%s' \"\$NO_SERVER_OUT\" | grep -qi 'panic\|RUST_BACKTRACE\|anyhow'"
+chk "status before any server started exits nonzero" "[ '$NO_SERVER_RC' != 0 ]"
+
 "$BIN" serve --target "$TMP" --home "$HOME_TMP" --bind local --port 0 --pid-file "$PIDF" > "$LOG" 2>&1 &
 for _ in $(seq 1 50); do
   [ -f "$TMP/.workbench/mesh/server.json" ] && [ -f "$PIDF" ] && break

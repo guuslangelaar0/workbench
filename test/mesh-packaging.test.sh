@@ -109,7 +109,7 @@ chk "wrapper open does not call rust binary" "[ ! -s '$LOG' ]"
 printf '{"host":"127.0.0.1","port":47321,"local_token":"fake-local-token"}\n' > "$PROJECT_DIR/.workbench/mesh/server.json"
 : > "$LOG"
 run_wrapper open > "$WRAP_TMP/open-token.out" 2>&1
-chk "wrapper open does not print local token from metadata" "contains '$WRAP_TMP/open-token.out' 'Command center: http://127.0.0.1:47321' && ! contains '$WRAP_TMP/open-token.out' 'fake-local-token' && ! contains '$WRAP_TMP/open-token.out' 'token='"
+chk "wrapper open prints the real local token from metadata" "contains '$WRAP_TMP/open-token.out' 'Command center: http://127.0.0.1:47321' && contains '$WRAP_TMP/open-token.out' 'fake-local-token'"
 chk "wrapper tokenized open does not call rust binary" "[ ! -s '$LOG' ]"
 
 # --- first-use mesh binary bootstrap ---

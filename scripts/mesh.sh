@@ -379,9 +379,19 @@ case "$cmd" in
     echo "mesh: stopped mesh server (pid $pid)"
     ;;
   status)
+    if ! metadata_url >/dev/null 2>&1; then
+      echo "mesh: no running mesh metadata found at $TARGET/.workbench/mesh/server.json" >&2
+      echo "mesh: run /workbench:mesh start first" >&2
+      exit 1
+    fi
     exec "$BIN" status "${PROJECT_ARGS[@]}" "$@"
     ;;
   who)
+    if ! metadata_url >/dev/null 2>&1; then
+      echo "mesh: no running mesh metadata found at $TARGET/.workbench/mesh/server.json" >&2
+      echo "mesh: run /workbench:mesh start first" >&2
+      exit 1
+    fi
     exec "$BIN" who "${PROJECT_ARGS[@]}" "$@"
     ;;
   invite)
@@ -460,6 +470,11 @@ case "$cmd" in
         exit 0
       fi
     fi
+    if ! metadata_url >/dev/null 2>&1; then
+      echo "mesh: no running mesh metadata found at $TARGET/.workbench/mesh/server.json" >&2
+      echo "mesh: run /workbench:mesh start first" >&2
+      exit 1
+    fi
     exec "$BIN" jobs "${PROJECT_ARGS[@]}" "$@"
     ;;
   availability)
@@ -511,7 +526,11 @@ case "$cmd" in
     seq_file="$TARGET/.workbench/mesh/inbox-$actor.seq"
     [ -n "$since" ] || since="$(cat "$seq_file" 2>/dev/null || echo 0)"
     while true; do
-      out="$("$BIN" event list "${PROJECT_ARGS[@]}" --since "$since" 2>/dev/null | ACTOR="$actor" python3 -c '
+      if ! bin_out="$("$BIN" event list "${PROJECT_ARGS[@]}" --since "$since" 2>&1)"; then
+        echo "mesh: inbox failed for $actor: $bin_out" >&2
+        exit 1
+      fi
+      out="$(printf '%s' "$bin_out" | ACTOR="$actor" python3 -c '
 import json, os, sys
 actor = os.environ["ACTOR"]
 top, hits = 0, []
@@ -570,8 +589,14 @@ for h in hits:
     ;;
   open)
     if url="$(metadata_url)"; then
+      token="$(metadata_field local_token)"
       printf 'Command center: %s\n' "$url"
-      echo "Open the command center in a browser and use a local project credential token when prompted."
+      if [ -n "$token" ]; then
+        echo "Open that URL in a browser."
+        printf 'If it prompts for a token, paste this: %s\n' "$token"
+      else
+        echo "mesh: no local_token found in $TARGET/.workbench/mesh/server.json — the server may need a restart"
+      fi
     else
       echo "mesh: no running mesh metadata found at $TARGET/.workbench/mesh/server.json" >&2
       echo "mesh: run /workbench:mesh start first" >&2
