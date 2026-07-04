@@ -15,10 +15,12 @@ else
   C_BOLD= C_DIM= C_RESET= C_AMBER= C_GREEN= C_RED= C_BLUE= C_GREY=
 fi
 
-# locate project root: walk up to a dir containing .claude/tasks
+# locate project root: walk up to a dir containing .claude/tasks AND
+# .workbench/config.json (a real workbench project, not just any dir with
+# a .claude/tasks/ subfolder — e.g. Claude Code's own ~/.claude/tasks/).
 ROOT="$PWD"
-while [[ "$ROOT" != "/" ]] && [[ ! -d "$ROOT/.claude/tasks" ]]; do ROOT="$(dirname "$ROOT")"; done
-[[ -d "$ROOT/.claude/tasks" ]] || { echo "mc: no .claude/tasks/ found from $PWD upwards" >&2; exit 1; }
+while [[ "$ROOT" != "/" ]] && [[ "$ROOT" != "$HOME" ]] && { [[ ! -d "$ROOT/.claude/tasks" ]] || [[ ! -f "$ROOT/.workbench/config.json" ]]; }; do ROOT="$(dirname "$ROOT")"; done
+[[ -d "$ROOT/.claude/tasks" ]] && [[ -f "$ROOT/.workbench/config.json" ]] || { echo "mc: no workbench project (.claude/tasks/ + .workbench/config.json) found from $PWD upwards" >&2; exit 1; }
 cd "$ROOT"
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SELF_DIR/lib.sh"

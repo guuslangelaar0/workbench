@@ -6,7 +6,7 @@ argument-hint: "<id>"
 
 Run the verification gate for a task. Follow the `orchestration` and `task-lifecycle` skills.
 
-1. Parse the task `<id>` from `$ARGUMENTS`. If invoked without an `<id>` (or ambiguous), don't fail or dump usage — run a short wizard: use AskUserQuestion offering the tasks currently in `.claude/tasks/in-review/` (oldest first) as options, confirm the pick, then run the gate on it. Read its **verification contract** — the `**Verification:**` field, the `## Acceptance criteria`, the `## Scenarios`, and the `## Verification ladder`. These define "done"; they should have been written before dispatch.
+1. Parse the task `<id>` from `$ARGUMENTS`. If invoked without an `<id>` (or ambiguous), don't fail or dump usage — run a short wizard: resolve this project's actual pre-verification stage via `bash "${CLAUDE_PLUGIN_ROOT}/scripts/levels.sh" lifecycle --target "${CLAUDE_PROJECT_DIR}"` (the stage immediately before `verified` in the returned list — for `solo` that's `in-development`, for `pair`/`crew`/`fleet` it's `in-review`), then use AskUserQuestion offering the tasks currently in that stage's directory (oldest first) as options, confirm the pick, then run the gate on it. Read its **verification contract** — the `**Verification:**` field, the `## Acceptance criteria`, the `## Scenarios`, and the `## Verification ladder`. These define "done"; they should have been written before dispatch.
 2. Apply the gate per `way_of_working.verification` in `.workbench/config.json`:
    - `leaner` — run the verification yourself (the engineer already self-verified); spot-check.
    - `recommended` — spawn a `verifier` (Task tool, `subagent_type: verifier`, model per the `models` skill) to independently run it and return evidence.

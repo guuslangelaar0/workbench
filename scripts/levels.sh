@@ -59,3 +59,34 @@ wb_dial() { # <project_root> <dial_name> -> resolved value (dial_overrides.<dial
   preset="$(wb_level_dials "${lvl:-solo}" 2>/dev/null | sed -n 's/^'"$d"'=//p')"
   printf '%s\n' "${preset:-}"
 }
+
+# CLI entry point — only when run directly (not sourced; init.sh, task-move.sh,
+# mc.sh, etc. source this file as a pure function library and never hit this).
+#
+# Usage: levels.sh lifecycle --target <dir>
+#   Resolves <dir>'s configured level from .workbench/config.json (defaults to
+#   solo if unset/unreadable) and prints its space-separated lifecycle stages.
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+  case "${1:-}" in
+    lifecycle)
+      shift
+      TARGET="$PWD"
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target) [ "$#" -ge 2 ] || { echo "levels.sh: --target requires a value" >&2; exit 64; }; TARGET="$2"; shift 2 ;;
+          *) echo "levels.sh: unknown arg '$1'" >&2; exit 64 ;;
+        esac
+      done
+      if ! command -v il_cfg_dir >/dev/null 2>&1; then
+        _self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        # shellcheck source=lib.sh
+        . "$_self_dir/lib.sh"
+      fi
+      _cfg="$(il_cfg_dir "$TARGET")/config.json"
+      LEVEL="$(sed -n 's/.*"level"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_cfg" 2>/dev/null | head -1)"
+      wb_level_lifecycle "${LEVEL:-solo}"
+      ;;
+    "") echo "levels.sh: usage: levels.sh lifecycle --target <dir>" >&2; exit 64 ;;
+    *)  echo "levels.sh: unknown subcommand '$1'" >&2; exit 64 ;;
+  esac
+fi

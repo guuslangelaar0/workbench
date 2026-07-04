@@ -1,6 +1,6 @@
 ---
 description: Convene an evolution summit — a project-configurable persona panel that generates new ideas, retrospectively audits verified/shipped work, and synthesizes critic-approved survivors into backlog tasks
-allowed-tools: ["Bash", "Read", "Glob", "Grep", "Task", "TodoWrite"]
+allowed-tools: ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "Task", "TodoWrite"]
 argument-hint: "[status | init | --force] [--track <track>]"
 ---
 

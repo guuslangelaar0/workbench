@@ -1,7 +1,7 @@
 ---
 description: Dispatch a specific unblocked backlog task by id to an engineer lane — Claude by default, or Codex via --engine codex — after checking claims, dependencies, and in-review pressure
 allowed-tools: ["Bash", "Read", "Task", "Agent", "TodoWrite", "AskUserQuestion"]
-argument-hint: "<id> [--engine claude|codex] [--worktree [name]|--shared] [--background|--wait|--reconcile] [--fresh|--resume] [--model <model|spark>] [--effort <level>] [lane/repo]"
+argument-hint: "<id> [--engine claude|codex] [--worktree [name]|--shared] [--background|--wait] [--reconcile --fresh|--resume --model <model|spark> --effort <level> (codex only)] [lane/repo]"
 ---
 
 `dispatch` is the generic front door for "assign this task to an engineer" — it does not care which engine does the work. Follow the `orchestration` skill — **you are the lead; you do not write the code yourself.**

@@ -13,6 +13,7 @@ You are still the Workbench lead. The `engineer` subagent (Task tool, `subagent_
    - `--shared`: avoid a persistent/background worktree and use the normal foreground Task-tool path. The engineer agent can still run in Claude's temporary `isolation: worktree` sandbox.
    - `--background`: for a native CLI lane, launch it with `claude --worktree <name> --bg --agent engineer "<prompt>"`.
    - `--wait`: keep the engineer in the current session foreground path.
+   - `--worktree` with `--wait` (no `--background`): create the native worktree (per `--worktree` above) but run the engineer synchronously in the foreground Task-tool path against it, blocking until it completes — do not use `claude --bg`. `--worktree` alone (no `--background`/`--wait`) defaults to this same foreground-with-worktree behavior.
    - if `--background` and `--wait` are both present, stop and ask the user to choose one.
 2. Read the task file under `.claude/tasks/` for that id (its `## Why`, acceptance criteria, `**Repo(s):**`, `**Verification:**`). If it has `**Blocked-by:**` IDs that have not reached `verified/`/`shipped/`, stop and report the blocker; do not start the lane.
    Before spawning, check the in-review cap via `/workbench:mc` or by counting `.claude/tasks/in-review/`. If the queue is at/over the hard-drain threshold, stop and tell the user to drain/verify in-review first.
