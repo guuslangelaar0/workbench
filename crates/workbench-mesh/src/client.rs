@@ -961,7 +961,7 @@ mod tests {
     use crate::store::MeshStore;
 
     use super::{
-        default_capabilities, job_events, merge_capabilities, normalize_platform,
+        ask_status, default_capabilities, job_events, merge_capabilities, normalize_platform,
         resolve_actor_from, sanitize_remote_error_message, send_message, set_activity,
         set_availability, set_doing, DEFAULT_ACTOR,
     };
@@ -1738,5 +1738,213 @@ mod tests {
             warning_on_second_send.is_none(),
             "after one prior send, the actor must be recognized as known"
         );
+    }
+
+    #[tokio::test]
+    async fn ask_status_unknown_actor_warning_fires_for_a_never_seen_target_and_ask_still_succeeds()
+    {
+        // `ask_status` gates on the same non-blocking "unknown actor" warning
+        // pattern as `send_message`/`watch_actor`. Prove the warning fires for
+        // a brand-new target, and that `ask_status` itself still succeeds and
+        // posts the event regardless.
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "worker.cred", "mesh-client", "worker");
+
+        let warning = super::unknown_actor_warning(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "actor:brandnew",
+        )
+        .await;
+        assert!(
+            warning.is_some(),
+            "a never-seen target must produce a warning"
+        );
+
+        let result = ask_status(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "actor:brandnew".to_string(),
+            "how's it going?".to_string(),
+            Some("actor:lead".to_string()),
+        )
+        .await;
+        assert!(
+            result.is_ok(),
+            "ask must succeed even for an unknown actor: {result:?}"
+        );
+
+        let events = MeshStore::open(project.path())
+            .unwrap()
+            .list_events_since(0)
+            .unwrap();
+        assert_eq!(events.len(), 1, "the event must still be appended");
+        assert_eq!(events[0].event_type, "message.request_status");
+        assert_eq!(events[0].to.as_deref(), Some("actor:brandnew"));
+        assert_eq!(events[0].payload["question"], "how's it going?");
+    }
+
+    #[tokio::test]
+    async fn ask_status_unknown_actor_warning_does_not_fire_for_a_target_with_prior_history() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "worker.cred", "mesh-client", "worker");
+
+        // Give `actor:worker` prior history before we probe it.
+        MeshStore::open(project.path())
+            .unwrap()
+            .append_event(
+                "message.sent",
+                "direct:actor:worker",
+                "actor:worker",
+                Some("actor:lead"),
+                json!({ "text": "hi from worker" }),
+            )
+            .unwrap();
+
+        let warning = super::unknown_actor_warning(
+            project.path(),
+            Some(home.path().to_path_buf()),
+            "actor:worker",
+        )
+        .await;
+        assert!(
+            warning.is_none(),
+            "a target with prior history must not produce a warning, got: {warning:?}"
+        );
+
+        let result = ask_status(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "actor:worker".to_string(),
+            "still on track?".to_string(),
+            Some("actor:lead".to_string()),
+        )
+        .await;
+        assert!(
+            result.is_ok(),
+            "ask to a known actor must succeed: {result:?}"
+        );
+    }
+
+    async fn wait_for_metadata(project: &std::path::Path) -> crate::server::ServerMetadata {
+        use tokio::time::{sleep, Duration};
+
+        for _ in 0..50 {
+            if crate::server::server_metadata_path(project).is_file() {
+                return crate::server::read_server_metadata(project).unwrap();
+            }
+            sleep(Duration::from_millis(20)).await;
+        }
+        panic!("server metadata was not written");
+    }
+
+    #[tokio::test]
+    async fn remote_mode_known_actors_reflects_server_state_over_http() {
+        // The `mode == "remote"` branch of `known_actors` (hitting a real
+        // daemon's `/api/state` over HTTP) had zero test coverage — every
+        // other test in this file only exercises the local-store dispatch.
+        // Spin up a real server and drive a client configured in remote mode
+        // against it, proving `known_actors`/`unknown_actor_warning` compose
+        // correctly with the HTTP round trip, not just the local store.
+        use crate::server::{serve, ServeOptions};
+
+        let project = TempDir::new().unwrap();
+        let host_home = TempDir::new().unwrap();
+        let join_project = TempDir::new().unwrap();
+        let join_home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Remote Actors");
+        write_project_config(join_project.path(), "Mesh Remote Actors");
+        auth::bootstrap(project.path(), Some(host_home.path().to_path_buf())).unwrap();
+        let invite = auth::create_invite(
+            project.path(),
+            Some(host_home.path().to_path_buf()),
+            "worker",
+            900,
+            1,
+        )
+        .unwrap();
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: project.path().to_path_buf(),
+            home: Some(host_home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+            started_by: None,
+        }));
+        let metadata = wait_for_metadata(project.path()).await;
+        let base = format!("http://{}:{}", metadata.host, metadata.port);
+
+        super::accept_remote_invite(
+            join_project.path().to_path_buf(),
+            Some(join_home.path().to_path_buf()),
+            base.clone(),
+            invite.token,
+            "laptop".to_string(),
+        )
+        .await
+        .unwrap();
+
+        // Before any traffic to a brand-new actor, the remote `/api/state`
+        // round trip must not report it as known.
+        let actors_before =
+            super::known_actors(join_project.path(), Some(join_home.path().to_path_buf()))
+                .await
+                .unwrap();
+        assert!(
+            !actors_before.contains("actor:brandnew"),
+            "actor must not be known before any traffic: {actors_before:?}"
+        );
+
+        let warning_before = super::unknown_actor_warning(
+            join_project.path(),
+            Some(join_home.path().to_path_buf()),
+            "actor:brandnew",
+        )
+        .await;
+        assert!(
+            warning_before.is_some(),
+            "warning must fire for a never-seen actor even over the remote branch"
+        );
+
+        // Post to the brand-new actor from the join side; this itself goes
+        // over HTTP via `append_or_post_event`'s remote branch.
+        super::send_message(
+            join_project.path().to_path_buf(),
+            Some(join_home.path().to_path_buf()),
+            "actor:brandnew".to_string(),
+            "hi".to_string(),
+            None,
+        )
+        .await
+        .unwrap();
+
+        // Re-check: the remote branch must reflect server-side state after a
+        // real round trip, not a stale/cached view.
+        let actors_after =
+            super::known_actors(join_project.path(), Some(join_home.path().to_path_buf()))
+                .await
+                .unwrap();
+        assert!(
+            actors_after.contains("actor:brandnew"),
+            "actor must be known after a real send round-tripped through the server: {actors_after:?}"
+        );
+
+        let warning_after = super::unknown_actor_warning(
+            join_project.path(),
+            Some(join_home.path().to_path_buf()),
+            "actor:brandnew",
+        )
+        .await;
+        assert!(
+            warning_after.is_none(),
+            "warning must not fire once the server reflects the actor's history"
+        );
+
+        server.abort();
     }
 }
