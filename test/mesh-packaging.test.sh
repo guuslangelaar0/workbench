@@ -57,7 +57,7 @@ chk "wrapper start default output points to metadata" "contains '$WRAP_TMP/start
 run_wrapper invite --ttl-seconds 60 > "$WRAP_TMP/invite.out" 2>&1
 chk "wrapper invite defaults worker role" "contains '$LOG' 'cmd|invite|create|--target|$PROJECT_DIR|--home|$MESH_HOME|--role|worker|--ttl-seconds|60'"
 chk "wrapper invite prints metadata URL" "contains '$WRAP_TMP/invite.out' 'url: http://127.0.0.1:47321'"
-chk "wrapper invite local mode only prints loopback connect" "contains '$WRAP_TMP/invite.out' 'connect-url: /workbench:mesh connect http://127.0.0.1:47321 fake-token <device>' && ! contains '$WRAP_TMP/invite.out' 'connect-host:' && ! contains '$WRAP_TMP/invite.out' 'connect-ip:' && ! contains '$WRAP_TMP/invite.out' 'connect: /workbench:mesh connect http://mesh-host.local'"
+chk "wrapper invite local mode only prints loopback connect" "contains '$WRAP_TMP/invite.out' 'connect-url: /workbench:mesh connect http://127.0.0.1:47321 fake-token' && ! contains '$WRAP_TMP/invite.out' '<device>' && ! contains '$WRAP_TMP/invite.out' 'connect-host:' && ! contains '$WRAP_TMP/invite.out' 'connect-ip:' && ! contains '$WRAP_TMP/invite.out' 'connect: /workbench:mesh connect http://mesh-host.local'"
 
 : > "$LOG"
 run_wrapper connect local-token laptop > "$WRAP_TMP/connect-local.out" 2>&1

@@ -131,19 +131,19 @@ print_connect_commands() {
   mode="$(metadata_field mode || true)"
   if [ "$mode" != "lan" ]; then
     if url="$(metadata_url)"; then
-      printf 'connect-url: /workbench:mesh connect %s %s <device>\n' "$url" "$token"
+      printf 'connect-url: /workbench:mesh connect %s %s\n' "$url" "$token"
     fi
     return 0
   fi
   host="$(metadata_field hostname || true)"
   mdns="$(metadata_field mdns || true)"
-  [ -n "$mdns" ] && printf 'connect: /workbench:mesh connect http://%s:%s %s <device>\n' "$mdns" "$port" "$token"
-  [ -n "$host" ] && [ "$host" != "$mdns" ] && printf 'connect-host: /workbench:mesh connect http://%s:%s %s <device>\n' "$host" "$port" "$token"
+  [ -n "$mdns" ] && printf 'connect: /workbench:mesh connect http://%s:%s %s\n' "$mdns" "$port" "$token"
+  [ -n "$host" ] && [ "$host" != "$mdns" ] && printf 'connect-host: /workbench:mesh connect http://%s:%s %s\n' "$host" "$port" "$token"
   for ip in $(metadata_lan_ips || true); do
-    [ -n "$ip" ] && printf 'connect-ip: /workbench:mesh connect http://%s:%s %s <device>\n' "$ip" "$port" "$token"
+    [ -n "$ip" ] && printf 'connect-ip: /workbench:mesh connect http://%s:%s %s\n' "$ip" "$port" "$token"
   done
   if url="$(metadata_url)"; then
-    printf 'connect-url: /workbench:mesh connect %s %s <device>\n' "$url" "$token"
+    printf 'connect-url: /workbench:mesh connect %s %s\n' "$url" "$token"
   fi
 }
 

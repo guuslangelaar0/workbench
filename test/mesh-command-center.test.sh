@@ -269,4 +269,11 @@ sleep 1
 wait "$lw_pid" || true
 chk "listen-wait fallback receives message" "grep -q 'fallback test' '$LISTEN_WAIT_OUT'"
 
+echo "== invite connect command is copy-pasteable (no <device> placeholder) =="
+INVITE_PLUGIN="$TMP/invite-plugin"
+mkdir -p "$INVITE_PLUGIN/bin"
+ln -sf "$BIN" "$INVITE_PLUGIN/bin/workbench-mesh"
+INVITE_TEXT="$(CLAUDE_PLUGIN_ROOT="$INVITE_PLUGIN" CLAUDE_PROJECT_DIR="$TMP" WORKBENCH_HOME="$HOME_TMP" bash "$HERE/scripts/mesh.sh" invite --role worker --ttl-seconds 900 2>&1)"
+chk "printed connect command contains no literal <device> placeholder" "! printf '%s\n' \"\$INVITE_TEXT\" | grep -q '<device>'"
+
 [ "$fail" = 0 ] && echo "PASS: mesh-command-center" || { echo "mesh-command-center test failed"; exit 1; }

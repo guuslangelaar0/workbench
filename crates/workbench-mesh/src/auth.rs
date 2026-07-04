@@ -571,6 +571,12 @@ fn sanitize_device_identifier(value: &str) -> Result<String> {
     if value.trim().is_empty() {
         bail!("device name is required");
     }
+    if value.contains('<') || value.contains('>') {
+        bail!(
+            "device name '{value}' looks like an unresolved <device> placeholder — \
+             replace it with a real device name"
+        );
+    }
     let sanitized = sanitize_name(value);
     if sanitized == "project" && !value.chars().any(|ch| ch.is_ascii_alphanumeric()) {
         bail!("device name is invalid");
@@ -1603,6 +1609,23 @@ mod tests {
     fn sanitizes_project_names() {
         assert_eq!(sanitize_name("Mesh Auth"), "mesh-auth");
         assert_eq!(sanitize_name("###"), "project");
+    }
+
+    #[test]
+    fn sanitize_device_identifier_rejects_unresolved_placeholder_brackets() {
+        let err = super::sanitize_device_identifier("<device>").unwrap_err();
+        assert!(
+            err.to_string().contains("placeholder"),
+            "unexpected error: {err:#}"
+        );
+        let err = super::sanitize_device_identifier("my<device>").unwrap_err();
+        assert!(err.to_string().contains("placeholder"));
+    }
+
+    #[test]
+    fn sanitize_device_identifier_still_accepts_real_names() {
+        assert_eq!(super::sanitize_device_identifier("macbook").unwrap(), "macbook");
+        assert_eq!(super::sanitize_device_identifier("Guus's MacBook").unwrap(), "guus-s-macbook");
     }
 
     fn write_project_config(project: &Path, name: &str) {
