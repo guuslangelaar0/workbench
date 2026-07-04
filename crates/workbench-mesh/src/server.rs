@@ -1840,6 +1840,101 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn remote_invite_accept_surfaces_distinct_client_facing_reasons() {
+        let server_project = TempDir::new().unwrap();
+        let server_home = TempDir::new().unwrap();
+        write_project_config(server_project.path(), "Mesh Shared");
+        auth::bootstrap(
+            server_project.path(),
+            Some(server_home.path().to_path_buf()),
+        )
+        .unwrap();
+
+        fn hash_token(token: &str) -> String {
+            use sha2::{Digest, Sha256};
+            Sha256::digest(token.as_bytes())
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect()
+        }
+
+        // redeem_invite (auth.rs) has no public API to construct an already-expired
+        // or already-exhausted invite (create_invite requires ttl_seconds > 0, and
+        // exhaustion via the public accept path always sets revoked_at in the same
+        // call that reaches max_uses, which would surface "invite revoked" instead
+        // of "invite exhausted"). So this test writes the on-disk invite storage
+        // directly, matching the exact StoredInvite JSON shape create_invite itself
+        // writes at auth.rs's `mutate_invites` call site.
+        let expired_token = "wb_invite_test_expired";
+        let exhausted_token = "wb_invite_test_exhausted";
+        let unknown_token = "wb_invite_test_unknown";
+
+        let invites_path = server_project.path().join(".workbench/mesh/invites.json");
+        fs::create_dir_all(invites_path.parent().unwrap()).unwrap();
+        fs::write(
+            &invites_path,
+            serde_json::to_string(&json!([
+                {
+                    "token_hash": hash_token(expired_token),
+                    "role": "worker",
+                    "expires_at": "2000-01-01T00:00:00Z",
+                    "max_uses": 5,
+                    "uses": 0,
+                    "revoked_at": null,
+                },
+                {
+                    "token_hash": hash_token(exhausted_token),
+                    "role": "worker",
+                    "expires_at": "2999-01-01T00:00:00Z",
+                    "max_uses": 1,
+                    "uses": 1,
+                    "revoked_at": null,
+                },
+            ]))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let server = tokio::spawn(serve(ServeOptions {
+            project_root: server_project.path().to_path_buf(),
+            home: Some(server_home.path().to_path_buf()),
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+            started_by: None,
+        }));
+        let metadata = wait_for_metadata(server_project.path()).await;
+        let url = format!("http://{}:{}", metadata.host, metadata.port);
+
+        for (token, expected_substring) in [
+            (unknown_token, "not found"),
+            (expired_token, "expired"),
+            (exhausted_token, "exhausted"),
+        ] {
+            let client_project = TempDir::new().unwrap();
+            let client_home = TempDir::new().unwrap();
+            write_project_config(client_project.path(), "Mesh Shared");
+
+            let err = client::accept_remote_invite(
+                client_project.path().to_path_buf(),
+                Some(client_home.path().to_path_buf()),
+                url.clone(),
+                token.to_string(),
+                "test-device".to_string(),
+            )
+            .await
+            .unwrap_err();
+
+            assert!(
+                err.to_string().contains(expected_substring),
+                "token {token}: expected {expected_substring:?} in error, got: {err:#}"
+            );
+        }
+
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn invite_api_returns_non_secret_connect_url_variants() {
         let project = TempDir::new().unwrap();
         let home = TempDir::new().unwrap();

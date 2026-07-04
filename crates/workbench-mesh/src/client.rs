@@ -188,9 +188,16 @@ pub async fn accept_remote_invite(
         }))
         .send()
         .await
-        .context("post remote invite accept")?
-        .error_for_status()
-        .context("remote invite rejected")?;
+        .context("post remote invite accept")?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body: Value = response.json().await.unwrap_or_default();
+        let message = body
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("request failed");
+        anyhow::bail!("remote invite rejected ({status}): {message}");
+    }
     let credential: auth::ProjectCredential = response
         .json()
         .await
