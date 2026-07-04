@@ -416,7 +416,7 @@ window.WB = window.WB || {};
       pendingSelf.push(m.text);
       const type = m.kind === 'ask' ? 'message.request_status' : m.kind === 'handoff' ? 'task.handoff' : 'message.sent';
       const payload = m.kind === 'handoff' ? { task_id: m.text } : { text: m.text };
-      return post(type, m.room === 'team' ? 'repo:workbench' : m.room, payload, m.to || undefined).then((data) => {
+      return post(type, m.room, payload, m.to || undefined).then((data) => {
         if (data && data.seq) {
           // Backfill the real server-assigned seq onto the object already pushed
           // into WB.CHAT by bench.js's send(). Without this the optimistic entry
