@@ -445,6 +445,18 @@ body[data-density="compact"] .session-meta { width: 280px; }
     grid-template-columns: minmax(0, 1fr);
   }
 
+  /* Host: scope Devices table horizontal scroll to its panel body, not the
+     whole surface. Without this, .host-wrap's overflow-x computes to auto
+     (CSS spec: when overflow-y is non-visible the other axis can't be visible)
+     making the ENTIRE surface draggable sideways with no visual affordance.
+     table-layout:auto naturally expands the table beyond width:100% when
+     column content demands it, so adding overflow-x:auto here is sufficient —
+     the overflow is captured at panel-body level and never propagates up. */
+  .host-grid .panel-body {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   /* Host: prevent the topology diagram from overflowing on narrow screens. */
   .topo-inner {
     flex-direction: column;
