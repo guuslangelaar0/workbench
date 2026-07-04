@@ -476,7 +476,7 @@ case "$cmd" in
     ;;
   activity)
     require_arg "activity state" "${1:-}"
-    exec "$BIN" activity "${PROJECT_ARGS[@]}" "$1" "${AS_ARGS[@]}"
+    exec "$BIN" activity "${PROJECT_ARGS[@]}" "$@" "${AS_ARGS[@]}"
     ;;
   tail)
     # tail reads stream-json on stdin and needs an actor identity to name its

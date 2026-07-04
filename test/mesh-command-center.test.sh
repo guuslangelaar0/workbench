@@ -276,4 +276,19 @@ ln -sf "$BIN" "$INVITE_PLUGIN/bin/workbench-mesh"
 INVITE_TEXT="$(CLAUDE_PLUGIN_ROOT="$INVITE_PLUGIN" CLAUDE_PROJECT_DIR="$TMP" WORKBENCH_HOME="$HOME_TMP" bash "$HERE/scripts/mesh.sh" invite --role worker --ttl-seconds 900 2>&1)"
 chk "printed connect command contains no literal <device> placeholder" "! printf '%s\n' \"\$INVITE_TEXT\" | grep -q '<device>'"
 
+echo "== activity --ack-of forwards ack seq to binary (blocker fix) =="
+ACTIVITY_PLUGIN="$TMP/activity-ack-plugin"
+mkdir -p "$ACTIVITY_PLUGIN/bin"
+ln -sf "$BIN" "$ACTIVITY_PLUGIN/bin/workbench-mesh"
+# Post a message with no explicit to-field so any actor may ack it.
+SENT_RESP="$(curl -fsS -X POST "http://127.0.0.1:$PORT/api/events" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"type":"message.sent","room":"team","from":"forge-lead","payload":{"text":"activity-ack-test"}}')"
+SENT_SEQ="$(printf '%s' "$SENT_RESP" | python3 -c 'import json,sys; print(json.load(sys.stdin)["seq"])')"
+CLAUDE_PLUGIN_ROOT="$ACTIVITY_PLUGIN" CLAUDE_PROJECT_DIR="$TMP" WORKBENCH_HOME="$HOME_TMP" \
+  bash "$HERE/scripts/mesh.sh" activity reading --ack-of "$SENT_SEQ" --as activity-reader >/dev/null 2>&1
+ACK_EVENTS="$(curl -fsS "http://127.0.0.1:$PORT/api/events?since=0" -H "Authorization: Bearer $TOKEN")"
+READ_FOUND="$(printf '%s' "$ACK_EVENTS" | python3 -c 'import json,sys; events=json.load(sys.stdin).get("events",[]); print("yes" if any(e.get("type")=="message.read" and e.get("ack_of")=='"$SENT_SEQ"' for e in events) else "no")')"
+chk "activity --ack-of posts a message.read receipt" "[ '$READ_FOUND' = yes ]"
+
 [ "$fail" = 0 ] && echo "PASS: mesh-command-center" || { echo "mesh-command-center test failed"; exit 1; }
