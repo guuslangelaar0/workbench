@@ -23,11 +23,11 @@ Each tick the supervisor reconciles disk state and, if the loop crashed (recover
 ls -la "${CLAUDE_PROJECT_DIR}/.workbench/recovery/" 2>/dev/null || echo "no recovery dir yet (no failures recorded)"
 crontab -l 2>/dev/null | grep -n watchdog.sh || systemctl --user list-timers 2>/dev/null | grep -i wb-watchdog || echo "no supervisor scheduled — run /workbench:supervise install"
 ```
-Then show the dry-run decision the supervisor would make right now (needs the loop's session id — find it in your Claude Code session list):
+Then show the dry-run decision the supervisor would make right now. If `$ARGUMENTS` includes `--session-id <id>`, use that id directly; otherwise find the loop's session id from your Claude Code session list:
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.sh" --session-id "<loop-session-id>" --project "${CLAUDE_PROJECT_DIR}"
 ```
 
-**`install`:** help the human wire it for their runtime. The script self-documents a crontab line and a `systemd --user` unit/timer (`scripts/watchdog.sh --help`). Recommend **systemd-user** on Linux (survives terminal close, restarts on boot); a `*/5 * * * *` crontab as the portable fallback; or a foreground `tmux`/`nohup` loop for a dev box. The human supplies the loop's **session id** (so `--resume` targets the right conversation) and confirms `--exec`. Print the exact unit/cron with their paths filled in; do not enable it for them without confirmation — it launches `claude` unattended.
+**`install`:** help the human wire it for their runtime. The script self-documents a crontab line and a `systemd --user` unit/timer (`scripts/watchdog.sh --help`). Recommend **systemd-user** on Linux (survives terminal close, restarts on boot); a `*/5 * * * *` crontab as the portable fallback; or a foreground `tmux`/`nohup` loop for a dev box. If `$ARGUMENTS` supplies `--session-id <id>`, use it directly; otherwise the human supplies the loop's **session id** (so `--resume` targets the right conversation) and confirms `--exec`. Print the exact unit/cron with their paths filled in; do not enable it for them without confirmation — it launches `claude` unattended.
 
 Keep it honest: the supervisor is the only layer that survives the session itself dying. Everything in-agent is within-a-tick behavior.

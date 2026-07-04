@@ -18,7 +18,20 @@ get_key() { [ -f "$1" ] || return 0; sed -n "s/^$2=//p" "$1" | head -1; }
 clean_line() { printf '%s' "$1" | tr '\n\t' '  '; }
 
 usage() {
-  sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//' >&2
+  cat >&2 <<'EOF'
+usage: lead.sh <set|status|latest-open|clear> --target DIR [--as ID|--session-id ID] [options]
+
+  set --target DIR --as ID --mode <task|track|backlog-scout|unassigned> --purpose "<text>" [--active-task ID] [--track NAME]
+      Record this session's current lead purpose.
+  status --target DIR --as ID
+      Show the recorded purpose for this session.
+  latest-open --target DIR
+      Show the most recently recorded open (non-cleared) purpose.
+  clear --target DIR --as ID
+      Clear this session's recorded purpose.
+
+--as is the canonical identity flag; --session-id is accepted as an alias.
+EOF
   exit "${1:-64}"
 }
 

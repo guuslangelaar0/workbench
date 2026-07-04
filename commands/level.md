@@ -1,7 +1,7 @@
 ---
 description: Show the current workbench maturity level and dials, or change the level (status | up | down | <level>)
 allowed-tools: ["Bash", "Read", "AskUserQuestion"]
-argument-hint: "[status|up|down|<level>]"
+argument-hint: "[status|up|down|<level>|override <dial> <value>]"
 ---
 
 You are the `/workbench:level` command. Read `$ARGUMENTS` and act on it.
@@ -123,6 +123,10 @@ Existing tasks are untouched.
 ```
 
 If `init.sh` exits non-zero, show its output and tell the user the change was NOT applied.
+
+## `override <dial> <value>`
+
+**`override <dial> <value>`:** jump straight to the "Single-dial override" section below with `<dial>`/`<value>` already parsed from `$ARGUMENTS` — skip the level status/up/down flow entirely.
 
 ### Single-dial override
 
