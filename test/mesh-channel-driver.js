@@ -75,8 +75,11 @@ async function waitFor(pred, ms) {
     JSON.stringify({ seq: 4, type: "output.chunk", room: "output:x", from: "x", payload: { kind: "message", summary: "not a message type" } }),
     JSON.stringify({ seq: 5, type: "message.sent", room: "repo:demo", from: "intruder", payload: { text: "not on the sender allowlist" } }),
     JSON.stringify({ seq: 6, type: "message.request_status", room: "presence", from: "critic-1", to: "test-lead", payload: { question: "status?" } }),
-    JSON.stringify({ seq: 7, type: "message.delivered", room: "repo:demo", from: "test-lead", ack_of: 2, payload: {} }),
-    JSON.stringify({ seq: 8, type: "message.read", room: "repo:demo", from: "test-lead", ack_of: 2, payload: {} }),
+    // Non-empty payload text is deliberate: it ensures this only passes because
+    // of the explicit ack-type exclusion below, not because of the unrelated
+    // empty-payload `text` fallback that would filter an empty-payload ack anyway.
+    JSON.stringify({ seq: 7, type: "message.delivered", room: "repo:demo", from: "critic-1", ack_of: 2, payload: { text: "delivered" } }),
+    JSON.stringify({ seq: 8, type: "message.read", room: "repo:demo", from: "critic-1", ack_of: 2, payload: { text: "read" } }),
   ].join("\n") + "\n");
 
   await waitFor(() => inbox.length >= 2, 6000);
