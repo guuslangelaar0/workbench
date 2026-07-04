@@ -590,11 +590,11 @@ for h in hits:
   open)
     if url="$(metadata_url)"; then
       token="$(metadata_field local_token)"
-      printf 'Command center: %s\n' "$url"
       if [ -n "$token" ]; then
-        echo "Open that URL in a browser."
-        printf 'If it prompts for a token, paste this: %s\n' "$token"
+        printf 'Command center: %s/?token=%s\n' "$url" "$token"
+        printf 'token (for Authorization: Bearer, if needed): %s\n' "$token"
       else
+        printf 'Command center: %s\n' "$url"
         echo "mesh: no local_token found in $TARGET/.workbench/mesh/server.json — the server may need a restart"
       fi
     else
