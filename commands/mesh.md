@@ -1,6 +1,6 @@
 ---
 description: Coordinate Claude sessions/leads/workers over the local/LAN Workbench Mesh command center
-argument-hint: "[start|stop|status|who|open|invite|connect|devices|revoke-device|room|message|ask|handoff|availability|doing|watch|tail|inbox]"
+argument-hint: "[start|stop|status|who|jobs|open|invite|connect|devices|revoke-device|room|message|ask|handoff|availability|activity|doing|watch|tail|inbox|listen-wait]"
 allowed-tools: ["Bash", "Read", "AskUserQuestion"]
 ---
 
@@ -8,7 +8,7 @@ Use this when the user asks to connect another Claude session, bring in another 
 
 Run `${CLAUDE_PLUGIN_ROOT}/scripts/mesh.sh $ARGUMENTS`.
 
-Wizard on missing required values: bare `/workbench:mesh` routes naturally per the outcomes below, but an operation invoked with required pieces missing (`connect URL TOKEN`; `invite` role/ttl; `message`/`ask`/`handoff` targets; `revoke-device DEVICE`; `tail --as`) must not fail or dump usage — use AskUserQuestion for exactly the missing values (for `connect`, offer to read a pending invite's connect lines when `.workbench/mesh/server.json` exists; for message/ask/handoff/revoke targets, offer live candidates from `who`/`devices`), confirm the assembled command, then run it.
+Wizard on missing required values: bare `/workbench:mesh` routes naturally per the outcomes below, but an operation invoked with required pieces missing (`connect URL TOKEN`; `message`/`ask`/`handoff` targets; `revoke-device DEVICE`; `tail --as`; `room NAME`; `doing STATE`; `availability STATE`; `watch ACTOR`; `activity STATE`) must not fail or dump usage — use AskUserQuestion for exactly the missing values (for `connect`, offer to read a pending invite's connect lines when `.workbench/mesh/server.json` exists; for message/ask/handoff/revoke targets, offer live candidates from `who`/`devices`), confirm the assembled command, then run it. (`invite`'s `--role`/`--ttl-seconds` already have working defaults — worker role, 3600s TTL — so don't prompt for them unless the user wants to override.)
 
 Prefer natural outcome routing:
 - "talk to my MacBook Claude" -> status, start with `start --lan` if no LAN mesh is running, create `invite --role worker --ttl-seconds 900`, then show `/workbench:mesh connect URL TOKEN` using hostname/mDNS and raw IP forms (device defaults to hostname if omitted).

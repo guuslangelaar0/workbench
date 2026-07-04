@@ -1,5 +1,7 @@
 # Mesh Command Center Redesign — Design
 
+> **Note (2026-07-04):** this spec's 2-tab design ("Overview"/"Admin") was superseded before ship by a later, uncommitted handoff that shipped the current 5-tab layout (Bench/Board/Host/Ops/Docs — see `crates/workbench-mesh/assets/command-center/app.js`). This document is kept for history; it does not describe the shipped product.
+
 ## Intent
 
 The current Mesh command center (`crates/workbench-mesh/assets/`) is a plain dark operator console: 10 flat sections (Overview send-form, Leads, Workers table, Rooms, Jobs, Tasks, Decisions, Invites, Devices, Audit) plus a raw event-feed. It works, but it reads as an admin panel, not an overview of a live AI team.
