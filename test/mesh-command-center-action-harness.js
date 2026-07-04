@@ -176,6 +176,36 @@ chk(
   "expected the existing tick handler to periodically re-render #audit-body so timestamps keep advancing"
 );
 
+// "No response yet" 30s stuck-message hint (Important/Minor Fix 11): a
+// message stuck at server-received with no delivery/read ack must surface a
+// hint, and any hint/timer must clear once delivery/read does arrive.
+chk(
+  "bench.js arms a 30s stuck timer on server-received with no ack yet",
+  /else if \(r && r\.serverReceivedAt && !r\._stuckTimer\) \{\s*\n\s*r\._stuckTimer = setTimeout\(\(\) => \{\s*\n\s*if \(!r\.deliveredBy\.size && !r\.seenBy\.size\) \{\s*\n\s*r\.stuck = true;/.test(bench),
+  "expected the receipt handler to setTimeout(..., 30000) guarded by r.serverReceivedAt && !r._stuckTimer, re-checking deliveredBy/seenBy before marking stuck"
+);
+chk(
+  "bench.js's stuck timer fires at 30000ms and renders .stuck-hint",
+  /\}, 30000\);/.test(bench) && bench.includes("class: 'stuck-hint'"),
+  "expected the stuck timer's setTimeout delay to be exactly 30000 and the fired callback to append a .stuck-hint span"
+);
+chk(
+  "bench.js clears the stuck timer once delivery/read is acked",
+  /if \(r && \(r\.deliveredBy\.size \|\| r\.seenBy\.size\)\) \{\s*\n(?:[^\n]*\n)*?\s*if \(r\._stuckTimer\) \{ clearTimeout\(r\._stuckTimer\); r\._stuckTimer = null; \}/.test(bench),
+  "expected the receipt handler to clearTimeout(r._stuckTimer) as soon as deliveredBy/seenBy gains an entry, so a late ack can't be followed by a stale hint"
+);
+chk(
+  "bench.js removes an already-rendered .stuck-hint once delivery/read lands late",
+  /if \(r\.stuck\) \{\s*\n\s*r\.stuck = false;\s*\n\s*const hintEl = document\.getElementById\('chat-scroll'\)\?\.querySelector\('\.msg\[data-seq="' \+ seq \+ '"\] \.stuck-hint'\);\s*\n\s*if \(hintEl\) hintEl\.remove\(\);/.test(bench),
+  "expected the ack branch to also remove a previously-rendered .stuck-hint element, not just cancel a still-pending timer"
+);
+const surfacesCss = fs.readFileSync(path.join(bundleDir, "style-surfaces.css"), "utf8");
+chk(
+  "style-surfaces.css defines .stuck-hint",
+  /\.stuck-hint\s*\{/.test(surfacesCss),
+  "expected a .stuck-hint rule styling the 30s no-response-yet hint"
+);
+
 // Security hardening: a token handed off via ?token=... must not linger in
 // the browser's address bar / history after it's cached in localStorage.
 chk(

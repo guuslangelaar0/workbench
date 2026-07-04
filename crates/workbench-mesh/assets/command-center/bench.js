@@ -699,6 +699,34 @@ window.WB = window.WB || {};
     }
   });
   WB.sim.on('receipt', (seq) => {
+    // "No response yet" stuck-message hint (realtime-protocol spec): a
+    // message stuck at server-received with no delivery/read within ~30s
+    // gets a subtle warning. This runs unconditionally on every 'receipt'
+    // emit for this seq — including the very first one, fired from inside
+    // live.js's own sendChat().then() before bench.js's send() has had a
+    // chance to backfill the optimistic bubble's data-seq — so it must not
+    // depend on the DOM lookups below (those still early-return when the
+    // row isn't mounted yet/at all; WB.RECEIPTS state is tracked regardless).
+    const r = WB.RECEIPTS[seq];
+    if (r && (r.deliveredBy.size || r.seenBy.size)) {
+      // Delivered/read already arrived — cancel a pending timer so a stale
+      // hint can't appear after the fact, and remove one if it already
+      // rendered (e.g. the ack lands just past the 30s mark).
+      if (r._stuckTimer) { clearTimeout(r._stuckTimer); r._stuckTimer = null; }
+      if (r.stuck) {
+        r.stuck = false;
+        const hintEl = document.getElementById('chat-scroll')?.querySelector('.msg[data-seq="' + seq + '"] .stuck-hint');
+        if (hintEl) hintEl.remove();
+      }
+    } else if (r && r.serverReceivedAt && !r._stuckTimer) {
+      r._stuckTimer = setTimeout(() => {
+        if (!r.deliveredBy.size && !r.seenBy.size) {
+          r.stuck = true;
+          const row = document.getElementById('chat-scroll')?.querySelector('.msg[data-seq="' + seq + '"]');
+          if (row) row.appendChild(el('span', { class: 'stuck-hint', title: 'no response yet — the recipient’s listen connector may be down', text: ' ⚠' }));
+        }
+      }, 30000);
+    }
     // Update only the affected message's tick in-place — a full list re-render
     // would jump the viewport to the bottom on every ack, breaking the UX for
     // users scrolled up reading history.  If the message isn't in the current

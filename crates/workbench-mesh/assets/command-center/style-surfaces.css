@@ -404,6 +404,14 @@ body[data-density="compact"] .session-meta { width: 280px; }
   font-size: 10px;
   color: var(--ink-3, #8a8f98);
 }
+/* stuck: server-received with no delivery/read ack within ~30s — signals the
+   addressee's listen connector may be down, not just a slow reply. Muted
+   warning tone, matching .st-note/.pill.warn's existing amber convention. */
+.stuck-hint {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--amber-deep, #b8860b);
+}
 /* ── reveal animation (typewriter) ── */
 .reveal-cursor::after {
   content: '▍';

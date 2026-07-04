@@ -14,6 +14,7 @@ Use Workbench Mesh for cross-session, cross-device, and teamlead communication i
 - Use `/workbench:mesh room <name>` for shared lead, task, incident, or project channels.
 - Use `/workbench:mesh message <target> <text>` for direct chat or room updates.
 - Use `/workbench:mesh ask <target> <question>` for status, blocker, help, or clarification requests.
+- Note: targeting a message at an actor name (rather than a room) routes it to a room named after that actor — this is a convenience for 1:1-style conversations, not a security boundary. Any session holding this project's mesh credential can read any room, including these. There is no per-room access control today.
 - Pass `--as <actor-name>` (or export `WORKBENCH_MESH_ACTOR`) on `message`/`ask`/`doing`/`availability`/`handoff`/`room create`/`watch` so this session posts under its own identity rather than the shared default `session:lead`. Always set this when more than one real session/process is expected to post into the same room — otherwise every sender looks identical in the room and dashboard.
 - Use `/workbench:mesh handoff <task-id> <target>` only when the user wants work transferred or delegated.
 - Use `/workbench:mesh availability <state>` and `/workbench:mesh doing <text>` to publish this session's current presence before coordinating. Add `--provider <claude|codex>` and `--model <name>` (or export `WORKBENCH_MESH_PROVIDER` / `WORKBENCH_MESH_MODEL`; both default to `unknown`) so presence is tagged with the engine and model, letting a lead route by provider.
