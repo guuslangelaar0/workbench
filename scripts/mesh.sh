@@ -191,52 +191,93 @@ cmd="${1:-}"
 [ -n "$cmd" ] || { usage; exit 2; }
 shift || true
 
-# Pull `--as ACTOR`, `--platform NAME`, and repeatable `--capability VALUE`
-# out of the remaining args, wherever they appear, so they don't get
-# swallowed by commands that greedily join the rest of the args as
-# message/question/doing text (e.g. `doing "fixing tests" --platform macos`).
-# Leaves the *_ARGS arrays empty (nothing passed to the binary) when the
-# corresponding flag wasn't given, so the binary's own auto-detection
-# (WORKBENCH_MESH_ACTOR / std::env::consts::OS) still applies.
+# Pull `--as ACTOR`, `--platform NAME`, repeatable `--capability VALUE`,
+# `--provider NAME`, `--model NAME` out of the remaining args.
+#
+# message/ask/doing join their remaining args into UNBOUNDED free-text
+# message/question/doing content, so for those three operations only, scan
+# for these flags from the END of the argument list backward, stripping a
+# trailing run of recognized `flag value` pairs — never from the middle.
+# Every documented usage of these flags on these three ops has them trail
+# the free text (e.g. `message TARGET TEXT... [--as ACTOR]`), so this means
+# a flag-shaped word buried INSIDE a message (e.g. "please use --as flag
+# correctly") is never mistaken for a real flag; only a genuine trailing
+# flag (or a message whose literal last two words happen to collide) can
+# still match — a much narrower window than the bug this replaces.
+#
+# Every other operation takes a bounded number of positional args plus
+# these flags in any relative order (e.g. `inbox --as ACTOR --wait`, where
+# --wait trails --as) — for those, front-to-back scanning is safe (there is
+# no free-text tail to protect) and must be preserved, since a trailing-only
+# scan would stop at --wait before ever reaching --as further left.
 AS_ARGS=()
 PLATFORM_ARGS=()
 CAP_ARGS=()
 PROVIDER_ARGS=()
 MODEL_ARGS=()
-if [ "$#" -gt 0 ]; then
-  rest=()
-  i=1
-  while [ "$i" -le "$#" ]; do
-    arg="${!i}"
-    case "$arg" in
-      --as)
+case "$cmd" in
+  message|ask|doing)
+    if [ "$#" -gt 0 ]; then
+      rest=("$@")
+      while [ "${#rest[@]}" -ge 2 ]; do
+        last=$((${#rest[@]} - 1))
+        flag="${rest[$((last - 1))]}"
+        value="${rest[$last]}"
+        case "$flag" in
+          --as) AS_ARGS=(--as "$value") ;;
+          --platform) PLATFORM_ARGS=(--platform "$value") ;;
+          --capability) CAP_ARGS=(--capability "$value" "${CAP_ARGS[@]}") ;;
+          --provider) PROVIDER_ARGS=(--provider "$value") ;;
+          --model) MODEL_ARGS=(--model "$value") ;;
+          *) break ;;
+        esac
+        keep=$((${#rest[@]} - 2))
+        if [ "$keep" -gt 0 ]; then
+          rest=("${rest[@]:0:$keep}")
+        else
+          rest=()
+        fi
+      done
+      set -- "${rest[@]}"
+    fi
+    ;;
+  *)
+    if [ "$#" -gt 0 ]; then
+      rest=()
+      i=1
+      while [ "$i" -le "$#" ]; do
+        arg="${!i}"
+        case "$arg" in
+          --as)
+            i=$((i + 1))
+            AS_ARGS=(--as "${!i:-}")
+            ;;
+          --platform)
+            i=$((i + 1))
+            PLATFORM_ARGS=(--platform "${!i:-}")
+            ;;
+          --capability)
+            i=$((i + 1))
+            CAP_ARGS+=(--capability "${!i:-}")
+            ;;
+          --provider)
+            i=$((i + 1))
+            PROVIDER_ARGS=(--provider "${!i:-}")
+            ;;
+          --model)
+            i=$((i + 1))
+            MODEL_ARGS=(--model "${!i:-}")
+            ;;
+          *)
+            rest+=("$arg")
+            ;;
+        esac
         i=$((i + 1))
-        AS_ARGS=(--as "${!i:-}")
-        ;;
-      --platform)
-        i=$((i + 1))
-        PLATFORM_ARGS=(--platform "${!i:-}")
-        ;;
-      --capability)
-        i=$((i + 1))
-        CAP_ARGS+=(--capability "${!i:-}")
-        ;;
-      --provider)
-        i=$((i + 1))
-        PROVIDER_ARGS=(--provider "${!i:-}")
-        ;;
-      --model)
-        i=$((i + 1))
-        MODEL_ARGS=(--model "${!i:-}")
-        ;;
-      *)
-        rest+=("$arg")
-        ;;
-    esac
-    i=$((i + 1))
-  done
-  set -- "${rest[@]}"
-fi
+      done
+      set -- "${rest[@]}"
+    fi
+    ;;
+esac
 
 case "$cmd" in
   start)

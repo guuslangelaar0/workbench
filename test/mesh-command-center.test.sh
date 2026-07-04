@@ -221,6 +221,23 @@ chk "state includes close lead action" "printf '%s' \"\$STATE\" | grep -q 'lead-
 chk "state includes availability action" "printf '%s' \"\$STATE\" | grep -q 'availability.set'"
 chk "state includes output chunk" "printf '%s' \"\$STATE\" | grep -q 'output:generator-1'"
 
+echo "== flag pre-scan does not corrupt free-text message content (blocker fix) =="
+FLAG_PLUGIN="$TMP/flag-test-plugin"
+mkdir -p "$FLAG_PLUGIN/bin"
+ln -sf "$BIN" "$FLAG_PLUGIN/bin/workbench-mesh"
+CLAUDE_PLUGIN_ROOT="$FLAG_PLUGIN" CLAUDE_PROJECT_DIR="$TMP" WORKBENCH_HOME="$HOME_TMP" \
+  bash "$HERE/scripts/mesh.sh" message team please use --as flag correctly >/dev/null 2>&1 || true
+FLAG_MSG="$(curl -fsS "http://127.0.0.1:$PORT/api/events?since=0" -H "Authorization: Bearer $TOKEN" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for e in data['events']:
+    if e.get('type') == 'message.sent' and 'please use' in e.get('payload', {}).get('text', ''):
+        print(e['payload']['text'])
+        print(e['from'])
+")"
+chk "free-text message with an embedded --as token is preserved in full" "printf '%s\n' \"\$FLAG_MSG\" | head -1 | grep -qx 'please use --as flag correctly'"
+chk "sender identity is not spoofed by the embedded token" "printf '%s\n' \"\$FLAG_MSG\" | sed -n 2p | grep -q '^session:lead$\|^forge-lead$'"
+
 echo "== listen-wait FIFO fallback =="
 # Without a running `workbench-mesh listen` connector, listen-wait must fall
 # back to the polling inbox --wait path rather than hanging forever.
