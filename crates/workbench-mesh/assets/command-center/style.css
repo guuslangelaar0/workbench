@@ -283,3 +283,14 @@ body[data-density="compact"] .panel-body { padding: 10px 14px; }
   .pulse::before { animation: none !important; }
   * { animation-duration: 0.001s !important; }
 }
+
+/* ── Mobile: scrollable nav ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .topbar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tabs, .topbar-right {
+    flex-shrink: 0;
+  }
+}
