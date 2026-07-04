@@ -129,7 +129,8 @@ window.WB = window.WB || {};
   function routeFor(text) {
     const hit = text.match(/@([\w-]+)/);
     if (hit) {
-      const a = WB.AGENTS.find((x) => x.id === hit[1] || x.id.startsWith(hit[1]));
+      const exact = WB.AGENTS.find((x) => x.id === hit[1]);
+      const a = exact || WB.AGENTS.find((x) => x.id.startsWith(hit[1]));
       if (a) return { to: a.id };
     }
     const host = WB.AGENTS.find((a) => a.isHostSession);
