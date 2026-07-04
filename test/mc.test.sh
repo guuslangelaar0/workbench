@@ -33,12 +33,26 @@ chk "exits 0 cleanly"         "(cd '$TMP' && bash '$HERE/scripts/mc.sh' --no-pro
 # .workbench/config.json, and must stop walking up at $HOME -- otherwise a
 # subdirectory of $HOME with no real project either errors confusingly or
 # walks past HOME and renders a dashboard against an unrelated project.
-FAKE_HOME="$(mktemp -d)"
+FAKE_HOME="$TMP/fake_home"
 mkdir -p "$FAKE_HOME/project/.claude/tasks" "$FAKE_HOME/project/sub"
 NOPROJECT_OUT="$(cd "$FAKE_HOME/project/sub" && HOME="$FAKE_HOME" bash "$HERE/scripts/mc.sh" 2>&1)"; NOPROJECT_RC=$?
 chk "no-project: exits non-zero"        "[ \"\$NOPROJECT_RC\" != 0 ]"
 chk "no-project: exact error message"   "printf '%s' \"\$NOPROJECT_OUT\" | grep -qF 'mc: no workbench project (.claude/tasks/ + .workbench/config.json) found from $FAKE_HOME/project/sub upwards'"
 chk "no-project: does not render a dashboard" "! printf '%s' \"\$NOPROJECT_OUT\" | grep -q 'Jobs'"
-rm -rf "$FAKE_HOME"
+
+# Regression: the $ROOT != $HOME stop-walking clause itself -- this only bites
+# when a REAL project exists above $HOME. Put a valid project at $OUTER (both
+# markers) and make the fake HOME a subdirectory of it with .claude/tasks but
+# no .workbench/config.json. With the guard, the walk must stop at $HOME and
+# report no-project (exit 1); without the guard, it would walk past $HOME,
+# find $OUTER's project, and render a dashboard against the wrong project.
+OUTER="$TMP/outer"
+mkdir -p "$OUTER/.claude/tasks" "$OUTER/.workbench"
+echo '{}' > "$OUTER/.workbench/config.json"
+mkdir -p "$OUTER/subdir/fake_home/.claude/tasks" "$OUTER/subdir/fake_home/sub"
+BOUNDARY_OUT="$(cd "$OUTER/subdir/fake_home/sub" && HOME="$OUTER/subdir/fake_home" bash "$HERE/scripts/mc.sh" 2>&1)"; BOUNDARY_RC=$?
+chk "home-boundary: exits non-zero"      "[ \"\$BOUNDARY_RC\" != 0 ]"
+chk "home-boundary: exact error message" "printf '%s' \"\$BOUNDARY_OUT\" | grep -qF 'mc: no workbench project (.claude/tasks/ + .workbench/config.json) found from $OUTER/subdir/fake_home/sub upwards'"
+chk "home-boundary: does not render a dashboard" "! printf '%s' \"\$BOUNDARY_OUT\" | grep -q 'Jobs'"
 
 [ "$fail" = 0 ] && echo "PASS: mc" || { echo "mc test failed"; exit 1; }
