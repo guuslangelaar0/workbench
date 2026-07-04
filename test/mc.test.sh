@@ -29,4 +29,16 @@ chk "shows active codex job"  "printf '%s' \"\$out\" | grep -q \"$JOB_ID\" && pr
 chk "hides terminal codex job" "! printf '%s' \"\$out\" | grep -q \"$DONE_ID\""
 chk "exits 0 cleanly"         "(cd '$TMP' && bash '$HERE/scripts/mc.sh' --no-prod --no-build >/dev/null 2>&1)"
 
+# Regression: root-detection guard must require BOTH .claude/tasks/ AND
+# .workbench/config.json, and must stop walking up at $HOME -- otherwise a
+# subdirectory of $HOME with no real project either errors confusingly or
+# walks past HOME and renders a dashboard against an unrelated project.
+FAKE_HOME="$(mktemp -d)"
+mkdir -p "$FAKE_HOME/project/.claude/tasks" "$FAKE_HOME/project/sub"
+NOPROJECT_OUT="$(cd "$FAKE_HOME/project/sub" && HOME="$FAKE_HOME" bash "$HERE/scripts/mc.sh" 2>&1)"; NOPROJECT_RC=$?
+chk "no-project: exits non-zero"        "[ \"\$NOPROJECT_RC\" != 0 ]"
+chk "no-project: exact error message"   "printf '%s' \"\$NOPROJECT_OUT\" | grep -qF 'mc: no workbench project (.claude/tasks/ + .workbench/config.json) found from $FAKE_HOME/project/sub upwards'"
+chk "no-project: does not render a dashboard" "! printf '%s' \"\$NOPROJECT_OUT\" | grep -q 'Jobs'"
+rm -rf "$FAKE_HOME"
+
 [ "$fail" = 0 ] && echo "PASS: mc" || { echo "mc test failed"; exit 1; }

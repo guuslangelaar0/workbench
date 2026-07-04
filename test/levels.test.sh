@@ -45,4 +45,21 @@ chk "wb_dial: non-overridden dial still uses preset" "[ \"\$(wb_dial '$TPRESET' 
 chk "wb_dial: config still valid JSON" "python3 -m json.tool '$TPRESET/.workbench/config.json' >/dev/null"
 rm -rf "$TPRESET"
 
+# levels.sh lifecycle CLI dispatch -- run as a real subprocess (not sourced),
+# exercising the ~lines 63-92 dispatch block that commands/verify.md depends on.
+TSOLO="$(mktemp -d)"
+bash "$HERE/scripts/init.sh" --profile full --level solo --name "SoloCLI" --mission m --target "$TSOLO" >/dev/null 2>&1
+SOLO_OUT="$(bash "$HERE/scripts/levels.sh" lifecycle --target "$TSOLO")"; SOLO_RC=$?
+chk "levels.sh lifecycle CLI: solo includes in-development" "printf '%s' \"\$SOLO_OUT\" | grep -qw in-development"
+chk "levels.sh lifecycle CLI: solo excludes in-review"      "! printf '%s' \"\$SOLO_OUT\" | grep -qw in-review"
+chk "levels.sh lifecycle CLI: solo exits 0"                 "[ \"\$SOLO_RC\" = 0 ]"
+rm -rf "$TSOLO"
+
+TCREW="$(mktemp -d)"
+bash "$HERE/scripts/init.sh" --profile full --level crew --name "CrewCLI" --mission m --target "$TCREW" >/dev/null 2>&1
+CREW_OUT="$(bash "$HERE/scripts/levels.sh" lifecycle --target "$TCREW")"; CREW_RC=$?
+chk "levels.sh lifecycle CLI: crew includes in-review" "printf '%s' \"\$CREW_OUT\" | grep -qw in-review"
+chk "levels.sh lifecycle CLI: crew exits 0"            "[ \"\$CREW_RC\" = 0 ]"
+rm -rf "$TCREW"
+
 [ "$fail" = 0 ] && echo "PASS: levels" || { echo "levels test failed"; exit 1; }
