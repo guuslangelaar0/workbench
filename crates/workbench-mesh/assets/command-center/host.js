@@ -114,8 +114,8 @@ window.WB = window.WB || {};
     if (WB.ENROLLMENT.hold) {
       body.appendChild(el('div', { class: 'hold-note', html: svgIcon('lock', 12) + '<span>On hold — join attempts are denied at the door. Already-enrolled devices are unaffected.</span>' }));
     }
-    const roleSel = el('select', {}, ['worker', 'operator', 'observer'].map((r) => el('option', { text: r })));
-    const ttlSel = el('select', {}, ['30m', '2h'].map((r) => el('option', { text: r })));
+    const roleSel = el('select', { id: 'invite-role', name: 'invite-role' }, ['worker', 'operator', 'observer'].map((r) => el('option', { text: r })));
+    const ttlSel = el('select', { id: 'invite-ttl', name: 'invite-ttl' }, ['30m', '2h'].map((r) => el('option', { text: r })));
     body.appendChild(el('div', { style: 'display:flex; gap:8px; align-items:center; flex-wrap:wrap;' }, [
       roleSel, ttlSel,
       el('button', { class: 'btn primary', html: svgIcon('plus', 12) + ' Create invite', disabled: WB.ENROLLMENT.hold ? 'disabled' : null, title: WB.ENROLLMENT.hold ? 'Enrollment is on hold' : null, onclick: () => createInvite(body, roleSel.value, ttlSel.value) }),
@@ -203,6 +203,7 @@ window.WB = window.WB || {};
   }
   function renderDevices(body) {
     body.replaceChildren();
+    if (!WB.DEVICES.length) { body.appendChild(empty('key', 'No enrolled devices yet.', 'create an invite above to enroll one')); return; }
     const table = el('table', { class: 'wb' });
     table.appendChild(el('tr', {}, ['Device', 'Platform', 'Transport', 'Role', 'Enrolled', 'Last seen', ''].map((h) => el('th', { text: h }))));
     for (const d of WB.DEVICES) {

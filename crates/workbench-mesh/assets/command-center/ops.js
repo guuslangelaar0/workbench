@@ -145,7 +145,7 @@ window.WB = window.WB || {};
   /* ── tasks (reassign) ── */
   function tasksBody() {
     const body = el('div', { style: 'padding: 10px 16px 14px; display:flex; flex-direction:column; gap: 10px;' });
-    const idInput = el('input', { type: 'text', placeholder: 'task id', style: 'width:90px;' });
+    const idInput = el('input', { id: 'reassign-task-id', name: 'reassign-task-id', type: 'text', placeholder: 'task id', style: 'width:90px;' });
     const agentSel = el('select', {}, [
       el('option', { value: '', text: 'assign to…' }),
       ...WB.AGENTS.map((a) => el('option', { value: a.id, text: a.id })),

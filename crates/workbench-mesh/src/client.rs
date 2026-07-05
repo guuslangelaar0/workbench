@@ -328,12 +328,34 @@ pub async fn revoke_device(
     Ok(())
 }
 
+/// Room names reserved for internal use — `team` is the implicit all-hands
+/// broadcast room and `tasks` backs the coordination board. Letting a user
+/// `create-room team` would silently start posting `room.created` noise into
+/// (and inviting confusion with) a room every dashboard/CLI surface already
+/// treats as special, so this is a hard reject rather than a warning.
+const RESERVED_ROOMS: &[&str] = &["team", "tasks"];
+
 pub async fn create_room(
     project_root: PathBuf,
     home: Option<PathBuf>,
     name: String,
     from: Option<String>,
 ) -> Result<()> {
+    if RESERVED_ROOMS.contains(&name.as_str()) {
+        anyhow::bail!(
+            "'{name}' is a reserved room name (used internally for {}); choose a different name",
+            RESERVED_ROOMS.join("/")
+        );
+    }
+    // Best-effort, non-blocking, same reasoning as `unknown_actor_warning`:
+    // snapshot *before* the event is posted, since the `room.created` event
+    // about to be appended would itself make the room "exist" if checked
+    // after. There is no dedicated room registry (rooms are derived purely
+    // by scanning `event.room` across the log, same as `known_actors`
+    // scans `event.from`/`event.to`) — re-creating/re-joining a room that
+    // already exists by name is a legitimate way to keep posting to it, so
+    // this warns rather than rejects. Reserved names above still hard-reject.
+    let warning = existing_room_warning(&project_root, home.clone(), &name).await;
     let event = append_or_post_event(
         &project_root,
         home,
@@ -345,6 +367,7 @@ pub async fn create_room(
     )
     .await?;
     println!("room: created {} seq={}", event.room, event.seq);
+    emit_warning(warning);
     Ok(())
 }
 
@@ -377,7 +400,7 @@ pub async fn send_message(
     )
     .await?;
     println!("message: sent seq={}", event.seq);
-    emit_unknown_actor_warning(warning);
+    emit_warning(warning);
     Ok(())
 }
 
@@ -403,7 +426,7 @@ pub async fn ask_status(
     )
     .await?;
     println!("ask: sent seq={}", event.seq);
-    emit_unknown_actor_warning(warning);
+    emit_warning(warning);
     Ok(())
 }
 
@@ -749,7 +772,7 @@ pub async fn watch_actor(
     )
     .await?;
     println!("watch: added seq={}", event.seq);
-    emit_unknown_actor_warning(warning);
+    emit_warning(warning);
     Ok(())
 }
 
@@ -902,10 +925,60 @@ async fn unknown_actor_warning(
     ))
 }
 
-/// Prints a warning computed by `unknown_actor_warning`, if any. Call only
-/// after the corresponding send has already succeeded, so the warning never
-/// appears in place of (or ahead of) a successful "sent" confirmation.
-fn emit_unknown_actor_warning(warning: Option<String>) {
+/// Best-effort, non-blocking: `Some(message)` if a room named `name` already
+/// has at least one event in the log, `None` otherwise (or if the lookup
+/// itself failed — e.g. an unreachable remote daemon). Mirrors
+/// `unknown_actor_warning`'s shape: there is no dedicated room registry, so
+/// this scans the same event log (`event.room`) that `known_actors` scans
+/// for `event.from`/`event.to`. MUST be snapshotted *before* the
+/// `room.created` event is posted for the same reason `unknown_actor_warning`
+/// snapshots before its send — after posting, the room would always appear
+/// to "already exist" (it now contains the very event just appended).
+async fn existing_room_warning(
+    project_root: &std::path::Path,
+    home: Option<PathBuf>,
+    name: &str,
+) -> Option<String> {
+    let exists = if let Ok(metadata) = read_server_metadata(project_root) {
+        if metadata.mode == "remote" {
+            let token = auth::local_project_token(project_root, home).ok()?;
+            let state = get_state(&metadata, &token).await.ok()?;
+            state
+                .get("events")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .any(|event| event.get("room").and_then(Value::as_str) == Some(name))
+        } else {
+            local_room_exists(project_root, name)?
+        }
+    } else {
+        local_room_exists(project_root, name)?
+    };
+    if !exists {
+        return None;
+    }
+    Some(format!(
+        "mesh: note — room '{name}' already exists; posting to it rather than starting a new one"
+    ))
+}
+
+fn local_room_exists(project_root: &std::path::Path, name: &str) -> Option<bool> {
+    Some(
+        MeshStore::open(project_root)
+            .ok()?
+            .list_events_since(0)
+            .ok()?
+            .iter()
+            .any(|event| event.room == name),
+    )
+}
+
+/// Prints a warning computed by `unknown_actor_warning` or
+/// `existing_room_warning`, if any. Call only after the corresponding
+/// action has already succeeded, so the warning never appears in place of
+/// (or ahead of) a successful confirmation.
+fn emit_warning(warning: Option<String>) {
     if let Some(warning) = warning {
         eprintln!("{warning}");
     }

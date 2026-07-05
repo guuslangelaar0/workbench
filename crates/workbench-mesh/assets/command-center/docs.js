@@ -128,9 +128,13 @@ window.WB = window.WB || {};
       const isPrev = id === previewTarget;
       const badge = isCur ? chip('current', 'amber') : (isPrev ? chip('previewing', 'ghost') : null);
       if (badge && isPrev) badge.style.background = 'var(--paper)'; // opaque — sits over the rung's own border, doesn't let it show through
+      const activate = () => { previewTarget = isCur ? null : id; rerender(); };
       return el('div', {
         class: 'rung' + (isCur ? ' current' : '') + (isPrev ? ' previewing' : ''),
-        onclick: () => { previewTarget = isCur ? null : id; rerender(); },
+        tabindex: '0',
+        role: 'button',
+        onclick: activate,
+        onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } },
       }, [
         badge,
         el('div', { class: 'rung-steps' }, [0, 1, 2, 3].map((i) => el('i', { class: i <= idx ? 'on' : '' }))),
@@ -339,7 +343,13 @@ window.WB = window.WB || {};
       el('p', { class: 'doc-lede', text: 'Every /workbench:* command, grouped by concern. Click a row to copy it.' }),
       el('div', { class: 'cmd-groups' }, WB.COMMAND_GROUPS.map((g) => el('section', { class: 'panel cmd-group' }, [
         el('div', { class: 'panel-head' }, [el('h2', { text: g.group })]),
-        el('div', { class: 'panel-body', style: 'padding: 4px 6px 6px;' }, g.items.map((it) => el('div', { class: 'cmd-item', onclick: copyCmd(it.cmd) }, [
+        el('div', { class: 'panel-body', style: 'padding: 4px 6px 6px;' }, g.items.map((it) => el('div', {
+          class: 'cmd-item',
+          tabindex: '0',
+          role: 'button',
+          onclick: copyCmd(it.cmd),
+          onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); copyCmd(it.cmd)(); } },
+        }, [
           el('span', { class: 'cmd-name', text: it.cmd }),
           el('span', { class: 'cmd-desc', text: it.desc }),
           el('span', { class: 'cmd-copy', html: svgIcon('copy', 11) }),

@@ -210,7 +210,7 @@ window.WB = window.WB || {};
           reseedWindow();
           updateHint();
         } })));
-    const input = el('textarea', { rows: '1', placeholder: 'Message the team… (@name for one lead · shift+enter for a new line)' });
+    const input = el('textarea', { id: 'chat-compose-input', name: 'chat-message', rows: '1', placeholder: 'Message the team… (@name for one lead · shift+enter for a new line)' });
     const autoGrow = () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 132) + 'px'; };
     input.addEventListener('input', autoGrow);
     const hint = el('div', { class: 'route-hint' });
@@ -546,7 +546,7 @@ window.WB = window.WB || {};
   }
   function renderCombined(entry) { return entry.tool ? feedLine(entry.entry) : chatTermLine(entry.msg); }
   function termPrompt(a, feed) {
-    const input = el('textarea', { rows: '1', placeholder: 'Message ' + a.id + '…' });
+    const input = el('textarea', { id: 'focus-compose-input', name: 'focus-message', rows: '1', placeholder: 'Message ' + a.id + '…' });
     const autoGrow = () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; };
     input.addEventListener('input', autoGrow);
     const send = () => {
