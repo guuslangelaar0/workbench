@@ -12,6 +12,7 @@
 
 - Branch: `feat/mesh-lan-tls-pinning`, based on `main` at `d599466d83dc668db9146ade241e495a8c082d6b` (tag `v0.11.0`).
 - Crypto provider is **`aws-lc-rs` everywhere** — never `ring`. Every task that touches `Cargo.toml` or constructs a `rustls::ClientConfig`/`ServerConfig` must verify `cargo tree -p workbench-mesh -i ring` prints nothing.
+- **Task 1b installs a process-wide default crypto provider via `ctor` — it must land before Task 2 and before any task's tests are judged against a "fully green" bar.** Task 1 alone (the dependency swap) is expected to leave the test suite red with a uniform `"No provider set"` panic; that is normal and resolved by Task 1b, not a sign Task 1 did something wrong.
 - TLS is restricted to **1.3 only** on both client and server configs (`with_protocol_versions(&[&rustls::version::TLS13])`).
 - `local` mode (127.0.0.1) is **never** touched by any task in this plan — every task must explicitly verify its change is gated on `mode == "lan"` (or `"remote"` for the client side) and leaves the `local` code path byte-for-byte behavior-identical.
 - No `axum-server` dependency — the server wraps `tokio::net::TcpListener` with a manual `tokio_rustls::TlsAcceptor` accept loop feeding `hyper-util`'s `TowerToHyperService`.
@@ -107,13 +108,96 @@ Expected: prints `aws-lc-rs vX.Y.Z` with a list of dependents (rcgen, rustls, to
 - [ ] **Step 5: Run the existing full test suite to confirm nothing broke**
 
 Run: `cargo test -p workbench-mesh` and `cd /home/guus/code/workbench && bash test/all.sh`
-Expected: both fully green — no source code changed yet, so this is a pure regression check on the dependency swap itself.
+Expected: **these will NOT be green yet — this is expected and correct, not a bug in this task.** `reqwest`'s `rustls-tls-manual-roots-no-provider` feature (selected specifically to exclude `ring`) makes `ClientBuilder::build()` panic with `"No provider set"` for every `Client::new()` call anywhere in the process — including existing pre-TLS tests and `local` mode's own plain-HTTP calls — until a process-wide `rustls::crypto::CryptoProvider` default is installed, which is Task 1b's entire job, not this one. Confirm the failures you see are ALL the identical `"No provider set"` panic (verify by grepping the test output for that exact string) — if you see any OTHER kind of failure, that is a real regression and must be investigated before moving on; do not wave away a different failure as "expected."
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/workbench-mesh/Cargo.toml
+git add crates/workbench-mesh/Cargo.toml Cargo.lock
 git commit -m "build(mesh): switch TLS-capable deps to aws-lc-rs, add rcgen/rustls/tokio-rustls"
+```
+
+---
+
+### Task 1b: Install a process-wide default rustls crypto provider
+
+**Files:**
+- Modify: `crates/workbench-mesh/src/lib.rs:1-9` (add the ctor)
+- Modify: `crates/workbench-mesh/Cargo.toml` (add the `ctor` dependency)
+- Test: none new — this task's success criterion is that Task 1's already-existing test suite goes back to fully green.
+
+**Interfaces:** none consumed from other tasks. Produces: a guarantee, relied on by every later task in this plan, that `rustls::crypto::CryptoProvider::install_default()`-equivalent has already run before any `reqwest::Client` or `rustls::ClientConfig`/`ServerConfig` is ever constructed anywhere in this binary — real production `local` mode included, not just `lan`/`remote` mode's new TLS code.
+
+**Why this task exists:** Task 1's dependency swap (excluding `ring`, keeping only `aws-lc-rs`) breaks `reqwest::Client::new()` process-wide the instant it lands — `reqwest`'s own source (`ClientBuilder::build()`) calls `rustls::crypto::CryptoProvider::get_default()` and panics if nothing installed one, and no code path in the `-no-provider` feature route auto-installs a default the way rustls's own bundled-provider features do. This was a genuine gap in this plan's original task breakdown (the design spec called for `CryptoProvider::install_default()` at startup; no task actually assigned it) — caught by Task 1's own test-suite verification rather than assumed away. Do not skip this task or treat it as optional polish; without it, the real `workbench-mesh` binary cannot serve `local` mode traffic at all, let alone `lan` mode.
+
+Standard Rust library idiom for a process-wide, run-exactly-once, no-per-test-edit install is the `ctor` crate — verified (compiled and run) that plain library-feature auto-install does NOT cover `reqwest`'s `-no-provider` path, and that no stable-libtest hook exists for "before all tests" — `ctor` is genuinely the only mechanism that requires zero edits to the ~20+ existing test functions across this crate that already construct HTTP clients.
+
+- [ ] **Step 1: Add the `ctor` dependency**
+
+Modify `crates/workbench-mesh/Cargo.toml`'s `[dependencies]` block (added by Task 1 in the same file — re-read the current file first to append correctly) to add one line:
+```toml
+ctor = "1.0"
+```
+
+- [ ] **Step 2: Add the install-once constructor to the crate root**
+
+Modify `crates/workbench-mesh/src/lib.rs` from:
+```rust
+pub mod auth;
+pub mod client;
+pub mod listen;
+pub mod net;
+pub mod protocol;
+pub mod server;
+pub mod statusline;
+pub mod store;
+pub mod tls;
+pub mod tailer;
+```
+to (add the ctor function; module list unchanged from Task 2's edit — if Task 2 has not yet landed when this task runs, the `pub mod tls;` line will not exist yet, which is fine, this task's ctor function doesn't depend on the `tls` module):
+```rust
+pub mod auth;
+pub mod client;
+pub mod listen;
+pub mod net;
+pub mod protocol;
+pub mod server;
+pub mod statusline;
+pub mod store;
+pub mod tls;
+pub mod tailer;
+
+/// Installs the process-wide rustls crypto provider before `main()` runs and
+/// before any `#[test]` in this crate's test binaries runs — required
+/// because this crate deliberately excludes `ring` (aws-lc-rs only), and
+/// `reqwest`'s no-default-provider TLS feature panics on the first
+/// `Client::new()`/`ClientBuilder::build()` call otherwise. A second call to
+/// `install_default()` (e.g. if some other crate in the dependency graph
+/// also tries to install one) returns `Err` rather than panicking — the
+/// `let _ =` here is deliberate, not a swallowed error worth propagating.
+#[ctor::ctor(unsafe)]
+fn install_default_crypto_provider() {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+}
+```
+
+- [ ] **Step 3: Run the full test suite to confirm this actually fixes Task 1's failures**
+
+Run: `cargo test -p workbench-mesh`
+Expected: fully green — every test that previously panicked with `"No provider set"` now passes, with zero changes to those test functions themselves.
+
+Run: `cd /home/guus/code/workbench && bash test/all.sh`
+Expected: fully green, including the `mesh-service` suite (which exercises the real compiled binary's `mesh who`/`mesh bench` commands — these must now run without the provider panic too, proving this fixes the real binary, not just the test harness).
+
+- [ ] **Step 4: Manually confirm the real binary works standalone (not just under `cargo test`)**
+
+Run: `cd crates/workbench-mesh && cargo build && cd /home/guus/code/workbench && ./crates/workbench-mesh/target/debug/workbench-mesh --help` (adjust the binary path if the workspace's target directory differs — check `cargo build`'s own output for the exact path) and confirm it runs without panicking. This is a real, if small, regression risk specifically because `ctor` code runs in a pre-`main()` context with different guarantees than ordinary code — confirm this isn't just "works under the test harness" but genuinely works for a real invocation of the compiled binary.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add crates/workbench-mesh/Cargo.toml crates/workbench-mesh/src/lib.rs Cargo.lock
+git commit -m "fix(mesh): install a process-wide rustls crypto provider (aws-lc-rs) via ctor"
 ```
 
 ---
