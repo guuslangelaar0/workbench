@@ -10,7 +10,10 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use fs2::FileExt;
 use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, SanType};
-use rustls::pki_types::CertificateDer;
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, CryptoProvider};
+use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+use rustls::{DigitallySignedStruct, SignatureScheme};
 use sha2::{Digest, Sha256};
 
 /// This project's persistent, self-signed mesh server identity — generated
@@ -146,6 +149,79 @@ pub fn server_config_from_identity(identity: &Identity) -> Result<rustls::Server
     Ok(config)
 }
 
+#[derive(Debug)]
+struct PinnedCertVerifier {
+    pinned: [u8; 16],
+    provider: Arc<CryptoProvider>,
+}
+
+impl ServerCertVerifier for PinnedCertVerifier {
+    fn verify_server_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: UnixTime,
+    ) -> Result<ServerCertVerified, rustls::Error> {
+        let digest = Sha256::digest(end_entity.as_ref());
+        let actual: [u8; 16] = digest[0..16].try_into().unwrap();
+        if actual == self.pinned {
+            Ok(ServerCertVerified::assertion())
+        } else {
+            // This is the entire security boundary. There is no fallback to
+            // CA/webpki validation under any circumstance — a mismatch is
+            // always a hard failure, never a warning.
+            Err(rustls::Error::InvalidCertificate(
+                rustls::CertificateError::ApplicationVerificationFailure,
+            ))
+        }
+    }
+
+    // These MUST delegate to the provider's real signature verification, not
+    // stub "valid" — a stub here would let a MITM replay the pinned cert's
+    // bytes (passing verify_server_cert) while forging the handshake
+    // signature, making the pin purely decorative.
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        verify_tls12_signature(message, cert, dss, &self.provider.signature_verification_algorithms)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        verify_tls13_signature(message, cert, dss, &self.provider.signature_verification_algorithms)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.provider.signature_verification_algorithms.supported_schemes()
+    }
+}
+
+/// Builds a rustls ClientConfig that trusts exactly one certificate — the one
+/// whose truncated SHA-256 fingerprint matches `pinned` — via aws-lc-rs,
+/// TLS 1.3 only. No CA, no webpki root store, no fallback path.
+pub fn pinned_client_config(pinned: [u8; 16]) -> rustls::ClientConfig {
+    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+    let verifier = PinnedCertVerifier {
+        pinned,
+        provider: provider.clone(),
+    };
+    rustls::ClientConfig::builder_with_provider(provider)
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .expect("TLS 1.3 is supported by the aws-lc-rs provider")
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(verifier))
+        .with_no_client_auth()
+}
+
 #[cfg(unix)]
 fn write_secret_pem(path: &Path, contents: &str) -> Result<()> {
     use std::io::Write;
@@ -263,5 +339,77 @@ mod tests {
         let identity = ensure_identity(dir.path(), &["127.0.0.1".to_string()]).unwrap();
         let config = server_config_from_identity(&identity).unwrap();
         assert_eq!(config.alpn_protocols, vec![b"http/1.1".to_vec()]);
+    }
+
+    #[tokio::test]
+    async fn pinned_client_config_accepts_a_matching_certificate() {
+        let dir = TempDir::new().unwrap();
+        let identity = ensure_identity(dir.path(), &["127.0.0.1".to_string()]).unwrap();
+        let server_config = server_config_from_identity(&identity).unwrap();
+        let (addr, _server) = spawn_test_tls_echo_server(server_config).await;
+
+        let client_config = pinned_client_config(identity.fingerprint);
+        let outcome = tls_connect_and_read_one_byte(addr, client_config).await;
+        assert!(outcome.is_ok(), "a correct pin must allow the handshake to succeed");
+    }
+
+    #[tokio::test]
+    async fn pinned_client_config_rejects_a_wrong_fingerprint() {
+        let dir = TempDir::new().unwrap();
+        let identity = ensure_identity(dir.path(), &["127.0.0.1".to_string()]).unwrap();
+        let server_config = server_config_from_identity(&identity).unwrap();
+        let (addr, _server) = spawn_test_tls_echo_server(server_config).await;
+
+        let wrong_pin = [identity.fingerprint[0] ^ 0xFF; 16];
+        let client_config = pinned_client_config(wrong_pin);
+        let outcome = tls_connect_and_read_one_byte(addr, client_config).await;
+        assert!(
+            outcome.is_err(),
+            "THE load-bearing test of this whole feature: a wrong fingerprint MUST hard-fail the handshake, never silently succeed"
+        );
+        // Guard against this test "passing" for an unrelated reason (e.g. a
+        // TCP setup error): the failure must be a certificate rejection from
+        // the TLS layer itself, not some incidental I/O problem.
+        let message = format!("{:#}", outcome.unwrap_err()).to_lowercase();
+        assert!(
+            message.contains("certificate"),
+            "handshake must fail specifically at certificate verification, got: {message}"
+        );
+    }
+
+    // --- test-only helpers, real TLS over a real loopback socket, no mocks ---
+
+    async fn spawn_test_tls_echo_server(
+        config: rustls::ServerConfig,
+    ) -> (std::net::SocketAddr, tokio::task::JoinHandle<()>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let acceptor = tokio_rustls::TlsAcceptor::from(std::sync::Arc::new(config));
+        let handle = tokio::spawn(async move {
+            if let Ok((stream, _)) = listener.accept().await {
+                if let Ok(mut tls) = acceptor.accept(stream).await {
+                    let mut buf = [0u8; 1];
+                    let _ = tls.read_exact(&mut buf).await;
+                    let _ = tls.write_all(&[42u8]).await;
+                }
+            }
+        });
+        (addr, handle)
+    }
+
+    async fn tls_connect_and_read_one_byte(
+        addr: std::net::SocketAddr,
+        client_config: rustls::ClientConfig,
+    ) -> Result<()> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let connector = tokio_rustls::TlsConnector::from(std::sync::Arc::new(client_config));
+        let tcp = tokio::net::TcpStream::connect(addr).await?;
+        let server_name = rustls::pki_types::ServerName::IpAddress(addr.ip().into());
+        let mut tls = connector.connect(server_name, tcp).await?;
+        tls.write_all(&[1u8]).await?;
+        let mut buf = [0u8; 1];
+        tls.read_exact(&mut buf).await?;
+        Ok(())
     }
 }
