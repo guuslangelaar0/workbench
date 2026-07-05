@@ -135,7 +135,7 @@ pub async fn who(project_root: PathBuf, home: Option<PathBuf>) -> Result<()> {
 pub async fn bench(project_root: PathBuf, home: Option<PathBuf>, messages: u64) -> Result<()> {
     let token = auth::local_mutating_project_token(&project_root, home)?;
     let metadata = read_server_metadata(&project_root)?;
-    let client = Client::new();
+    let client = mesh_http_client(&metadata)?;
     let mut latencies = Vec::with_capacity(messages as usize);
     for idx in 0..messages {
         let started = Instant::now();
@@ -199,7 +199,7 @@ pub async fn accept_remote_invite(
     }
     let metadata = remote_metadata_from_url(&url)?;
     let local_project = auth::project_id_for(&project_root)?;
-    let response = Client::new()
+    let response = mesh_http_client(&metadata)?
         .post(format!("{}/api/invites/accept", base_url(&metadata)))
         .json(&json!({
             "token": token,
@@ -282,7 +282,7 @@ pub(crate) fn remote_metadata_from_url(url: &str) -> Result<ServerMetadata> {
 pub async fn list_devices(project_root: PathBuf, home: Option<PathBuf>) -> Result<()> {
     let token = auth::local_operator_project_token(&project_root, home)?;
     let metadata = read_server_metadata(&project_root)?;
-    let body: Value = Client::new()
+    let body: Value = mesh_http_client(&metadata)?
         .get(format!("{}/api/devices", base_url(&metadata)))
         .bearer_auth(&token)
         .send()
@@ -316,7 +316,7 @@ pub async fn revoke_device(
 ) -> Result<()> {
     let token = auth::local_operator_project_token(&project_root, home)?;
     let metadata = read_server_metadata(&project_root)?;
-    Client::new()
+    mesh_http_client(&metadata)?
         .post(format!("{}/api/devices/revoke", base_url(&metadata)))
         .bearer_auth(&token)
         .json(&json!({ "device": device }))
@@ -719,7 +719,7 @@ async fn append_or_post_ack(
     if let Ok(metadata) = read_server_metadata(project_root) {
         if metadata.mode == "remote" {
             let token = auth::local_mutating_project_token(project_root, home)?;
-            let response = Client::new()
+            let response = mesh_http_client(&metadata)?
                 .post(format!("{}/api/events", base_url(&metadata)))
                 .bearer_auth(&token)
                 .json(&json!({
@@ -853,7 +853,7 @@ async fn append_or_post_event(
     if let Ok(metadata) = read_server_metadata(project_root) {
         if metadata.mode == "remote" {
             let token = auth::local_mutating_project_token(project_root, home)?;
-            let response = Client::new()
+            let response = mesh_http_client(&metadata)?
                 .post(format!("{}/api/events", base_url(&metadata)))
                 .bearer_auth(&token)
                 .json(&json!({
@@ -993,7 +993,7 @@ fn emit_warning(warning: Option<String>) {
 }
 
 async fn get_state(metadata: &crate::server::ServerMetadata, token: &str) -> Result<Value> {
-    let response = Client::new()
+    let response = mesh_http_client(metadata)?
         .get(format!("{}/api/state", base_url(metadata)))
         .bearer_auth(token)
         .send()
@@ -1005,7 +1005,34 @@ async fn get_state(metadata: &crate::server::ServerMetadata, token: &str) -> Res
 }
 
 fn base_url(metadata: &crate::server::ServerMetadata) -> String {
-    format!("http://{}:{}", metadata.host, metadata.port)
+    let scheme = if metadata.mode == "lan" || metadata.mode == "remote" {
+        "https"
+    } else {
+        "http"
+    };
+    format!("{scheme}://{}:{}", metadata.host, metadata.port)
+}
+
+/// The single source of a pinned, TLS-configured reqwest client for lan/remote
+/// mode — every HTTP call site in this file must go through this rather than
+/// constructing its own `Client::new()`, or it would silently bypass pinning.
+fn mesh_http_client(metadata: &crate::server::ServerMetadata) -> Result<Client> {
+    if metadata.mode == "lan" || metadata.mode == "remote" {
+        let fingerprint_str = metadata.tls_fingerprint.as_deref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "no TLS fingerprint recorded for this {} server — refusing to connect unpinned",
+                metadata.mode
+            )
+        })?;
+        let fingerprint = crate::tls::decode_fingerprint(fingerprint_str)?;
+        let tls_config = crate::tls::pinned_client_config(fingerprint);
+        Client::builder()
+            .use_preconfigured_tls(tls_config)
+            .build()
+            .context("build pinned TLS client")
+    } else {
+        Ok(Client::new())
+    }
 }
 
 fn percentile(values: &[f64], percentile: f64) -> f64 {
@@ -1092,6 +1119,48 @@ mod tests {
         assert!(!sanitized.chars().any(|c| c.is_control()));
         assert!(sanitized.ends_with("... (truncated)"));
         assert!(sanitized.len() <= 200 + "... (truncated)".len());
+    }
+
+    #[test]
+    fn base_url_uses_https_for_lan_and_remote_http_for_local() {
+        let mut metadata = crate::server::ServerMetadata {
+            mode: "lan".to_string(),
+            host: "192.168.1.10".to_string(),
+            port: 47321,
+            hostname: "laptop".to_string(),
+            mdns: "laptop.local".to_string(),
+            lan_ips: vec![],
+            local_token: String::new(),
+            started_by: "unknown".to_string(),
+            started_at: String::new(),
+            tls_fingerprint: Some("abc".to_string()),
+        };
+        assert_eq!(super::base_url(&metadata), "https://192.168.1.10:47321");
+        metadata.mode = "remote".to_string();
+        assert_eq!(super::base_url(&metadata), "https://192.168.1.10:47321");
+        metadata.mode = "local".to_string();
+        assert_eq!(super::base_url(&metadata), "http://192.168.1.10:47321");
+    }
+
+    #[test]
+    fn mesh_http_client_requires_a_fingerprint_for_lan_and_remote_modes() {
+        let metadata = crate::server::ServerMetadata {
+            mode: "lan".to_string(),
+            host: "192.168.1.10".to_string(),
+            port: 47321,
+            hostname: "laptop".to_string(),
+            mdns: "laptop.local".to_string(),
+            lan_ips: vec![],
+            local_token: String::new(),
+            started_by: "unknown".to_string(),
+            started_at: String::new(),
+            tls_fingerprint: None,
+        };
+        let result = super::mesh_http_client(&metadata);
+        assert!(
+            result.is_err(),
+            "a lan-mode client with no recorded fingerprint must refuse to build a client rather than silently falling back to unpinned TLS"
+        );
     }
 
     #[test]
@@ -1956,6 +2025,28 @@ mod tests {
         // Spin up a real server and drive a client configured in remote mode
         // against it, proving `known_actors`/`unknown_actor_warning` compose
         // correctly with the HTTP round trip, not just the local store.
+        //
+        // This test used to fake "remote" mode by pointing it at a
+        // `bind: "local"` (plain HTTP) server and completing the handshake
+        // through `accept_remote_invite`. Task 7 makes `mode == "remote"`
+        // always mean pinned HTTPS (`base_url`/`mesh_http_client`), which
+        // breaks that setup on two independent counts: `bind: "local"` never
+        // starts a TLS listener at all (only `bind: "lan"` does), and
+        // `remote_metadata_from_url` has no way yet to attach a fingerprint
+        // to the metadata it builds from a bare URL (that plumbing is Task
+        // 9/10's job — an https-only `remote_metadata_from_url` plus a
+        // `--fingerprint` flag through `accept_remote_invite`). So instead:
+        // start a real `bind: "lan"` server, complete the invite-accept
+        // handshake ourselves directly over a manually pinned TLS client
+        // (proving the pinned round trip genuinely works end to end, rather
+        // than faking "remote" over plain HTTP), and hand the join side a
+        // `ServerMetadata` carrying the lan server's real fingerprint —
+        // mirroring what `accept_remote_invite` will persist once Task 9/10
+        // land. Seeding a synthetic credential file with a fake token (as
+        // one might first reach for) does not work here: the real lan
+        // server's device registry only recognizes tokens it itself issued
+        // via `/api/invites/accept`, so the join side needs a real,
+        // server-recognized credential, not just a locally well-formed one.
         use crate::server::{serve, ServeOptions};
 
         let project = TempDir::new().unwrap();
@@ -1977,22 +2068,86 @@ mod tests {
         let server = tokio::spawn(serve(ServeOptions {
             project_root: project.path().to_path_buf(),
             home: Some(host_home.path().to_path_buf()),
-            bind: "local".to_string(),
+            bind: "lan".to_string(),
             port: 0,
             pid_file: None,
             started_by: None,
         }));
-        let metadata = wait_for_metadata(project.path()).await;
-        let base = format!("http://{}:{}", metadata.host, metadata.port);
-
-        super::accept_remote_invite(
-            join_project.path().to_path_buf(),
-            Some(join_home.path().to_path_buf()),
-            base.clone(),
-            invite.token,
-            "laptop".to_string(),
+        let host_metadata = wait_for_metadata(project.path()).await;
+        let fingerprint = crate::tls::decode_fingerprint(
+            host_metadata
+                .tls_fingerprint
+                .as_deref()
+                .expect("lan mode must record a TLS fingerprint"),
         )
-        .await
+        .unwrap();
+        let pinned_client = reqwest::Client::builder()
+            .use_preconfigured_tls(crate::tls::pinned_client_config(fingerprint))
+            .build()
+            .unwrap();
+
+        // Both projects resolve to the same project id — `project_id_for`
+        // keys off `.workbench/config.json`'s `project.name` field, not the
+        // directory path, and both dirs were configured with the same name
+        // above — so the join side can present it as `expected_project`
+        // exactly as `accept_remote_invite` would.
+        let project_id = auth::project_id_for(project.path()).unwrap();
+        assert_eq!(
+            project_id,
+            auth::project_id_for(join_project.path()).unwrap()
+        );
+
+        // Complete the invite-accept handshake ourselves, over the real
+        // pinned TLS connection — this is the same request
+        // `accept_remote_invite` sends (see its `/api/invites/accept` call),
+        // just constructed directly since that function can't yet supply a
+        // fingerprint for an https:// remote (Task 9/10).
+        let response = pinned_client
+            .post(format!(
+                "https://127.0.0.1:{}/api/invites/accept",
+                host_metadata.port
+            ))
+            .json(&json!({
+                "token": invite.token,
+                "device": "laptop",
+                "expected_project": project_id,
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert!(
+            response.status().is_success(),
+            "invite accept over pinned TLS must succeed: {:?}",
+            response.status()
+        );
+        let credential: auth::ProjectCredential = response.json().await.unwrap();
+        assert_eq!(credential.project, project_id);
+        auth::persist_project_credential(
+            Some(join_home.path().to_path_buf()),
+            "laptop",
+            &credential,
+        )
+        .unwrap();
+
+        // Hand the join side a "remote" metadata carrying the lan server's
+        // real fingerprint — mirroring what `accept_remote_invite` records
+        // today (minus the fingerprint itself, which is Task 9/10's job to
+        // thread through `remote_metadata_from_url`).
+        crate::server::write_server_metadata(
+            join_project.path(),
+            &crate::server::ServerMetadata {
+                mode: "remote".to_string(),
+                host: "127.0.0.1".to_string(),
+                port: host_metadata.port,
+                hostname: "127.0.0.1".to_string(),
+                mdns: String::new(),
+                lan_ips: vec![],
+                local_token: String::new(),
+                started_by: "unknown".to_string(),
+                started_at: String::new(),
+                tls_fingerprint: host_metadata.tls_fingerprint.clone(),
+            },
+        )
         .unwrap();
 
         // Before any traffic to a brand-new actor, the remote `/api/state`

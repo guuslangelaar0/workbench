@@ -2009,23 +2009,34 @@ mod tests {
             (expired_token, "expired"),
             (exhausted_token, "exhausted"),
         ] {
-            let client_project = TempDir::new().unwrap();
-            let client_home = TempDir::new().unwrap();
-            write_project_config(client_project.path(), "Mesh Shared");
-
-            let err = client::accept_remote_invite(
-                client_project.path().to_path_buf(),
-                Some(client_home.path().to_path_buf()),
-                url.clone(),
-                token.to_string(),
-                "test-device".to_string(),
-            )
-            .await
-            .unwrap_err();
-
+            // Post directly rather than through `client::accept_remote_invite`:
+            // as of Task 7, that function always builds a `mode: "remote"`
+            // metadata via `remote_metadata_from_url`, which can never yet
+            // carry a TLS fingerprint (Task 9/10's job to plumb) — so it now
+            // unconditionally refuses to connect before ever reaching the
+            // server, regardless of which invite token is used. What this
+            // test actually protects — the *server's* distinct rejection
+            // reason per invite state — is transport-agnostic and doesn't
+            // require routing through that client function at all, so drive
+            // the same endpoint directly over this `bind: "local"` server's
+            // plain HTTP instead.
+            let body: Value = Client::new()
+                .post(format!("{url}/api/invites/accept"))
+                .json(&json!({
+                    "token": token,
+                    "device": "test-device",
+                    "expected_project": auth::project_id_for(server_project.path()).unwrap(),
+                }))
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            let error = body.get("error").and_then(Value::as_str).unwrap_or("");
             assert!(
-                err.to_string().contains(expected_substring),
-                "token {token}: expected {expected_substring:?} in error, got: {err:#}"
+                error.contains(expected_substring),
+                "token {token}: expected {expected_substring:?} in error, got: {error}"
             );
         }
 
@@ -2412,7 +2423,8 @@ mod tests {
         let join_home = TempDir::new().unwrap();
         write_project_config(project.path(), "Mesh Remote");
         // The joining checkout must declare the same project name so that
-        // accept_remote_invite's project-ID check passes.
+        // the join side resolves to the same project id (`project_id_for`
+        // keys off `.workbench/config.json`'s `project.name`, not the path).
         write_project_config(join_project.path(), "Mesh Remote");
         auth::bootstrap(project.path(), Some(host_home.path().to_path_buf())).unwrap();
         let owner_token =
@@ -2427,26 +2439,73 @@ mod tests {
         )
         .unwrap();
 
+        // As of Task 7, `mode == "remote"` always means pinned HTTPS, and
+        // `client::accept_remote_invite` can't yet supply a fingerprint
+        // (Task 9/10's job) — so this must run against a real `bind: "lan"`
+        // server, complete the invite handshake directly over a manually
+        // pinned client, and hand the join side a `ServerMetadata` carrying
+        // the real fingerprint. Mirrors
+        // `client::tests::remote_mode_known_actors_reflects_server_state_over_http`.
         let server = tokio::spawn(serve(ServeOptions {
             project_root: project.path().to_path_buf(),
             home: Some(host_home.path().to_path_buf()),
-            bind: "local".to_string(),
+            bind: "lan".to_string(),
             port: 0,
             pid_file: None,
             started_by: None,
         }));
         let metadata = wait_for_metadata(project.path()).await;
-        let base = format!("http://{}:{}", metadata.host, metadata.port);
-
-        client::accept_remote_invite(
-            join_project.path().to_path_buf(),
-            Some(join_home.path().to_path_buf()),
-            base.clone(),
-            invite.token,
-            "laptop".to_string(),
+        let fingerprint = crate::tls::decode_fingerprint(
+            metadata
+                .tls_fingerprint
+                .as_deref()
+                .expect("lan mode must record a TLS fingerprint"),
         )
-        .await
         .unwrap();
+        let pinned_client = Client::builder()
+            .use_preconfigured_tls(crate::tls::pinned_client_config(fingerprint))
+            .build()
+            .unwrap();
+
+        let project_id = auth::project_id_for(project.path()).unwrap();
+        let accept_response = pinned_client
+            .post(format!(
+                "https://127.0.0.1:{}/api/invites/accept",
+                metadata.port
+            ))
+            .json(&json!({
+                "token": invite.token,
+                "device": "laptop",
+                "expected_project": project_id,
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert!(accept_response.status().is_success());
+        let credential: auth::ProjectCredential = accept_response.json().await.unwrap();
+        auth::persist_project_credential(
+            Some(join_home.path().to_path_buf()),
+            "laptop",
+            &credential,
+        )
+        .unwrap();
+        super::write_server_metadata(
+            join_project.path(),
+            &super::ServerMetadata {
+                mode: "remote".to_string(),
+                host: "127.0.0.1".to_string(),
+                port: metadata.port,
+                hostname: "127.0.0.1".to_string(),
+                mdns: String::new(),
+                lan_ips: vec![],
+                local_token: String::new(),
+                started_by: "unknown".to_string(),
+                started_at: String::new(),
+                tls_fingerprint: metadata.tls_fingerprint.clone(),
+            },
+        )
+        .unwrap();
+
         client::send_message(
             join_project.path().to_path_buf(),
             Some(join_home.path().to_path_buf()),
@@ -2457,8 +2516,8 @@ mod tests {
         .await
         .unwrap();
 
-        let state: Value = Client::new()
-            .get(format!("{base}/api/state"))
+        let state: Value = pinned_client
+            .get(format!("https://127.0.0.1:{}/api/state", metadata.port))
             .bearer_auth(&owner_token)
             .send()
             .await
