@@ -347,6 +347,13 @@ pub async fn create_room(
             RESERVED_ROOMS.join("/")
         );
     }
+    // Gate on credentials *before* touching the store at all: the
+    // existing-room snapshot below opens the local store (creating its
+    // files as a side effect) even for a read-only scan, so it must not
+    // run ahead of the same auth check `append_or_post_event` performs —
+    // otherwise a rejected create (bad/missing credential) would still
+    // leave mesh files behind. See `send_message` for the same pattern.
+    auth::require_local_mutating_project_credential(&project_root, home.clone())?;
     // Best-effort, non-blocking, same reasoning as `unknown_actor_warning`:
     // snapshot *before* the event is posted, since the `room.created` event
     // about to be appended would itself make the room "exist" if checked
@@ -1034,9 +1041,9 @@ mod tests {
     use crate::store::MeshStore;
 
     use super::{
-        ask_status, default_capabilities, job_events, merge_capabilities, normalize_platform,
-        resolve_actor_from, sanitize_remote_error_message, send_message, set_activity,
-        set_availability, set_doing, DEFAULT_ACTOR,
+        ask_status, create_room, default_capabilities, job_events, merge_capabilities,
+        normalize_platform, resolve_actor_from, sanitize_remote_error_message, send_message,
+        set_activity, set_availability, set_doing, DEFAULT_ACTOR,
     };
 
     #[test]
@@ -1197,6 +1204,30 @@ mod tests {
             "local mutating project credential required"
         );
         assert!(!project.path().join(".workbench/mesh/events.jsonl").exists());
+    }
+
+    #[tokio::test]
+    async fn create_room_rejects_observer_project_credential() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        write_project_config(project.path(), "Mesh Client");
+        write_project_credential(home.path(), "observer.cred", "mesh-client", "observer");
+
+        let err = create_room(
+            project.path().to_path_buf(),
+            Some(home.path().to_path_buf()),
+            "room:design".to_string(),
+            None,
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "local mutating project credential required"
+        );
+        assert!(!project.path().join(".workbench/mesh/events.jsonl").exists());
+        assert!(!project.path().join(".workbench/mesh/audit.jsonl").exists());
     }
 
     #[tokio::test]
