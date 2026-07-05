@@ -385,6 +385,7 @@ mod tests {
             local_token: "tok".to_string(),
             started_by: "unknown".to_string(),
             started_at: String::new(),
+            tls_fingerprint: None,
         };
         assert_eq!(
             ws_url(&metadata, "tok"),

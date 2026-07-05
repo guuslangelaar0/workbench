@@ -117,6 +117,8 @@ pub struct ServerMetadata {
     pub started_by: String,
     #[serde(default)]
     pub started_at: String,
+    #[serde(default)]
+    pub tls_fingerprint: Option<String>,
 }
 
 fn unknown_actor() -> String {
@@ -300,6 +302,23 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
         .await
         .with_context(|| format!("bind {}", bind_info.bind_addr))?;
     let local_addr = listener.local_addr().context("read bound address")?;
+
+    // `local` mode never touches the TLS stack at all — no identity file is
+    // generated, no fingerprint is recorded, and (below) the listener is
+    // handed to plain `axum::serve` exactly as before. Only `lan` mode's
+    // socket ever gets wrapped in TLS.
+    let tls_identity = if bind_info.mode == "lan" {
+        Some(
+            crate::tls::ensure_identity(&opts.project_root, &bind_info.lan_ips)
+                .context("prepare TLS server identity for --lan mode")?,
+        )
+    } else {
+        None
+    };
+    let tls_fingerprint = tls_identity
+        .as_ref()
+        .map(|identity| crate::tls::encode_fingerprint(&identity.fingerprint));
+
     let metadata = ServerMetadata {
         mode: bind_info.mode.clone(),
         host: metadata_host(&bind_info.mode, &bind_info.lan_ips),
@@ -312,6 +331,7 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
         started_at: time::OffsetDateTime::now_utc()
             .format(&time::format_description::well_known::Rfc3339)
             .unwrap_or_default(),
+        tls_fingerprint,
     };
     let store = Arc::new(MeshStore::open(&opts.project_root)?);
     let tail_scan_seq = Arc::new(AtomicU64::new(current_store_seq(&store)?));
@@ -357,10 +377,57 @@ pub async fn serve(opts: ServeOptions) -> Result<()> {
         .route("/ws", get(ws_handler))
         .with_state(state);
 
-    axum::serve(listener, app)
-        .await
-        .context("serve mesh http api")?;
-    Ok(())
+    match tls_identity {
+        Some(identity) => {
+            let tls_config = crate::tls::server_config_from_identity(&identity)
+                .context("build TLS server config")?;
+            serve_tls(listener, app, tls_config).await
+        }
+        None => {
+            axum::serve(listener, app)
+                .await
+                .context("serve mesh http api")?;
+            Ok(())
+        }
+    }
+}
+
+/// Manual tokio-rustls accept loop for `--lan` mode — deliberately not the
+/// `axum-server` crate (this project keeps the TLS dependency surface to the
+/// rustls family already used transitively elsewhere). Every accepted
+/// connection is upgraded to TLS before any HTTP/WebSocket handling occurs;
+/// there is no plain-HTTP code path reachable on a `--lan` listener once this
+/// runs. `local` mode never calls this function at all — it keeps using
+/// plain `axum::serve` above, untouched.
+async fn serve_tls(
+    listener: TcpListener,
+    app: Router,
+    tls_config: rustls::ServerConfig,
+) -> Result<()> {
+    use hyper_util::rt::{TokioExecutor, TokioIo};
+    use hyper_util::server::conn::auto::Builder as AutoBuilder;
+    use hyper_util::service::TowerToHyperService;
+    use tokio_rustls::TlsAcceptor;
+
+    let acceptor = TlsAcceptor::from(Arc::new(tls_config));
+    loop {
+        let (tcp, _peer) = listener.accept().await.context("accept TCP connection")?;
+        let acceptor = acceptor.clone();
+        let app = app.clone();
+        tokio::spawn(async move {
+            let tls = match acceptor.accept(tcp).await {
+                Ok(tls) => tls,
+                // Handshake failure (e.g. a plain-HTTP probe) — drop silently;
+                // this matches a closed port's observable behavior and is
+                // exactly the "plain HTTP to a --lan port must fail" contract.
+                Err(_) => return,
+            };
+            let service = TowerToHyperService::new(app);
+            let _ = AutoBuilder::new(TokioExecutor::new())
+                .serve_connection_with_upgrades(TokioIo::new(tls), service)
+                .await;
+        });
+    }
 }
 
 pub fn server_metadata_path(project_root: &Path) -> PathBuf {
@@ -892,13 +959,18 @@ fn metadata_host(mode: &str, lan_ips: &[String]) -> String {
 }
 
 fn connect_urls_from_metadata(metadata: &ServerMetadata) -> Vec<ConnectUrl> {
+    let scheme = if metadata.mode == "lan" {
+        "https"
+    } else {
+        "http"
+    };
     let mut urls = Vec::new();
     let mut seen = BTreeSet::new();
     let mut push = |label: &str, host: &str| {
         if host.trim().is_empty() {
             return;
         }
-        let url = format!("http://{}:{}", host, metadata.port);
+        let url = format!("{scheme}://{host}:{}", metadata.port);
         if seen.insert(url.clone()) {
             urls.push(ConnectUrl {
                 label: label.to_string(),
@@ -1987,6 +2059,7 @@ mod tests {
             local_token: "local-token".to_string(),
             started_by: "unknown".to_string(),
             started_at: String::new(),
+            tls_fingerprint: None,
         };
 
         let urls = super::connect_urls_from_metadata(&metadata);
@@ -2008,6 +2081,7 @@ mod tests {
             local_token: "local-token".to_string(),
             started_by: "unknown".to_string(),
             started_at: String::new(),
+            tls_fingerprint: Some("sha256:abc".to_string()),
         };
 
         let urls = super::connect_urls_from_metadata(&metadata);
@@ -2016,9 +2090,112 @@ mod tests {
             .map(|url| (url.label.as_str(), url.url.as_str()))
             .collect::<Vec<_>>();
 
-        assert!(pairs.contains(&("connect", "http://workstation.local:47321")));
-        assert!(pairs.contains(&("connect-host", "http://workstation:47321")));
-        assert!(pairs.contains(&("connect-ip", "http://192.168.1.8:47321")));
+        assert!(pairs.contains(&("connect", "https://workstation.local:47321")));
+        assert!(pairs.contains(&("connect-host", "https://workstation:47321")));
+        assert!(pairs.contains(&("connect-ip", "https://192.168.1.8:47321")));
+    }
+
+    #[test]
+    fn connect_urls_use_https_for_lan_mode_and_http_otherwise() {
+        let metadata = super::ServerMetadata {
+            mode: "lan".to_string(),
+            host: "192.168.1.10".to_string(),
+            port: 47321,
+            hostname: "laptop".to_string(),
+            mdns: "laptop.local".to_string(),
+            lan_ips: vec!["192.168.1.10".to_string()],
+            local_token: "tok".to_string(),
+            started_by: "unknown".to_string(),
+            started_at: String::new(),
+            tls_fingerprint: Some("abc".to_string()),
+        };
+        let urls = super::connect_urls_from_metadata(&metadata);
+        assert!(urls.iter().all(|u| u.url.starts_with("https://")));
+
+        let local_metadata = super::ServerMetadata {
+            mode: "local".to_string(),
+            ..metadata
+        };
+        let local_urls = super::connect_urls_from_metadata(&local_metadata);
+        assert!(local_urls.iter().all(|u| u.url.starts_with("http://")));
+    }
+
+    #[tokio::test]
+    async fn lan_mode_serves_https_and_local_mode_still_serves_plain_http() {
+        let tmp = TempDir::new().unwrap();
+        auth::bootstrap(tmp.path(), None).unwrap();
+
+        // local mode: unaffected, must still be plain http on 127.0.0.1
+        let local_opts = ServeOptions {
+            project_root: tmp.path().to_path_buf(),
+            home: None,
+            bind: "local".to_string(),
+            port: 0,
+            pid_file: None,
+            started_by: None,
+        };
+        let local_handle = tokio::spawn(serve(local_opts));
+        sleep(Duration::from_millis(200)).await;
+        let local_metadata = wait_for_metadata(tmp.path()).await;
+        assert_eq!(local_metadata.mode, "local");
+        assert!(
+            local_metadata.tls_fingerprint.is_none(),
+            "local mode must never generate a TLS identity"
+        );
+        let plain = Client::new()
+            .get(format!("http://127.0.0.1:{}/health", local_metadata.port))
+            .send()
+            .await;
+        assert!(plain.is_ok(), "local mode must still serve plain HTTP");
+        local_handle.abort();
+
+        // lan mode: must now require TLS — a plain HTTP GET to the same port must fail
+        let lan_tmp = TempDir::new().unwrap();
+        auth::bootstrap(lan_tmp.path(), None).unwrap();
+        let lan_opts = ServeOptions {
+            project_root: lan_tmp.path().to_path_buf(),
+            home: None,
+            bind: "lan".to_string(),
+            port: 0,
+            pid_file: None,
+            started_by: None,
+        };
+        let lan_handle = tokio::spawn(serve(lan_opts));
+        sleep(Duration::from_millis(200)).await;
+        let lan_metadata = wait_for_metadata(lan_tmp.path()).await;
+        assert_eq!(lan_metadata.mode, "lan");
+        assert!(
+            lan_metadata.tls_fingerprint.is_some(),
+            "lan mode must generate and record a TLS identity"
+        );
+
+        let plain_to_tls_port = Client::new()
+            .get(format!("http://127.0.0.1:{}/health", lan_metadata.port))
+            .timeout(Duration::from_secs(2))
+            .send()
+            .await;
+        assert!(
+            plain_to_tls_port.is_err(),
+            "a plain HTTP request to a --lan port must fail — the port only speaks TLS now"
+        );
+
+        let fingerprint =
+            crate::tls::decode_fingerprint(lan_metadata.tls_fingerprint.as_deref().unwrap())
+                .unwrap();
+        let pinned_config = crate::tls::pinned_client_config(fingerprint);
+        let pinned_client = Client::builder()
+            .use_preconfigured_tls(pinned_config)
+            .build()
+            .unwrap();
+        let https_ok = pinned_client
+            .get(format!("https://127.0.0.1:{}/health", lan_metadata.port))
+            .send()
+            .await;
+        assert!(
+            https_ok.is_ok(),
+            "a correctly pinned HTTPS request to a --lan port must succeed"
+        );
+        lan_handle.abort();
     }
 
     #[tokio::test]

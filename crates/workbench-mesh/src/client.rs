@@ -275,6 +275,7 @@ pub(crate) fn remote_metadata_from_url(url: &str) -> Result<ServerMetadata> {
         local_token: String::new(),
         started_by: "unknown".to_string(),
         started_at: String::new(),
+        tls_fingerprint: None,
     })
 }
 
@@ -1618,6 +1619,7 @@ mod tests {
                 local_token: "real-local-token".to_string(),
                 started_by: "test-lead".to_string(),
                 started_at: "2026-07-04T00:00:00Z".to_string(),
+                tls_fingerprint: None,
             },
         )
         .unwrap();
