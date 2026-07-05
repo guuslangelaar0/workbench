@@ -21,7 +21,7 @@
 - `mesh connect`'s human-confirmation prompt defaults to shown-and-blocking when stdin is a real TTY, and silently skipped otherwise; `-y`/`--yes` always skips it regardless of TTY state, in both modes, with zero friction.
 - **Dispatch directive (from the design spec, carried forward for execution):**
   - Default/mechanical tasks (dependency wiring, CLI plumbing, shell script changes, CI YAML, `rotate-identity` subcommand) → dispatch via the `codex:codex-rescue` subagent bridge.
-  - Security-critical tasks (anything constructing, comparing, or serving a certificate/key/fingerprint; the custom verifier; crypto-provider wiring) → dispatch via the Agent tool with `model: "fable"`.
+  - Security-critical tasks (anything constructing, comparing, or serving a certificate/key/fingerprint; the custom verifier; crypto-provider wiring) → dispatch via the Agent tool with `model: "sonnet"` (revised: Fable 5 was the original directive for these, but the user corrected this mid-execution — Fable 5's cost isn't justified for full task implementation; Sonnet 5 is the standard tier for this work now. Fable 5 remains a reasonable choice for narrow, targeted research/verification calls — e.g. confirming an exact current crate API — not for implementing a whole task).
   - The final whole-branch review → Agent tool with `model: "sonnet"` (not the most-capable-model default the subagent-driven-development skill would otherwise suggest — explicit override for this feature).
 - The single most important test in this entire plan: **a deliberately wrong fingerprint must hard-fail the TLS handshake.** No task that touches the verifier is complete without this negative test passing.
 
