@@ -13,7 +13,7 @@ Resolve the project first. If `${CLAUDE_PROJECT_DIR}/.workbench/config.json` doe
 Run:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/lead.sh" status --target "${CLAUDE_PROJECT_DIR}" --session-id "<session-id>"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/lead.sh" status --target "${CLAUDE_PROJECT_DIR}" --as "<session-id>"
 ```
 
 If no purpose exists for this session, also run:
@@ -33,7 +33,7 @@ For designating a topic lead specifically, `/workbench:teamlead <topic>` wraps t
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/lead.sh" set \
   --target "${CLAUDE_PROJECT_DIR}" \
-  --session-id "<session-id>" \
+  --as "<session-id>" \
   --mode "<task|track|backlog-scout|unassigned>" \
   --purpose "<purpose>" \
   [--active-task "<id>"] [--track "<track>"]
@@ -56,7 +56,7 @@ Read the latest open lead with `lead.sh latest-open`, extract its `purpose`, `mo
 Close this session's purpose:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/lead.sh" clear --target "${CLAUDE_PROJECT_DIR}" --session-id "<session-id>"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/lead.sh" clear --target "${CLAUDE_PROJECT_DIR}" --as "<session-id>"
 ```
 
 Use this when the lead's task is verified/shipped, the track ownership ends, or the human explicitly redirects the session.

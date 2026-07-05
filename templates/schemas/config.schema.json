@@ -38,7 +38,7 @@
     },
     "way_of_working": {
       "type": "object",
-      "required": ["models", "verification", "review", "parallelism", "enforcement", "continuity", "graphify", "codex", "remote", "inception_depth"],
+      "required": ["models", "verification", "review", "parallelism", "enforcement", "continuity", "graphify", "codex", "remote", "inception_depth", "cross_model_verification"],
       "properties": {
         "models": { "enum": ["leaner", "recommended", "better"] },
         "verification": { "enum": ["leaner", "recommended", "better"] },
@@ -49,7 +49,8 @@
         "graphify": { "enum": ["off", "per-repo", "full"] },
         "codex": { "enum": ["off", "rescue-only", "full-lane"] },
         "remote": { "enum": ["off", "native", "telegram", "both"] },
-        "inception_depth": { "enum": ["leaner", "recommended", "better"] }
+        "inception_depth": { "enum": ["leaner", "recommended", "better"] },
+        "cross_model_verification": { "enum": ["on", "off"] }
       }
     },
     "dial_overrides": {

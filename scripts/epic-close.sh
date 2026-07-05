@@ -84,6 +84,10 @@ $linked_files
 EOF
 fi
 
+if [ "$nlinked" -eq 0 ]; then
+  echo "epic-close: warning — $ID has zero linked tasks (closing anyway; is this the epic you meant?)" >&2
+fi
+
 if [ "$nblocking" -gt 0 ]; then
   echo "epic-close: refusing to close $ID — $nblocking of $nlinked linked task(s) are not yet terminal:" >&2
   echo "  $blocking_list" >&2

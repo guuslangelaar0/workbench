@@ -11,6 +11,6 @@ You are the workbench front door — **the entry point every new user should typ
 - If hook status is `disabled`, say slash commands still work, but the always-on behavior is disabled by choice after choosing to skip hooks. Offer to enable hooks.
 - Offer the natural next actions: `/workbench:boot` (verify + brief), `/workbench:loop` (run the teamlead loop), `/workbench:inception` (greenfield genesis), `/workbench:setup` (reconfigure).
 
-This is also the auto-trigger: any `/workbench:*` command, when run in an unconfigured project, should defer to this front-door assessment and setup first.
+This is also intended as the fallback for any `/workbench:*` command run in an unconfigured project — not every command implements this defer-check yet; treat this doc as the front door to point users at manually when you notice a command running against an unconfigured project.
 
 > **Power-user note:** `/workbench:setup` and `/workbench:init` remain explicit entry points for users who want setup-only or low-level scaffolding, but `/workbench:workbench` is the front door to remember (type `/workbench` to filter the command menu to it). It does the right thing automatically.

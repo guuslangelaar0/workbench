@@ -79,5 +79,12 @@ chk "epic-close is idempotent on an already-done epic" "bash '$HERE/scripts/epic
 # unknown epic id is an error
 chk "epic-close unknown id exits non-zero" "! bash '$HERE/scripts/epic-close.sh' 9999 --target '$C' >/dev/null 2>&1"
 
+# --- epic-close.sh: zero linked tasks still closes, but warns on stderr ---
+bash "$HERE/scripts/epic-new.sh" --title "Orphan Epic" --target "$C" >/dev/null
+OID="$(ls "$C/.claude/epics" | grep -i orphan | head -1 | sed 's/-.*//')"
+ORPHAN_ERR="$(bash "$HERE/scripts/epic-close.sh" "$OID" --target "$C" 2>&1 1>/dev/null)"; ORPHAN_RC=$?
+chk "epic-close with zero linked tasks still succeeds" "[ '$ORPHAN_RC' -eq 0 ]"
+chk "epic-close warns on stderr for zero linked tasks" "printf '%s' \"\$ORPHAN_ERR\" | grep -q 'epic-close: warning — '\"\$OID\"' has zero linked tasks'"
+
 rm -rf "$S" "$C"
 [ "$fail" = 0 ] && echo "PASS: epics" || { echo "epics test failed"; exit 1; }

@@ -1,10 +1,9 @@
 ---
 description: Health-check this workbench project — drift, stale state, in-review cap
 allowed-tools: ["Bash", "Read", "Glob", "Grep"]
-argument-hint: ""
 ---
 
-Report this project's workbench health from deterministic script output:
+Report this project's workbench health from deterministic script output. (`/workbench:boot` runs an abbreviated version of these same checks as part of session start.)
 
 !`bash ${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh --target "$CLAUDE_PROJECT_DIR"`
 

@@ -16,6 +16,7 @@ Do not spawn an engineer, do not verify tasks, and do not move files. This is a 
 4. Otherwise run:
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/deps.sh" ready --target "${CLAUDE_PROJECT_DIR}"`
    and report the first ready backlog task by ID/title.
-5. Tell the user the exact next command only when it is safe: `/workbench:dispatch <id>` (defaults to a Claude engineer lane; add `--engine codex` to route the same task to Codex instead).
+5. If `deps.sh ready` returns zero candidates, say so plainly — distinguish an empty backlog ("no backlog tasks exist yet — run /workbench:task to add one") from everything-blocked ("N backlog tasks exist but all are blocked — check `deps.sh cycles` for a dependency loop, or see which Blocked-by hasn't landed").
+6. Tell the user the exact next command only when it is safe: `/workbench:dispatch <id>` (defaults to a Claude engineer lane; add `--engine codex` to route the same task to Codex instead).
 
-Correct output includes the reason: cap/drain, blocked/dependency, or ready task. Never silently dispatch from this command.
+Correct output includes the reason: cap/drain, blocked/dependency, ready task, or empty/all-blocked backlog. Never silently dispatch from this command.
