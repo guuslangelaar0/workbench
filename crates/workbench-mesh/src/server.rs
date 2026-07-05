@@ -411,7 +411,23 @@ async fn serve_tls(
 
     let acceptor = TlsAcceptor::from(Arc::new(tls_config));
     loop {
-        let (tcp, _peer) = listener.accept().await.context("accept TCP connection")?;
+        let (tcp, _peer) = match listener.accept().await {
+            Ok(conn) => conn,
+            Err(err) => {
+                if is_connection_error(&err) {
+                    // Client-side connection churn (e.g. reset before the
+                    // accept completed) — normal/expected occasionally,
+                    // skip silently and keep serving.
+                    continue;
+                }
+                // Something more serious (e.g. EMFILE/fd exhaustion) — log
+                // and back off briefly before retrying, same as
+                // `hyper::Server` 0.14 / axum::serve do internally.
+                eprintln!("serve_tls: accept error: {err}, retrying");
+                sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+        };
         let acceptor = acceptor.clone();
         let app = app.clone();
         tokio::spawn(async move {
@@ -428,6 +444,23 @@ async fn serve_tls(
                 .await;
         });
     }
+}
+
+/// Classifies a `TcpListener::accept` error the same way axum's own internal
+/// accept loop does, so a single transient failure never kills `serve_tls`.
+/// Mirrors `is_connection_error`/`tcp_accept` in axum 0.7.9's
+/// `src/serve.rs` (lines 465-498, vendored at
+/// `~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/axum-0.7.9/src/serve.rs`),
+/// which in turn carries this classification forward from `hyper::Server` in
+/// hyper 0.14. `true` means "skip silently and keep looping"; `false` means
+/// "something more serious (e.g. EMFILE/fd exhaustion) — log and back off".
+fn is_connection_error(e: &std::io::Error) -> bool {
+    matches!(
+        e.kind(),
+        std::io::ErrorKind::ConnectionRefused
+            | std::io::ErrorKind::ConnectionAborted
+            | std::io::ErrorKind::ConnectionReset
+    )
 }
 
 pub fn server_metadata_path(project_root: &Path) -> PathBuf {
@@ -2118,6 +2151,34 @@ mod tests {
         };
         let local_urls = super::connect_urls_from_metadata(&local_metadata);
         assert!(local_urls.iter().all(|u| u.url.starts_with("http://")));
+    }
+
+    #[test]
+    fn is_connection_error_classifies_transient_vs_serious_accept_errors() {
+        use std::io::ErrorKind;
+
+        // Transient, client-side connection churn — skip silently and keep looping.
+        assert!(super::is_connection_error(&std::io::Error::from(
+            ErrorKind::ConnectionRefused
+        )));
+        assert!(super::is_connection_error(&std::io::Error::from(
+            ErrorKind::ConnectionAborted
+        )));
+        assert!(super::is_connection_error(&std::io::Error::from(
+            ErrorKind::ConnectionReset
+        )));
+
+        // Anything else (e.g. EMFILE/fd exhaustion) is serious — must log and back off,
+        // not be silently swallowed.
+        assert!(!super::is_connection_error(&std::io::Error::from(
+            ErrorKind::Other
+        )));
+        assert!(!super::is_connection_error(&std::io::Error::from(
+            ErrorKind::TimedOut
+        )));
+        assert!(!super::is_connection_error(&std::io::Error::from(
+            ErrorKind::PermissionDenied
+        )));
     }
 
     #[tokio::test]
