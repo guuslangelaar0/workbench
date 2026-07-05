@@ -3,12 +3,14 @@ use std::fs::OpenOptions;
 use std::io::BufReader;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use fs2::FileExt;
 use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, SanType};
+use rustls::pki_types::CertificateDer;
 use sha2::{Digest, Sha256};
 
 /// This project's persistent, self-signed mesh server identity — generated
@@ -120,6 +122,30 @@ pub fn human_code(fp: &[u8; 16]) -> String {
     format!("{:03}-{:03}", n / 1000, n % 1000)
 }
 
+pub fn server_config_from_identity(identity: &Identity) -> Result<rustls::ServerConfig> {
+    let cert_file = fs::File::open(&identity.cert_path)
+        .with_context(|| format!("open {}", identity.cert_path.display()))?;
+    let certs: Vec<CertificateDer<'static>> = rustls_pemfile::certs(&mut BufReader::new(cert_file))
+        .collect::<std::result::Result<_, _>>()
+        .with_context(|| format!("parse {}", identity.cert_path.display()))?;
+
+    let key_file = fs::File::open(&identity.key_path)
+        .with_context(|| format!("open {}", identity.key_path.display()))?;
+    let key = rustls_pemfile::private_key(&mut BufReader::new(key_file))
+        .with_context(|| format!("parse {}", identity.key_path.display()))?
+        .ok_or_else(|| anyhow::anyhow!("no private key found in {}", identity.key_path.display()))?;
+
+    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+    let mut config = rustls::ServerConfig::builder_with_provider(provider)
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .expect("TLS 1.3 is supported by the aws-lc-rs provider")
+        .with_no_client_auth()
+        .with_single_cert(certs, key)
+        .context("build TLS server config from persisted identity")?;
+    config.alpn_protocols = vec![b"http/1.1".to_vec()];
+    Ok(config)
+}
+
 #[cfg(unix)]
 fn write_secret_pem(path: &Path, contents: &str) -> Result<()> {
     use std::io::Write;
@@ -229,5 +255,13 @@ mod tests {
     #[test]
     fn human_code_differs_for_different_fingerprints() {
         assert_ne!(human_code(&[1u8; 16]), human_code(&[2u8; 16]));
+    }
+
+    #[test]
+    fn server_config_from_identity_builds_a_tls13_only_config() {
+        let dir = TempDir::new().unwrap();
+        let identity = ensure_identity(dir.path(), &["127.0.0.1".to_string()]).unwrap();
+        let config = server_config_from_identity(&identity).unwrap();
+        assert_eq!(config.alpn_protocols, vec![b"http/1.1".to_vec()]);
     }
 }
