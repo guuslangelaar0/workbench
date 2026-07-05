@@ -5,6 +5,8 @@ use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
 use fs2::FileExt;
 use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, SanType};
 use sha2::{Digest, Sha256};
@@ -96,6 +98,28 @@ fn fingerprint_from_cert_pem(cert_path: &Path) -> Result<[u8; 16]> {
     Ok(digest[0..16].try_into().unwrap())
 }
 
+pub fn encode_fingerprint(fp: &[u8; 16]) -> String {
+    URL_SAFE_NO_PAD.encode(fp)
+}
+
+pub fn decode_fingerprint(s: &str) -> Result<[u8; 16]> {
+    let raw = s.strip_prefix("sha256:").unwrap_or(s);
+    let bytes = URL_SAFE_NO_PAD
+        .decode(raw)
+        .context("fingerprint is not valid base64url")?;
+    bytes
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("fingerprint must decode to exactly 16 bytes"))
+}
+
+/// Derived from the same pinned fingerprint bytes the crypto layer already
+/// enforces — this is a human cross-check against a *tampered invite string*,
+/// not a re-verification of what the TLS handshake already proved.
+pub fn human_code(fp: &[u8; 16]) -> String {
+    let n = u32::from_be_bytes([fp[0], fp[1], fp[2], fp[3]]) % 1_000_000;
+    format!("{:03}-{:03}", n / 1000, n % 1000)
+}
+
 #[cfg(unix)]
 fn write_secret_pem(path: &Path, contents: &str) -> Result<()> {
     use std::io::Write;
@@ -177,5 +201,33 @@ mod tests {
         // And what survives on disk must match what every caller believes.
         let on_disk = fingerprint_from_cert_pem(&tls_dir(&root).join("cert.pem")).unwrap();
         assert_eq!(fingerprints[0], on_disk, "in-memory fingerprint diverged from persisted cert");
+    }
+
+    #[test]
+    fn encode_decode_fingerprint_round_trips_with_and_without_prefix() {
+        let fp = [7u8; 16];
+        let encoded = encode_fingerprint(&fp);
+        assert_eq!(decode_fingerprint(&encoded).unwrap(), fp);
+        assert_eq!(decode_fingerprint(&format!("sha256:{encoded}")).unwrap(), fp);
+    }
+
+    #[test]
+    fn decode_fingerprint_rejects_garbage() {
+        assert!(decode_fingerprint("not-base64!!").is_err());
+        assert!(decode_fingerprint("sha256:dGVzdA").is_err(), "4-byte decode must not silently accept a wrong-length fingerprint");
+    }
+
+    #[test]
+    fn human_code_is_six_digits_dash_formatted_and_deterministic() {
+        let fp = [42u8; 16];
+        let code = human_code(&fp);
+        assert_eq!(code.len(), 7, "expected NNN-NNN (7 chars)");
+        assert_eq!(code.chars().nth(3), Some('-'));
+        assert_eq!(human_code(&fp), code, "must be deterministic for the same fingerprint");
+    }
+
+    #[test]
+    fn human_code_differs_for_different_fingerprints() {
+        assert_ne!(human_code(&[1u8; 16]), human_code(&[2u8; 16]));
     }
 }
