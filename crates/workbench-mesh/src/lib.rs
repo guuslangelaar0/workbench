@@ -7,6 +7,7 @@ pub mod server;
 pub mod statusline;
 pub mod store;
 pub mod tailer;
+pub mod tls;
 
 /// Installs the process-wide rustls crypto provider before `main()` runs and
 /// before any `#[test]` in this crate's test binaries runs — required
