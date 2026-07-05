@@ -19,8 +19,13 @@ pub struct InboxHit {
 }
 
 fn ws_url(metadata: &ServerMetadata, token: &str) -> String {
+    let scheme = if metadata.mode == "lan" || metadata.mode == "remote" {
+        "wss"
+    } else {
+        "ws"
+    };
     format!(
-        "ws://{}:{}/ws?token={token}&last_seq=0",
+        "{scheme}://{}:{}/ws?token={token}&last_seq=0",
         metadata.host, metadata.port
     )
 }
@@ -107,9 +112,27 @@ pub async fn run_once(project_root: &Path, home: Option<PathBuf>, actor: &str) -
     let token = crate::auth::local_mutating_project_token(project_root, home)
         .context("resolve mutating token")?;
     let url = ws_url(&metadata, &token);
-    let (ws_stream, _) = tokio_tungstenite::connect_async(&url)
-        .await
-        .with_context(|| format!("connect to {url}"))?;
+    let ws_stream = if metadata.mode == "lan" || metadata.mode == "remote" {
+        let fingerprint_str = metadata.tls_fingerprint.as_deref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "no TLS fingerprint recorded for this {} server — refusing to connect unpinned",
+                metadata.mode
+            )
+        })?;
+        let fingerprint = crate::tls::decode_fingerprint(fingerprint_str)?;
+        let tls_config = crate::tls::pinned_client_config(fingerprint);
+        let connector = tokio_tungstenite::Connector::Rustls(std::sync::Arc::new(tls_config));
+        let (stream, _) =
+            tokio_tungstenite::connect_async_tls_with_config(&url, None, false, Some(connector))
+                .await
+                .with_context(|| format!("connect to {url}"))?;
+        stream
+    } else {
+        let (stream, _) = tokio_tungstenite::connect_async(&url)
+            .await
+            .with_context(|| format!("connect to {url}"))?;
+        stream
+    };
     let (mut write, mut read) = ws_stream.split();
 
     let subscribe = json!({
@@ -391,5 +414,27 @@ mod tests {
             ws_url(&metadata, "tok"),
             "ws://127.0.0.1:47321/ws?token=tok&last_seq=0"
         );
+    }
+
+    fn sample_metadata(mode: &str) -> ServerMetadata {
+        ServerMetadata {
+            mode: mode.to_string(),
+            host: "192.168.1.10".to_string(),
+            port: 47321,
+            hostname: "laptop".to_string(),
+            mdns: "laptop.local".to_string(),
+            lan_ips: vec![],
+            local_token: String::new(),
+            started_by: "unknown".to_string(),
+            started_at: String::new(),
+            tls_fingerprint: Some("abc".to_string()),
+        }
+    }
+
+    #[test]
+    fn ws_url_uses_wss_for_lan_and_remote_ws_for_local() {
+        assert!(ws_url(&sample_metadata("lan"), "tok").starts_with("wss://"));
+        assert!(ws_url(&sample_metadata("remote"), "tok").starts_with("wss://"));
+        assert!(ws_url(&sample_metadata("local"), "tok").starts_with("ws://"));
     }
 }
