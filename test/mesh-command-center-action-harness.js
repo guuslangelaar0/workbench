@@ -195,9 +195,19 @@ chk(
   "expected the receipt handler to clearTimeout(r._stuckTimer) as soon as deliveredBy/seenBy gains an entry, so a late ack can't be followed by a stale hint"
 );
 chk(
-  "bench.js removes an already-rendered .stuck-hint once delivery/read lands late",
-  /if \(r\.stuck\) \{\s*\n\s*r\.stuck = false;\s*\n\s*const hintEl = document\.getElementById\('chat-scroll'\)\?\.querySelector\('\.msg\[data-seq="' \+ seq \+ '"\] \.stuck-hint'\);\s*\n\s*if \(hintEl\) hintEl\.remove\(\);/.test(bench),
-  "expected the ack branch to also remove a previously-rendered .stuck-hint element, not just cancel a still-pending timer"
+  "bench.js clears the durable stuck flag and reconciles the row on a late ack",
+  /if \(r\.stuck\) \{ r\.stuck = false; \}\s*\n\s*syncStuckHint\(seq\);/.test(bench),
+  "expected the ack branch to set r.stuck = false and call syncStuckHint(seq) so a mounted row drops the hint, instead of a one-shot DOM removal that can drift from state"
+);
+chk(
+  "bench.js re-derives the .stuck-hint from WB.RECEIPTS state inside msgNode (survives re-render)",
+  /if \(me && m\.seq != null && WB\.RECEIPTS\[m\.seq\] && WB\.RECEIPTS\[m\.seq\]\.stuck\) \{\s*\n\s*node\.appendChild\(stuckHint\(\)\);/.test(bench),
+  "expected msgNode to append the stuck hint whenever WB.RECEIPTS[m.seq].stuck is true, so a full renderChatList (room-filter switch / pagination) re-derives it from state rather than losing it"
+);
+chk(
+  "bench.js has a syncStuckHint reconcile helper driven by WB.RECEIPTS[seq].stuck",
+  /function syncStuckHint\(seq\) \{[\s\S]*?const r = WB\.RECEIPTS\[seq\];[\s\S]*?if \(r && r\.stuck\) \{\s*\n\s*if \(!existing\) row\.appendChild\(stuckHint\(\)\);\s*\n\s*\} else if \(existing\) \{\s*\n\s*existing\.remove\(\);/.test(bench),
+  "expected a syncStuckHint(seq) that adds/removes a mounted row's .stuck-hint to match WB.RECEIPTS[seq].stuck, keeping the timer-fire and ack paths deriving from the same state msgNode reads"
 );
 const surfacesCss = fs.readFileSync(path.join(bundleDir, "style-surfaces.css"), "utf8");
 chk(

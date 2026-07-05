@@ -84,6 +84,27 @@ window.WB = window.WB || {};
     const total = WB.AGENTS.filter((a) => WB.eff.heat(a) !== 'dead').length || 1;
     return el('span', { class: 'seen-by', text: 'seen by ' + seenCount + '/' + total });
   }
+  function stuckHint() {
+    return el('span', { class: 'stuck-hint', title: 'no response yet — the recipient’s listen connector may be down', text: ' ⚠' });
+  }
+  // Reconcile a currently-mounted row's .stuck-hint against WB.RECEIPTS[seq].stuck,
+  // the single source of truth (also read by msgNode() on every full render). Called
+  // when the 30s timer fires or a late ack clears it, so an already-mounted row updates
+  // in place without a full re-render (which would jump the viewport). If the row isn't
+  // mounted, this no-ops and msgNode() will render the correct state on the next render.
+  function syncStuckHint(seq) {
+    const scroll = document.getElementById('chat-scroll');
+    if (!scroll) return;
+    const row = scroll.querySelector('.msg[data-seq="' + seq + '"]');
+    if (!row) return;
+    const r = WB.RECEIPTS[seq];
+    const existing = row.querySelector('.stuck-hint');
+    if (r && r.stuck) {
+      if (!existing) row.appendChild(stuckHint());
+    } else if (existing) {
+      existing.remove();
+    }
+  }
   function msgNode(m) {
     if (m.kind === 'handoff') {
       return el('div', { class: 'sysline', html: svgIcon('arrow-right', 12) + ' <b>' + WB.ui.esc(m.who) + '</b>&nbsp;handoff — ' + WB.ui.esc(m.text) });
@@ -104,11 +125,19 @@ window.WB = window.WB || {};
       const roomSummary = roomReceiptSummary(m);
       if (roomSummary) tsRow.appendChild(roomSummary);
     }
-    return el('div', { class: 'msg' + (me ? ' me' : ''), 'data-seq': m.seq != null ? String(m.seq) : '' }, [
+    const node = el('div', { class: 'msg' + (me ? ' me' : ''), 'data-seq': m.seq != null ? String(m.seq) : '' }, [
       el('div', { class: 'who' }, [nameSpan, el('span', { class: 'room-tag', text: ' ' + tag })]),
       bubble,
       tsRow,
     ]);
+    // Re-derive the "no response yet" stuck hint from state on EVERY render, the
+    // same way receiptGlyph() re-derives the tick — so a full renderChatList()
+    // (room-filter switch, pagination) never wipes a still-stuck message's hint,
+    // and a row that (re)mounts after the 30s timer already fired still shows it.
+    if (me && m.seq != null && WB.RECEIPTS[m.seq] && WB.RECEIPTS[m.seq].stuck) {
+      node.appendChild(stuckHint());
+    }
+    return node;
   }
   function chatMatches(m) { return roomFilter === 'all' || m.room === roomFilter || m.room === 'team'; }
   const CHAT_MOUNT_CAP = 150;
@@ -710,20 +739,16 @@ window.WB = window.WB || {};
     const r = WB.RECEIPTS[seq];
     if (r && (r.deliveredBy.size || r.seenBy.size)) {
       // Delivered/read already arrived — cancel a pending timer so a stale
-      // hint can't appear after the fact, and remove one if it already
-      // rendered (e.g. the ack lands just past the 30s mark).
+      // hint can't appear after the fact, and clear the durable stuck flag so
+      // any mounted row drops the hint on the next syncStuckHint/render.
       if (r._stuckTimer) { clearTimeout(r._stuckTimer); r._stuckTimer = null; }
-      if (r.stuck) {
-        r.stuck = false;
-        const hintEl = document.getElementById('chat-scroll')?.querySelector('.msg[data-seq="' + seq + '"] .stuck-hint');
-        if (hintEl) hintEl.remove();
-      }
+      if (r.stuck) { r.stuck = false; }
+      syncStuckHint(seq);
     } else if (r && r.serverReceivedAt && !r._stuckTimer) {
       r._stuckTimer = setTimeout(() => {
         if (!r.deliveredBy.size && !r.seenBy.size) {
           r.stuck = true;
-          const row = document.getElementById('chat-scroll')?.querySelector('.msg[data-seq="' + seq + '"]');
-          if (row) row.appendChild(el('span', { class: 'stuck-hint', title: 'no response yet — the recipient’s listen connector may be down', text: ' ⚠' }));
+          syncStuckHint(seq);
         }
       }, 30000);
     }
