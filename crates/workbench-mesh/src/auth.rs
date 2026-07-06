@@ -132,7 +132,7 @@ pub fn create_invite(
     if role == "owner" && authority.role != "owner" {
         bail!("local owner credential required for owner invite");
     }
-    let token = format!("wb_invite_{}", random_secret());
+    let token = format!("wb_invite_{}", random_short_secret());
     let expires_at = (OffsetDateTime::now_utc() + duration_from_secs(ttl_seconds)?)
         .format(&Rfc3339)
         .context("format invite expiry")?;
@@ -652,6 +652,16 @@ fn random_secret() -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
+/// Shorter than `random_secret` — used only for invite tokens, which are
+/// single-use, TTL-bound, and rate-limited by real network round-trips (not
+/// an offline brute-force target). Persistent project/device credentials
+/// continue to use the full-length `random_secret`.
+fn random_short_secret() -> String {
+    let mut bytes = [0_u8; 16];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    URL_SAFE_NO_PAD.encode(bytes)
+}
+
 fn hash_token(token: &str) -> String {
     let digest = Sha256::digest(token.as_bytes());
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
@@ -897,12 +907,30 @@ mod tests {
     use super::{
         accept_invite, bootstrap, check, create_invite, issue_invite_credential, list_devices,
         local_mutating_project_token, local_operator_project_token, local_project_token,
-        persist_project_credential, project_token_role, require_local_mutating_project_credential,
-        require_local_project_credential, revoke_device, revoke_invite, sanitize_name,
-        validate_role, ProjectCredential,
+        persist_project_credential, project_token_role, random_secret, random_short_secret,
+        require_local_mutating_project_credential, require_local_project_credential, revoke_device,
+        revoke_invite, sanitize_name, validate_role, ProjectCredential,
     };
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use base64::Engine;
     use std::fs;
     use std::path::Path;
+
+    #[test]
+    fn random_short_secret_is_16_bytes_base64url() {
+        let secret = random_short_secret();
+        let decoded = URL_SAFE_NO_PAD.decode(&secret).unwrap();
+        assert_eq!(decoded.len(), 16);
+    }
+
+    #[test]
+    fn random_secret_is_still_32_bytes_unchanged() {
+        // Guards against accidentally shrinking the persistent-credential
+        // secret generator when adding the shorter invite-token one.
+        let secret = random_secret();
+        let decoded = URL_SAFE_NO_PAD.decode(&secret).unwrap();
+        assert_eq!(decoded.len(), 32);
+    }
 
     #[test]
     fn validates_known_roles() {

@@ -14,6 +14,7 @@ use crate::store::MeshStore;
 
 const DEFAULT_ACTOR: &str = "session:lead";
 const ACTOR_ENV_VAR: &str = "WORKBENCH_MESH_ACTOR";
+const DEFAULT_MESH_LAN_PORT: u16 = 47321;
 
 /// Resolves which actor identity a CLI-invoked mesh command should post as:
 /// an explicit `--as <name>` wins, then the `WORKBENCH_MESH_ACTOR` env var
@@ -240,27 +241,33 @@ pub async fn accept_remote_invite(
 }
 
 pub(crate) fn remote_metadata_from_url(url: &str) -> Result<ServerMetadata> {
-    let parsed = Url::parse(url).context("parse remote mesh URL")?;
-    if parsed.scheme() != "http" {
-        anyhow::bail!("remote mesh URL must use http");
+    // Accept a bare host ("192.168.1.10") by defaulting a scheme before
+    // parsing — Url::parse requires one. The default LAN port (47321) is
+    // applied after parsing if the input didn't specify one.
+    let with_scheme = if url.contains("://") {
+        url.to_string()
+    } else {
+        format!("https://{url}")
+    };
+    let parsed = Url::parse(&with_scheme).context("parse remote mesh host")?;
+    if parsed.scheme() != "https" {
+        anyhow::bail!("remote mesh connections require https — a bare host or an https:// URL (plain http is no longer accepted)");
     }
     if !parsed.username().is_empty()
         || parsed.password().is_some()
         || parsed.query().is_some()
         || parsed.fragment().is_some()
-        || parsed.path() != "/"
+        || (parsed.path() != "/" && !parsed.path().is_empty())
     {
         anyhow::bail!(
-            "remote mesh URL must be http://host:port without userinfo, path, query, or fragment"
+            "remote mesh host must be a bare host, optionally host:port, without userinfo, path, query, or fragment"
         );
     }
     let host = parsed
         .host_str()
-        .ok_or_else(|| anyhow::anyhow!("remote mesh URL requires a host"))?
+        .ok_or_else(|| anyhow::anyhow!("remote mesh host is required"))?
         .to_string();
-    let port = parsed
-        .port()
-        .ok_or_else(|| anyhow::anyhow!("remote mesh URL must be http://host:port"))?;
+    let port = parsed.port().unwrap_or(DEFAULT_MESH_LAN_PORT);
     Ok(ServerMetadata {
         mode: "remote".to_string(),
         host: host.clone(),
@@ -1164,24 +1171,47 @@ mod tests {
     }
 
     #[test]
-    fn remote_metadata_url_rejects_non_http_scheme() {
-        let err = super::remote_metadata_from_url("ssh://example.com:47321").unwrap_err();
-        assert!(err.to_string().contains("remote mesh URL must use http"));
+    fn remote_metadata_from_url_accepts_bare_host_no_scheme_no_port() {
+        let metadata = super::remote_metadata_from_url("192.168.1.10").unwrap();
+        assert_eq!(metadata.host, "192.168.1.10");
+        assert_eq!(metadata.port, 47321);
     }
 
     #[test]
-    fn remote_metadata_url_requires_explicit_port_and_root_url() {
+    fn remote_metadata_from_url_accepts_explicit_https_and_port() {
+        let metadata = super::remote_metadata_from_url("https://192.168.1.10:9999").unwrap();
+        assert_eq!(metadata.port, 9999);
+    }
+
+    #[test]
+    fn remote_metadata_from_url_rejects_plain_http() {
+        let result = super::remote_metadata_from_url("http://192.168.1.10:47321");
+        assert!(
+            result.is_err(),
+            "remote mesh connections are TLS-only now — a bare http:// URL must be rejected, not silently downgraded"
+        );
+    }
+
+    #[test]
+    fn remote_metadata_url_rejects_non_https_scheme() {
+        let err = super::remote_metadata_from_url("ssh://example.com:47321").unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("remote mesh connections require https"));
+    }
+
+    #[test]
+    fn remote_metadata_url_rejects_non_root_url_parts() {
         for url in [
-            "http://example.com",
-            "http://user@example.com:47321",
-            "http://example.com:47321/path",
-            "http://example.com:47321?token=abc",
-            "http://example.com:47321#fragment",
+            "https://user@example.com:47321",
+            "https://example.com:47321/path",
+            "https://example.com:47321?token=abc",
+            "https://example.com:47321#fragment",
         ] {
             let err = super::remote_metadata_from_url(url).unwrap_err();
             assert!(
                 err.to_string()
-                    .contains("remote mesh URL must be http://host:port"),
+                    .contains("remote mesh host must be a bare host"),
                 "unexpected error for {url}: {err:#}"
             );
         }
