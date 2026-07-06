@@ -187,6 +187,7 @@ pub async fn accept_remote_invite(
     url: String,
     token: String,
     device: String,
+    fingerprint: Option<String>,
 ) -> Result<()> {
     if let Ok(existing) = read_server_metadata(&project_root) {
         if existing.mode == "local" || existing.mode == "lan" {
@@ -198,7 +199,18 @@ pub async fn accept_remote_invite(
             );
         }
     }
-    let metadata = remote_metadata_from_url(&url)?;
+    let fingerprint = fingerprint.ok_or_else(|| {
+        anyhow::anyhow!(
+            "connect requires --fingerprint sha256:<value> — copy it verbatim from the invite; \
+             there is no unpinned fallback for lan/remote connections"
+        )
+    })?;
+    // Validate the fingerprint decodes before making any network call — an
+    // invalid pin should never even reach a pending connection attempt.
+    let pinned = crate::tls::decode_fingerprint(&fingerprint)
+        .context("--fingerprint value is not valid")?;
+    let mut metadata = remote_metadata_from_url(&url)?;
+    metadata.tls_fingerprint = Some(crate::tls::encode_fingerprint(&pinned));
     let local_project = auth::project_id_for(&project_root)?;
     let response = mesh_http_client(&metadata)?
         .post(format!("{}/api/invites/accept", base_url(&metadata)))
@@ -236,6 +248,7 @@ pub async fn accept_remote_invite(
     println!("project: {}", credential.project);
     println!("role: {}", credential.role);
     println!("url: {}", base_url(&metadata));
+    println!("fingerprint code: {}", crate::tls::human_code(&pinned));
     println!("credential: {}", credential_path.display());
     Ok(())
 }
@@ -1729,6 +1742,7 @@ mod tests {
             "http://127.0.0.1:9999".to_string(),
             "wb_invite_fake".to_string(),
             "some-device".to_string(),
+            None,
         )
         .await
         .unwrap_err();
@@ -1742,6 +1756,21 @@ mod tests {
         let after = crate::server::read_server_metadata(project.path()).unwrap();
         assert_eq!(after.mode, "local");
         assert_eq!(after.local_token, "real-local-token");
+    }
+
+    #[tokio::test]
+    async fn accept_remote_invite_requires_a_fingerprint_when_a_url_is_given() {
+        let tmp = TempDir::new().unwrap();
+        let result = super::accept_remote_invite(
+            tmp.path().to_path_buf(),
+            None,
+            "192.168.1.10".to_string(),
+            "sometoken".to_string(),
+            "some-device".to_string(),
+            None, // no fingerprint
+        )
+        .await;
+        assert!(result.is_err(), "a URL-based connect with no fingerprint must fail clearly, never silently proceed unpinned");
     }
 
     #[tokio::test]

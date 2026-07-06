@@ -189,6 +189,8 @@ struct InviteAcceptArgs {
     token: String,
     #[arg(long)]
     device: String,
+    #[arg(long)]
+    fingerprint: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -706,7 +708,15 @@ fn invite_create(args: InviteCreateArgs) -> Result<()> {
 
 async fn invite_accept(args: InviteAcceptArgs) -> Result<()> {
     if let Some(url) = args.url {
-        client::accept_remote_invite(args.target, args.home, url, args.token, args.device).await
+        client::accept_remote_invite(
+            args.target,
+            args.home,
+            url,
+            args.token,
+            args.device,
+            args.fingerprint,
+        )
+        .await
     } else {
         println!(
             "{}",
