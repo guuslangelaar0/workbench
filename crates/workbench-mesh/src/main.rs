@@ -191,6 +191,8 @@ struct InviteAcceptArgs {
     device: String,
     #[arg(long)]
     fingerprint: Option<String>,
+    #[arg(short = 'y', long = "yes")]
+    yes: bool,
 }
 
 #[derive(Debug, Args)]
@@ -715,6 +717,7 @@ async fn invite_accept(args: InviteAcceptArgs) -> Result<()> {
             args.token,
             args.device,
             args.fingerprint,
+            args.yes,
         )
         .await
     } else {

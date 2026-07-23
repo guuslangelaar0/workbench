@@ -188,6 +188,7 @@ pub async fn accept_remote_invite(
     token: String,
     device: String,
     fingerprint: Option<String>,
+    yes: bool,
 ) -> Result<()> {
     if let Ok(existing) = read_server_metadata(&project_root) {
         if existing.mode == "local" || existing.mode == "lan" {
@@ -207,8 +208,13 @@ pub async fn accept_remote_invite(
     })?;
     // Validate the fingerprint decodes before making any network call — an
     // invalid pin should never even reach a pending connection attempt.
-    let pinned = crate::tls::decode_fingerprint(&fingerprint)
-        .context("--fingerprint value is not valid")?;
+    let pinned =
+        crate::tls::decode_fingerprint(&fingerprint).context("--fingerprint value is not valid")?;
+
+    if !yes && std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+        confirm_fingerprint_interactively(&pinned)?;
+    }
+
     let mut metadata = remote_metadata_from_url(&url)?;
     metadata.tls_fingerprint = Some(crate::tls::encode_fingerprint(&pinned));
     let local_project = auth::project_id_for(&project_root)?;
@@ -251,6 +257,31 @@ pub async fn accept_remote_invite(
     println!("fingerprint code: {}", crate::tls::human_code(&pinned));
     println!("credential: {}", credential_path.display());
     Ok(())
+}
+
+/// Interactive-only, out-of-band cross-check: the code shown here is derived
+/// from the fingerprint the client is ABOUT to pin (from --fingerprint), not
+/// from anything the network has sent yet. A human comparing this against
+/// what the host printed catches a tampered invite string — something the
+/// TLS handshake's own pin check cannot, since it would "succeed" against
+/// whatever fingerprint the (possibly tampered) invite says to trust.
+fn confirm_fingerprint_interactively(pinned: &[u8; 16]) -> Result<()> {
+    use std::io::Write;
+
+    print!(
+        "Confirm code matches host: {} [y/N] ",
+        crate::tls::human_code(pinned)
+    );
+    std::io::stdout().flush().ok();
+    let mut answer = String::new();
+    std::io::stdin()
+        .read_line(&mut answer)
+        .context("read confirmation")?;
+    if answer.trim().eq_ignore_ascii_case("y") {
+        Ok(())
+    } else {
+        anyhow::bail!("connect cancelled — fingerprint code not confirmed")
+    }
 }
 
 pub(crate) fn remote_metadata_from_url(url: &str) -> Result<ServerMetadata> {
@@ -1743,6 +1774,7 @@ mod tests {
             "wb_invite_fake".to_string(),
             "some-device".to_string(),
             None,
+            false,
         )
         .await
         .unwrap_err();
@@ -1768,9 +1800,37 @@ mod tests {
             "sometoken".to_string(),
             "some-device".to_string(),
             None, // no fingerprint
+            false,
         )
         .await;
         assert!(result.is_err(), "a URL-based connect with no fingerprint must fail clearly, never silently proceed unpinned");
+    }
+
+    #[tokio::test]
+    async fn accept_remote_invite_skips_confirmation_when_not_a_tty() {
+        // In the test harness stdin is never a TTY, so this exercises the
+        // "non-interactive: proceed without prompting" branch — it should
+        // reach the network call (and fail there, since no real server is
+        // running), not hang waiting for input.
+        let tmp = TempDir::new().unwrap();
+        let fp = [9u8; 16];
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            super::accept_remote_invite(
+                tmp.path().to_path_buf(),
+                None,
+                "127.0.0.1:1".to_string(),
+                "tok".to_string(),
+                "dev".to_string(),
+                Some(crate::tls::encode_fingerprint(&fp)),
+                false,
+            ),
+        )
+        .await;
+        assert!(
+            result.is_ok(),
+            "must not hang waiting for a confirmation prompt when stdin is not a TTY"
+        );
     }
 
     #[tokio::test]
