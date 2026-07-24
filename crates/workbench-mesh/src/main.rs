@@ -7,6 +7,7 @@ use workbench_mesh::auth;
 use workbench_mesh::client;
 use workbench_mesh::server::{self, ServeOptions};
 use workbench_mesh::store::MeshStore;
+use workbench_mesh::tls;
 
 #[derive(Debug, Parser)]
 #[command(name = "workbench-mesh")]
@@ -46,6 +47,8 @@ enum Command {
     /// Connect to the mesh server as ACTOR, subscribe to its rooms, ack
     /// every inbound message, and wake a FIFO reader on each delivery.
     Listen(ListenArgs),
+    RotateIdentity(RotateIdentityArgs),
+    FingerprintCode(FingerprintCodeArgs),
 }
 
 #[derive(Debug, Args)]
@@ -223,6 +226,19 @@ struct DeviceRevokeArgs {
     home: Option<PathBuf>,
     #[arg(long)]
     device: String,
+}
+
+#[derive(Debug, Args)]
+struct RotateIdentityArgs {
+    #[arg(long)]
+    target: PathBuf,
+    #[arg(long)]
+    home: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+struct FingerprintCodeArgs {
+    fingerprint: String,
 }
 
 #[derive(Debug, Args)]
@@ -593,6 +609,16 @@ async fn main() -> Result<()> {
             });
             workbench_mesh::listen::run(args.target, args.home, actor).await
         }
+        Command::RotateIdentity(args) => {
+            tls::rotate_identity(&args.target)?;
+            println!("rotated identity for {}", args.target.display());
+            Ok(())
+        }
+        Command::FingerprintCode(args) => {
+            let decoded = tls::decode_fingerprint(&args.fingerprint)?;
+            println!("{}", tls::human_code(&decoded));
+            Ok(())
+        }
     }
 }
 
@@ -838,6 +864,15 @@ mod tests {
                 other => panic!("expected device revoke, got {other:?}"),
             },
             other => panic!("expected device command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_fingerprint_code_as_a_bare_positional_arg() {
+        let cli = Cli::try_parse_from(["workbench-mesh", "fingerprint-code", "sha256:abc123"]).unwrap();
+        match cli.command {
+            Command::FingerprintCode(args) => assert_eq!(args.fingerprint, "sha256:abc123"),
+            other => panic!("expected fingerprint-code, got {other:?}"),
         }
     }
 }

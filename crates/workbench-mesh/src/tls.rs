@@ -243,6 +243,17 @@ fn write_secret_pem(path: &Path, contents: &str) -> Result<()> {
     fs::write(path, contents).with_context(|| format!("write {}", path.display()))
 }
 
+/// Deletes this project's persisted TLS identity so the next --lan start
+/// generates a fresh keypair. Every previously-enrolled device's pinned
+/// fingerprint becomes stale after this — they will need a new invite.
+pub fn rotate_identity(project_root: &Path) -> Result<()> {
+    let dir = tls_dir(project_root);
+    if dir.exists() {
+        fs::remove_dir_all(&dir).with_context(|| format!("remove {}", dir.display()))?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,6 +342,21 @@ mod tests {
     #[test]
     fn human_code_differs_for_different_fingerprints() {
         assert_ne!(human_code(&[1u8; 16]), human_code(&[2u8; 16]));
+    }
+
+    #[test]
+    fn rotate_identity_forces_a_new_fingerprint_on_next_use() {
+        let dir = TempDir::new().unwrap();
+        let before = ensure_identity(dir.path(), &["127.0.0.1".to_string()]).unwrap();
+        rotate_identity(dir.path()).unwrap();
+        let after = ensure_identity(dir.path(), &["127.0.0.1".to_string()]).unwrap();
+        assert_ne!(before.fingerprint, after.fingerprint, "rotate must actually force a new keypair, not silently no-op");
+    }
+
+    #[test]
+    fn rotate_identity_is_a_no_op_if_no_identity_exists_yet() {
+        let dir = TempDir::new().unwrap();
+        assert!(rotate_identity(dir.path()).is_ok());
     }
 
     #[test]
