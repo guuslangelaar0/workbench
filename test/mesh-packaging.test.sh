@@ -60,8 +60,13 @@ chk "wrapper invite prints metadata URL" "contains '$WRAP_TMP/invite.out' 'url: 
 chk "wrapper invite local mode only prints loopback connect" "contains '$WRAP_TMP/invite.out' 'connect-url: /workbench:mesh connect http://127.0.0.1:47321 fake-token' && ! contains '$WRAP_TMP/invite.out' '<device>' && ! contains '$WRAP_TMP/invite.out' 'connect-host:' && ! contains '$WRAP_TMP/invite.out' 'connect-ip:' && ! contains '$WRAP_TMP/invite.out' 'connect: /workbench:mesh connect http://mesh-host.local'"
 
 : > "$LOG"
-run_wrapper connect local-token laptop > "$WRAP_TMP/connect-local.out" 2>&1
-chk "wrapper connect local token accepts invite" "contains '$LOG' 'cmd|invite|accept|--target|$PROJECT_DIR|--home|$MESH_HOME|--token|local-token|--device|laptop'"
+# Real invite tokens are always "wb_invite_<random>" (auth::create_invite),
+# which always contains an underscore and so can never match connect)'s
+# bare-host regex (letters/digits/dot/hyphen only, no underscore) — use that
+# realistic shape here rather than a bare hyphenated placeholder, which since
+# Task 13 added bare-host acceptance would itself parse as a host, not a token.
+run_wrapper connect wb_invite_local-token laptop > "$WRAP_TMP/connect-local.out" 2>&1
+chk "wrapper connect local token accepts invite" "contains '$LOG' 'cmd|invite|accept|--target|$PROJECT_DIR|--home|$MESH_HOME|--token|wb_invite_local-token|--device|laptop'"
 
 : > "$LOG"
 run_wrapper connect http://192.0.2.10:47321 remote-token tablet > "$WRAP_TMP/connect-url.out" 2>&1
@@ -70,7 +75,7 @@ chk "wrapper connect URL no longer fails unsupported" "! contains '$WRAP_TMP/con
 
 : > "$LOG"
 run_wrapper help > "$WRAP_TMP/help.out" 2>&1
-chk "wrapper help advertises URL connect syntax" "contains '$WRAP_TMP/help.out' 'connect [URL] TOKEN [DEVICE]'"
+chk "wrapper help advertises host/URL connect syntax with fingerprint/yes flags" "contains '$WRAP_TMP/help.out' 'connect [HOST|URL] TOKEN [DEVICE] [--fingerprint sha256:HASH] [-y|--yes]'"
 chk "wrapper help documents devices operation" "contains '$WRAP_TMP/help.out' 'devices'"
 chk "wrapper help documents revoke-device operation" "contains '$WRAP_TMP/help.out' 'revoke-device DEVICE'"
 

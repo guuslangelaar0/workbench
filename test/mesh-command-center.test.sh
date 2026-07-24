@@ -336,4 +336,61 @@ CLAUDE_PLUGIN_ROOT="$LISTEN_PLUGIN" CLAUDE_PROJECT_DIR="$LISTEN_PROJECT" WORKBEN
   bash "$HERE/scripts/mesh.sh" listen >"$TMP/listen-no-actor.out" 2>&1 || LISTEN_NO_ACTOR_RC=$?
 chk "listen without --as (and no WORKBENCH_MESH_ACTOR) fails fast" "[ '$LISTEN_NO_ACTOR_RC' -ne 0 ] && grep -q 'listen requires --as ACTOR' '$TMP/listen-no-actor.out'"
 
+echo "== full TLS lan enrollment via scripts/mesh.sh: bare host + --fingerprint + --yes (Task 13) =="
+# Real end-to-end coverage through the actual shell entry point, not direct
+# Rust calls: start --lan, invite (fingerprint + code printed), connect from a
+# second project directory using a bare host (no scheme, no port) plus the
+# --fingerprint/--yes pass-through this task added, then a message round-trip
+# over the pinned TLS connection. This is the one test in the plan that would
+# catch a bug in mesh.sh's own argument assembly rather than the underlying
+# Rust functions (already covered directly by crates/workbench-mesh's suite).
+LAN_PLUGIN="$TMP/lan-connect-plugin"
+mkdir -p "$LAN_PLUGIN/bin"
+ln -sf "$BIN" "$LAN_PLUGIN/bin/workbench-mesh"
+LAN_HOST_PROJECT="$TMP/lan-host-project"
+LAN_JOIN_PROJECT="$TMP/lan-join-project"
+LAN_HOST_HOME="$TMP/lan-host-home"
+LAN_JOIN_HOME="$TMP/lan-join-home"
+mkdir -p "$LAN_HOST_PROJECT" "$LAN_JOIN_PROJECT" "$LAN_HOST_HOME" "$LAN_JOIN_HOME"
+LAN_PIDF="$TMP/lan-mesh.pid"
+# Same --name on both sides: project identity is derived from
+# .workbench/config.json's project.name, and the host only issues a
+# credential when the joiner's expected_project matches its own — this is
+# what makes two independent temp directories behave like the same project
+# checked out on two machines.
+bash "$HERE/scripts/init.sh" --name "MeshLanConnect" --mission "Test." --target "$LAN_HOST_PROJECT" --profile full --level crew >/dev/null 2>&1
+bash "$HERE/scripts/init.sh" --name "MeshLanConnect" --mission "Test." --target "$LAN_JOIN_PROJECT" --profile full --level crew >/dev/null 2>&1
+
+LAN_START_OUT="$TMP/lan-start.out"
+CLAUDE_PLUGIN_ROOT="$LAN_PLUGIN" CLAUDE_PROJECT_DIR="$LAN_HOST_PROJECT" WORKBENCH_HOME="$LAN_HOST_HOME" \
+  bash "$HERE/scripts/mesh.sh" start --lan --port 0 --pid-file "$LAN_PIDF" >"$LAN_START_OUT" 2>&1 &
+for _ in $(seq 1 50); do [ -f "$LAN_HOST_PROJECT/.workbench/mesh/server.json" ] && break; sleep 0.1; done
+chk "lan start banner prints https, not the old bare loopback command-center line" "grep -q '^Host: https://' '$LAN_START_OUT' && ! grep -q '^Command center: http://127.0.0.1' '$LAN_START_OUT'"
+
+LAN_INVITE_OUT="$(CLAUDE_PLUGIN_ROOT="$LAN_PLUGIN" CLAUDE_PROJECT_DIR="$LAN_HOST_PROJECT" WORKBENCH_HOME="$LAN_HOST_HOME" \
+  bash "$HERE/scripts/mesh.sh" invite --role worker --ttl-seconds 900)"
+LAN_TOKEN="$(printf '%s\n' "$LAN_INVITE_OUT" | sed -n 's/^token: //p' | head -1)"
+LAN_FINGERPRINT="$(printf '%s\n' "$LAN_INVITE_OUT" | sed -n 's/.*--fingerprint \(sha256:[^ ]*\).*/\1/p' | head -1)"
+chk "lan invite prints a human fingerprint code" "printf '%s\n' \"\$LAN_INVITE_OUT\" | grep -qE '^Fingerprint code: [0-9]{3}-[0-9]{3}$'"
+chk "lan invite connect line uses https, not http" "printf '%s\n' \"\$LAN_INVITE_OUT\" | grep -q '/workbench:mesh connect https://'"
+chk "lan invite captured a token" "[ -n '$LAN_TOKEN' ]"
+chk "lan invite captured a --fingerprint sha256:... value" "[ -n '$LAN_FINGERPRINT' ]"
+
+LAN_CONNECT_OUT="$(CLAUDE_PLUGIN_ROOT="$LAN_PLUGIN" CLAUDE_PROJECT_DIR="$LAN_JOIN_PROJECT" WORKBENCH_HOME="$LAN_JOIN_HOME" \
+  bash "$HERE/scripts/mesh.sh" connect 127.0.0.1 "$LAN_TOKEN" seconddevice --fingerprint "$LAN_FINGERPRINT" --yes 2>&1)"
+chk "bare-host connect with --fingerprint/--yes pass-through succeeds" "printf '%s' \"\$LAN_CONNECT_OUT\" | grep -q 'device seconddevice connected'"
+chk "bare-host connect persists the joining credential outside the repo" "[ -f '$LAN_JOIN_HOME/mesh/projects/seconddevice.cred' ]"
+
+LAN_MSG_OUT="$(CLAUDE_PLUGIN_ROOT="$LAN_PLUGIN" CLAUDE_PROJECT_DIR="$LAN_JOIN_PROJECT" WORKBENCH_HOME="$LAN_JOIN_HOME" \
+  bash "$HERE/scripts/mesh.sh" message team lan-e2e-hello --as seconddevice 2>&1)"
+chk "joiner message command succeeds over the pinned TLS connection" "printf '%s' \"\$LAN_MSG_OUT\" | grep -q 'message: sent'"
+LAN_MSG_SEEN=0
+for _ in $(seq 1 30); do
+  grep -q 'lan-e2e-hello' "$LAN_HOST_PROJECT/.workbench/mesh/events.jsonl" 2>/dev/null && { LAN_MSG_SEEN=1; break; }
+  sleep 0.1
+done
+chk "joiner message round-trips to the host event log" "[ '$LAN_MSG_SEEN' = 1 ]"
+
+kill "$(cat "$LAN_PIDF" 2>/dev/null)" >/dev/null 2>&1 || true
+
 [ "$fail" = 0 ] && echo "PASS: mesh-command-center" || { echo "mesh-command-center test failed"; exit 1; }

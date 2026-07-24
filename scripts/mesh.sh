@@ -25,7 +25,7 @@ operations:
   stop [--pid-file PATH]
   status | who | jobs | open
   invite [--role ROLE] [--ttl-seconds N] [--max-uses N]
-  connect [URL] TOKEN [DEVICE]
+  connect [HOST|URL] TOKEN [DEVICE] [--fingerprint sha256:HASH] [-y|--yes]
   devices
   revoke-device DEVICE
   room NAME [--as ACTOR]
@@ -129,10 +129,12 @@ metadata_lan_ips() {
 }
 
 print_connect_commands() {
-  local token="$1" mode port host mdns ip url
+  local token="$1" fingerprint="${2:-}" mode port host mdns ip url fp_flag
   port="$(metadata_port || true)"
   [ -n "$port" ] || return 0
   mode="$(metadata_field mode || true)"
+  fp_flag=""
+  [ -n "$fingerprint" ] && fp_flag=" --fingerprint sha256:$fingerprint"
   if [ "$mode" != "lan" ]; then
     if url="$(metadata_url)"; then
       printf 'connect-url: /workbench:mesh connect %s %s\n' "$url" "$token"
@@ -141,13 +143,13 @@ print_connect_commands() {
   fi
   host="$(metadata_field hostname || true)"
   mdns="$(metadata_field mdns || true)"
-  [ -n "$mdns" ] && printf 'connect: /workbench:mesh connect http://%s:%s %s\n' "$mdns" "$port" "$token"
-  [ -n "$host" ] && [ "$host" != "$mdns" ] && printf 'connect-host: /workbench:mesh connect http://%s:%s %s\n' "$host" "$port" "$token"
+  [ -n "$mdns" ] && printf 'connect: /workbench:mesh connect https://%s:%s %s%s\n' "$mdns" "$port" "$token" "$fp_flag"
+  [ -n "$host" ] && [ "$host" != "$mdns" ] && printf 'connect-host: /workbench:mesh connect https://%s:%s %s%s\n' "$host" "$port" "$token" "$fp_flag"
   for ip in $(metadata_lan_ips || true); do
-    [ -n "$ip" ] && printf 'connect-ip: /workbench:mesh connect http://%s:%s %s\n' "$ip" "$port" "$token"
+    [ -n "$ip" ] && printf 'connect-ip: /workbench:mesh connect %s %s%s\n' "$ip" "$token" "$fp_flag"
   done
   if url="$(metadata_url)"; then
-    printf 'connect-url: /workbench:mesh connect %s %s\n' "$url" "$token"
+    printf 'connect-url: /workbench:mesh connect %s %s%s\n' "$url" "$token" "$fp_flag"
   fi
 }
 
@@ -156,11 +158,10 @@ print_start_info() {
   local port="$2"
   if [ "$mode" = "lan" ]; then
     cat <<EOF
-Workbench mesh will listen on the local network.
-Host: $(mdns_name):$port
-LAN IP: $(lan_ip):$port
-Local: 127.0.0.1:$port
-Command center: http://127.0.0.1:$port
+Workbench mesh will listen on the local network, over TLS.
+Host: https://$(mdns_name):$port
+LAN IP: https://$(lan_ip):$port
+Local: https://127.0.0.1:$port
 Invite: run /workbench:mesh invite --role worker --ttl-seconds 900
 Public internet: unavailable in this version.
 EOF
@@ -310,7 +311,6 @@ case "$cmd" in
         --port)
           require_arg "--port value" "${2:-}"
           port="$2"
-          pass+=(--port "$2")
           shift 2
           ;;
         --pid-file)
@@ -326,8 +326,12 @@ case "$cmd" in
     done
     if [ "$mode" = "lan" ] && [ "$port" = "0" ]; then
       port="${WORKBENCH_MESH_PORT:-47321}"
-      pass+=(--port "$port")
     fi
+    # Pass --port exactly once, computed from the fully-resolved $port (explicit
+    # --port, or the lan-mode default above) — building this in two places
+    # (inside the --port case above and again here) let `start --lan --port 0`
+    # append --port twice, which clap rejects as a duplicate argument.
+    pass+=(--port "$port")
     # Always record a pid file so `/workbench:mesh stop` can find and signal this
     # process later, even when the caller didn't ask for one explicitly — default to
     # a fixed path next to server.json rather than leaving the server unstoppable.
@@ -415,24 +419,37 @@ case "$cmd" in
     token="$(printf '%s\n' "$invite_out" | sed -n 's/^token: //p' | head -1)"
     if url="$(metadata_url)"; then
       printf 'url: %s\n' "$url"
-      [ -n "$token" ] && print_connect_commands "$token"
+      fingerprint="$(metadata_field tls_fingerprint || true)"
+      if [ -n "$fingerprint" ]; then
+        printf 'Fingerprint code: %s\n' "$("$BIN" fingerprint-code "$fingerprint")"
+      fi
+      [ -n "$token" ] && print_connect_commands "$token" "$fingerprint"
     else
       echo "url: start mesh first with /workbench:mesh start --lan to invite another machine"
     fi
     ;;
   connect)
-    url=""
-    if [ "${1:-}" != "" ] && printf '%s' "$1" | grep -Eq '^https?://'; then
-      url="$1"
+    host_or_url=""
+    if [ "${1:-}" != "" ] && printf '%s' "$1" | grep -Eq '^[A-Za-z0-9.-]+(:[0-9]+)?$|^https?://'; then
+      host_or_url="$1"
       shift
     fi
     token="${1:-}"
-    device="${2:-$(host_name)}"
+    shift || true
+    device="$(host_name)"
+    extra=()
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --fingerprint) require_arg "--fingerprint value" "${2:-}"; extra+=(--fingerprint "$2"); shift 2 ;;
+        -y|--yes) extra+=(--yes); shift ;;
+        *) device="$1"; shift ;;
+      esac
+    done
     require_arg "invite token" "$token"
-    if [ -n "$url" ]; then
-      exec "$BIN" invite accept "${PROJECT_ARGS[@]}" --url "$url" --token "$token" --device "$device"
+    if [ -n "$host_or_url" ]; then
+      exec "$BIN" invite accept "${PROJECT_ARGS[@]}" --url "$host_or_url" --token "$token" --device "$device" "${extra[@]}"
     fi
-    exec "$BIN" invite accept "${PROJECT_ARGS[@]}" --token "$token" --device "$device"
+    exec "$BIN" invite accept "${PROJECT_ARGS[@]}" --token "$token" --device "$device" "${extra[@]}"
     ;;
   devices)
     exec "$BIN" device list "${PROJECT_ARGS[@]}" "$@"
