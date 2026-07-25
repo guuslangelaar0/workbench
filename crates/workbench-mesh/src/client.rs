@@ -110,6 +110,7 @@ pub async fn status(project_root: PathBuf, home: Option<PathBuf>) -> Result<()> 
     println!("url: {}", base_url(&metadata));
     println!("connected_actor_count: {actor_count}");
     println!("event_count: {event_count}");
+    print_fingerprint_code(&metadata);
     Ok(())
 }
 
@@ -130,7 +131,28 @@ pub async fn who(project_root: PathBuf, home: Option<PathBuf>) -> Result<()> {
             }
         }
     }
+    print_fingerprint_code(&metadata);
     Ok(())
+}
+
+/// Formats the "Fingerprint code: NNN-NNN" line — same phrasing `invite`
+/// already prints — or `None` when there is nothing to show: local mode has
+/// no pinned certificate (`tls_fingerprint` is `None`), and a stored value
+/// that fails to decode (corrupt metadata) is treated the same way rather
+/// than surfacing an error from an otherwise-working status/who call.
+fn fingerprint_code_line(metadata: &ServerMetadata) -> Option<String> {
+    let fingerprint = metadata.tls_fingerprint.as_deref()?;
+    let decoded = crate::tls::decode_fingerprint(fingerprint).ok()?;
+    Some(format!("Fingerprint code: {}", crate::tls::human_code(&decoded)))
+}
+
+/// Resurfaces the TLS fingerprint code so an operator can re-check it after
+/// `invite` time, not just at invite creation — `status`/`who` are the
+/// design-mandated places to print it again.
+fn print_fingerprint_code(metadata: &ServerMetadata) {
+    if let Some(line) = fingerprint_code_line(metadata) {
+        println!("{line}");
+    }
 }
 
 pub async fn bench(project_root: PathBuf, home: Option<PathBuf>, messages: u64) -> Result<()> {
@@ -1191,6 +1213,66 @@ mod tests {
         assert_eq!(super::base_url(&metadata), "https://192.168.1.10:47321");
         metadata.mode = "local".to_string();
         assert_eq!(super::base_url(&metadata), "http://192.168.1.10:47321");
+    }
+
+    // `status`/`who` both call `print_fingerprint_code`, which is a thin
+    // println! wrapper around this pure formatter — asserting on its return
+    // value here proves both commands resurface the fingerprint code
+    // whenever the design spec says they should (metadata has one), and
+    // stay silent rather than crashing when it doesn't (local mode), without
+    // needing a live authenticated mesh server to exercise `status`/`who`
+    // end-to-end.
+    #[test]
+    fn fingerprint_code_line_present_when_metadata_has_a_pinned_fingerprint() {
+        let pinned = [7u8; 16];
+        let metadata = crate::server::ServerMetadata {
+            mode: "lan".to_string(),
+            host: "192.168.1.10".to_string(),
+            port: 47321,
+            hostname: "laptop".to_string(),
+            mdns: "laptop.local".to_string(),
+            lan_ips: vec![],
+            local_token: String::new(),
+            started_by: "unknown".to_string(),
+            started_at: String::new(),
+            tls_fingerprint: Some(crate::tls::encode_fingerprint(&pinned)),
+        };
+        let expected = format!("Fingerprint code: {}", crate::tls::human_code(&pinned));
+        assert_eq!(super::fingerprint_code_line(&metadata), Some(expected));
+    }
+
+    #[test]
+    fn fingerprint_code_line_is_none_for_local_mode_with_no_fingerprint() {
+        let metadata = crate::server::ServerMetadata {
+            mode: "local".to_string(),
+            host: "127.0.0.1".to_string(),
+            port: 47321,
+            hostname: "laptop".to_string(),
+            mdns: String::new(),
+            lan_ips: vec![],
+            local_token: String::new(),
+            started_by: "unknown".to_string(),
+            started_at: String::new(),
+            tls_fingerprint: None,
+        };
+        assert_eq!(super::fingerprint_code_line(&metadata), None);
+    }
+
+    #[test]
+    fn fingerprint_code_line_is_none_rather_than_panicking_on_undecodable_fingerprint() {
+        let metadata = crate::server::ServerMetadata {
+            mode: "lan".to_string(),
+            host: "192.168.1.10".to_string(),
+            port: 47321,
+            hostname: "laptop".to_string(),
+            mdns: "laptop.local".to_string(),
+            lan_ips: vec![],
+            local_token: String::new(),
+            started_by: "unknown".to_string(),
+            started_at: String::new(),
+            tls_fingerprint: Some("not valid base64url".to_string()),
+        };
+        assert_eq!(super::fingerprint_code_line(&metadata), None);
     }
 
     #[test]
