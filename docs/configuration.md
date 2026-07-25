@@ -135,7 +135,7 @@ Start modes set the auth boundary:
 | Mode | Command | Boundary |
 |------|---------|----------|
 | Local | `/workbench:mesh start --local` | This machine only, using durable same-user credentials from `$WORKBENCH_HOME` / `~/.workbench`; ephemeral daemon metadata is not printed as invite/open URL authority. |
-| LAN | `/workbench:mesh start --lan` | Trusted local network, explicit invite token for each joining device/session, accepted with `/workbench:mesh connect http://HOST:PORT TOKEN [DEVICE]`. |
+| LAN | `/workbench:mesh start --lan` | Trusted local network, explicit invite token for each joining device/session, accepted with `/workbench:mesh connect HOST TOKEN --fingerprint sha256:HASH [DEVICE]` (the fingerprint is required and printed by `invite`). |
 | Public | Deferred | Public internet exposure is not implemented or documented as supported. |
 
 LAN startup prints the hostname, `.local` mDNS name, raw IP address, and port so another device can connect without guessing which address works on the network. URL acceptance is supported for trusted LAN hosts only; public internet exposure remains out of scope.

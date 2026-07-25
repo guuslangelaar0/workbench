@@ -61,7 +61,7 @@ On an unconfigured project it runs a short guided setup; on a configured one it 
 /workbench:mc                   # Mission Control: a dashboard of tasks, the in-review cap, build, prod
 /workbench:mesh start --local   # open the local Workbench Mesh command center
 /workbench:mesh start --lan     # invite another machine on your LAN
-/workbench:mesh connect http://HOST:PORT TOKEN macbook  # join a trusted LAN mesh
+/workbench:mesh connect HOST TOKEN --fingerprint sha256:HASH macbook  # join a trusted LAN mesh (fingerprint from `invite`'s output)
 /workbench:loop                 # run the autonomous teamlead loop: pick → dispatch → verify-gate → repeat
 ```
 
