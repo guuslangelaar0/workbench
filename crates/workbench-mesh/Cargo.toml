@@ -24,6 +24,7 @@ rustls-pemfile = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
+subtle = "2"
 time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time", "fs", "net", "sync", "io-std", "io-util"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["aws_lc_rs", "logging"] }

@@ -15,6 +15,7 @@ use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, CryptoProvi
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{DigitallySignedStruct, SignatureScheme};
 use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 
 /// This project's persistent, self-signed mesh server identity — generated
 /// once on first `--lan` use and reused forever. Regenerating it would
@@ -166,7 +167,7 @@ impl ServerCertVerifier for PinnedCertVerifier {
     ) -> Result<ServerCertVerified, rustls::Error> {
         let digest = Sha256::digest(end_entity.as_ref());
         let actual: [u8; 16] = digest[0..16].try_into().unwrap();
-        if actual == self.pinned {
+        if actual.ct_eq(&self.pinned).into() {
             Ok(ServerCertVerified::assertion())
         } else {
             // This is the entire security boundary. There is no fallback to
