@@ -373,6 +373,7 @@ LAN_TOKEN="$(printf '%s\n' "$LAN_INVITE_OUT" | sed -n 's/^token: //p' | head -1)
 LAN_FINGERPRINT="$(printf '%s\n' "$LAN_INVITE_OUT" | sed -n 's/.*--fingerprint \(sha256:[^ ]*\).*/\1/p' | head -1)"
 chk "lan invite prints a human fingerprint code" "printf '%s\n' \"\$LAN_INVITE_OUT\" | grep -qE '^Fingerprint code: [0-9]{3}-[0-9]{3}$'"
 chk "lan invite connect line uses https, not http" "printf '%s\n' \"\$LAN_INVITE_OUT\" | grep -q '/workbench:mesh connect https://'"
+chk "lan invite connect-url: line specifically uses https" "printf '%s\n' \"\$LAN_INVITE_OUT\" | grep -q 'connect-url: .*https://'"
 chk "lan invite captured a token" "[ -n '$LAN_TOKEN' ]"
 chk "lan invite captured a --fingerprint sha256:... value" "[ -n '$LAN_FINGERPRINT' ]"
 

@@ -98,13 +98,19 @@ lan_ip() {
 }
 
 metadata_url() {
-  local meta host port
+  local meta host port mode scheme
   meta="$TARGET/.workbench/mesh/server.json"
   [ -f "$meta" ] || return 1
   host="$(sed -n 's/.*"host"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$meta" | head -1)"
   port="$(sed -n 's/.*"port"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$meta" | head -1)"
   [ -n "$host" ] && [ -n "$port" ] || return 1
-  printf 'http://%s:%s\n' "$host" "$port"
+  # Mirror the Rust client's base_url(): lan/remote mode is TLS-only, so the
+  # scheme must be https there, or a copied connect-url: line gets rejected
+  # by remote_metadata_from_url()'s "remote mesh connections require https".
+  mode="$(metadata_field mode || true)"
+  scheme="http"
+  { [ "$mode" = "lan" ] || [ "$mode" = "remote" ]; } && scheme="https"
+  printf '%s://%s:%s\n' "$scheme" "$host" "$port"
 }
 
 metadata_field() {
