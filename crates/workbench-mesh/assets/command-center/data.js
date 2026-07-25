@@ -105,7 +105,7 @@ window.WB = window.WB || {};
     'This dashboard — a local/trusted-LAN read on the same event log the CLI already writes.',
   ];
   WB.WHAT_IS_NOT = [
-    'Not a hosted, multi-tenant product — no public internet exposure, no TLS by design.',
+    'Not a hosted, multi-tenant product — no public internet exposure, no CA-trusted TLS, by design.',
     'Not a replacement for git, CI or human judgement — decisions and level changes are recommend-only.',
     'Not a chat network for every agent — team agents route through their lead; only leads join the mesh.',
     'Not a redundant system — one host, no failover (see Host).',
@@ -226,7 +226,7 @@ window.WB = window.WB || {};
   WB.FAQ = [
     { q: 'Can I approve a decision from my phone?', a: '/workbench:remote surfaces decisions via Telegram; the dashboard’s Approve/Deny here mirrors the same lifecycle transition as /workbench:decision resolve.' },
     { q: 'Do crew agents show up on the mesh?', a: 'No — only leads connect. A lead’s crew (team + subagents) is visible via a pull-based snapshot on its session view, never streamed.' },
-    { q: 'Is this safe to run outside my LAN?', a: 'No — LAN mode is plaintext HTTP with bearer-token auth, trusted-LAN only, by design. There’s no TLS and no public exposure.' },
+    { q: 'Is this safe to run outside my LAN?', a: 'No — LAN mode is TLS-encrypted with a self-signed cert pinned by fingerprint, bearer-token auth, trusted-LAN only, by design. There’s no CA-trusted cert and no public exposure.' },
     { q: 'What happens at the in-review cap?', a: 'The loop stops picking new work at cap−3 and drains reviews first — see Board for the live count.' },
     { q: 'Can two people run mesh start at once?', a: 'One host at a time. The second session should join as a device via invite instead of starting its own daemon.' },
     { q: 'What’s the difference between park and suggest?', a: 'park commits out-of-scope work as a real backlog task; suggest add is a non-committed “maybe later” idea — dismiss makes it permanent, clear just deletes the file for now.' },

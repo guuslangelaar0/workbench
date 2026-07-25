@@ -128,7 +128,7 @@ window.WB = window.WB || {};
       el('span', { class: 'sl-item', html: 'seq <b id="sl-seq">#' + WB.sim.seq + '</b>' }),
       el('span', { class: 'sl-item', id: 'sl-rtt', text: WB.RTT != null ? WB.RTT + 'ms' : '…' }),
       el('span', { class: 'sl-item', text: 'you: operator · token ok' }),
-      el('span', { class: 'sl-item sl-dim', text: 'trusted LAN · plaintext HTTP' }),
+      el('span', { class: 'sl-item sl-dim', text: 'trusted LAN · TLS pinned' }),
     ]));
   }
 

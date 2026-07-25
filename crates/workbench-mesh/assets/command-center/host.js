@@ -315,7 +315,7 @@ window.WB = window.WB || {};
         enrollPanel(),
         devicesPanel(),
         el('div', { class: 'three-col' }, [spof, serverJson, auditPanel]),
-        el('div', { class: 'lan-note', html: svgIcon('shield', 11) + ' local + trusted-LAN surface · plaintext HTTP with bearer tokens · no public exposure, no TLS — by design' }),
+        el('div', { class: 'lan-note', html: svgIcon('shield', 11) + ' local + trusted-LAN surface · bearer tokens · LAN is TLS-pinned (self-signed), local is plain HTTP · no public exposure — by design' }),
       ]);
 
       container.appendChild(el('div', { class: 'host-wrap', 'data-screen-label': 'Host & topology' }, [grid]));
