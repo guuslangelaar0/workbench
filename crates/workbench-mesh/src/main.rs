@@ -869,7 +869,8 @@ mod tests {
 
     #[test]
     fn parses_fingerprint_code_as_a_bare_positional_arg() {
-        let cli = Cli::try_parse_from(["workbench-mesh", "fingerprint-code", "sha256:abc123"]).unwrap();
+        let cli =
+            Cli::try_parse_from(["workbench-mesh", "fingerprint-code", "sha256:abc123"]).unwrap();
         match cli.command {
             Command::FingerprintCode(args) => assert_eq!(args.fingerprint, "sha256:abc123"),
             other => panic!("expected fingerprint-code, got {other:?}"),

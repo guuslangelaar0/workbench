@@ -137,7 +137,9 @@ pub fn server_config_from_identity(identity: &Identity) -> Result<rustls::Server
         .with_context(|| format!("open {}", identity.key_path.display()))?;
     let key = rustls_pemfile::private_key(&mut BufReader::new(key_file))
         .with_context(|| format!("parse {}", identity.key_path.display()))?
-        .ok_or_else(|| anyhow::anyhow!("no private key found in {}", identity.key_path.display()))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!("no private key found in {}", identity.key_path.display())
+        })?;
 
     let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
     let mut config = rustls::ServerConfig::builder_with_provider(provider)
@@ -189,7 +191,12 @@ impl ServerCertVerifier for PinnedCertVerifier {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        verify_tls12_signature(message, cert, dss, &self.provider.signature_verification_algorithms)
+        verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &self.provider.signature_verification_algorithms,
+        )
     }
 
     fn verify_tls13_signature(
@@ -198,11 +205,18 @@ impl ServerCertVerifier for PinnedCertVerifier {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        verify_tls13_signature(message, cert, dss, &self.provider.signature_verification_algorithms)
+        verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &self.provider.signature_verification_algorithms,
+        )
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        self.provider.signature_verification_algorithms.supported_schemes()
+        self.provider
+            .signature_verification_algorithms
+            .supported_schemes()
     }
 }
 
@@ -286,7 +300,10 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let dir = TempDir::new().unwrap();
         let identity = ensure_identity(dir.path(), &[]).unwrap();
-        let mode = std::fs::metadata(&identity.key_path).unwrap().permissions().mode();
+        let mode = std::fs::metadata(&identity.key_path)
+            .unwrap()
+            .permissions()
+            .mode();
         assert_eq!(mode & 0o777, 0o600);
     }
 
@@ -302,7 +319,9 @@ mod tests {
                 let barrier = Arc::clone(&barrier);
                 std::thread::spawn(move || {
                     barrier.wait();
-                    ensure_identity(&root, &["127.0.0.1".to_string()]).unwrap().fingerprint
+                    ensure_identity(&root, &["127.0.0.1".to_string()])
+                        .unwrap()
+                        .fingerprint
                 })
             })
             .collect();
@@ -314,7 +333,10 @@ mod tests {
         );
         // And what survives on disk must match what every caller believes.
         let on_disk = fingerprint_from_cert_pem(&tls_dir(&root).join("cert.pem")).unwrap();
-        assert_eq!(fingerprints[0], on_disk, "in-memory fingerprint diverged from persisted cert");
+        assert_eq!(
+            fingerprints[0], on_disk,
+            "in-memory fingerprint diverged from persisted cert"
+        );
     }
 
     #[test]
@@ -322,13 +344,19 @@ mod tests {
         let fp = [7u8; 16];
         let encoded = encode_fingerprint(&fp);
         assert_eq!(decode_fingerprint(&encoded).unwrap(), fp);
-        assert_eq!(decode_fingerprint(&format!("sha256:{encoded}")).unwrap(), fp);
+        assert_eq!(
+            decode_fingerprint(&format!("sha256:{encoded}")).unwrap(),
+            fp
+        );
     }
 
     #[test]
     fn decode_fingerprint_rejects_garbage() {
         assert!(decode_fingerprint("not-base64!!").is_err());
-        assert!(decode_fingerprint("sha256:dGVzdA").is_err(), "4-byte decode must not silently accept a wrong-length fingerprint");
+        assert!(
+            decode_fingerprint("sha256:dGVzdA").is_err(),
+            "4-byte decode must not silently accept a wrong-length fingerprint"
+        );
     }
 
     #[test]
@@ -337,7 +365,11 @@ mod tests {
         let code = human_code(&fp);
         assert_eq!(code.len(), 7, "expected NNN-NNN (7 chars)");
         assert_eq!(code.chars().nth(3), Some('-'));
-        assert_eq!(human_code(&fp), code, "must be deterministic for the same fingerprint");
+        assert_eq!(
+            human_code(&fp),
+            code,
+            "must be deterministic for the same fingerprint"
+        );
     }
 
     #[test]
@@ -351,7 +383,10 @@ mod tests {
         let before = ensure_identity(dir.path(), &["127.0.0.1".to_string()]).unwrap();
         rotate_identity(dir.path()).unwrap();
         let after = ensure_identity(dir.path(), &["127.0.0.1".to_string()]).unwrap();
-        assert_ne!(before.fingerprint, after.fingerprint, "rotate must actually force a new keypair, not silently no-op");
+        assert_ne!(
+            before.fingerprint, after.fingerprint,
+            "rotate must actually force a new keypair, not silently no-op"
+        );
     }
 
     #[test]
@@ -377,7 +412,10 @@ mod tests {
 
         let client_config = pinned_client_config(identity.fingerprint);
         let outcome = tls_connect_and_read_one_byte(addr, client_config).await;
-        assert!(outcome.is_ok(), "a correct pin must allow the handshake to succeed");
+        assert!(
+            outcome.is_ok(),
+            "a correct pin must allow the handshake to succeed"
+        );
     }
 
     #[tokio::test]

@@ -1652,8 +1652,14 @@ mod tests {
 
     #[test]
     fn sanitize_device_identifier_still_accepts_real_names() {
-        assert_eq!(super::sanitize_device_identifier("macbook").unwrap(), "macbook");
-        assert_eq!(super::sanitize_device_identifier("Guus's MacBook").unwrap(), "guus-s-macbook");
+        assert_eq!(
+            super::sanitize_device_identifier("macbook").unwrap(),
+            "macbook"
+        );
+        assert_eq!(
+            super::sanitize_device_identifier("Guus's MacBook").unwrap(),
+            "guus-s-macbook"
+        );
     }
 
     fn write_project_config(project: &Path, name: &str) {

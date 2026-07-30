@@ -143,7 +143,10 @@ pub async fn who(project_root: PathBuf, home: Option<PathBuf>) -> Result<()> {
 fn fingerprint_code_line(metadata: &ServerMetadata) -> Option<String> {
     let fingerprint = metadata.tls_fingerprint.as_deref()?;
     let decoded = crate::tls::decode_fingerprint(fingerprint).ok()?;
-    Some(format!("Fingerprint code: {}", crate::tls::human_code(&decoded)))
+    Some(format!(
+        "Fingerprint code: {}",
+        crate::tls::human_code(&decoded)
+    ))
 }
 
 /// Resurfaces the TLS fingerprint code so an operator can re-check it after
