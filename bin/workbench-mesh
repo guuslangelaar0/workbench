@@ -37,12 +37,34 @@ if [ -x "$bundled" ]; then
   exec "$bundled" "$@"
 fi
 
-if [ -n "${CLAUDE_PLUGIN_DATA:-}" ]; then
-  cached="$CLAUDE_PLUGIN_DATA/mesh/bin/$version/$platform/workbench-mesh"
+# The verified-binary cache lives in workbench's OWN plugin data dir. A
+# session's Bash tool does not get CLAUDE_PLUGIN_DATA at all, and can inherit
+# another plugin's, so: trust the variable only when it names a workbench data
+# dir, then look under the active config dir's plugins/data/workbench-*.
+config_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+is_workbench_data_dir() {
+  case "$(basename "$1")" in
+    workbench|workbench-*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+data_dir=""
+if [ -n "${CLAUDE_PLUGIN_DATA:-}" ] && is_workbench_data_dir "$CLAUDE_PLUGIN_DATA"; then
+  data_dir="${CLAUDE_PLUGIN_DATA%/}"
+  cached="$data_dir/mesh/bin/$version/$platform/workbench-mesh"
   if [ -x "$cached" ]; then
     exec "$cached" "$@"
   fi
 fi
+for candidate in "$config_dir"/plugins/data/workbench-*/ "$config_dir"/plugins/data/workbench/; do
+  [ -d "$candidate" ] || continue
+  candidate="${candidate%/}"
+  [ -n "$data_dir" ] || data_dir="$candidate"
+  cached="$candidate/mesh/bin/$version/$platform/workbench-mesh"
+  if [ -x "$cached" ]; then
+    exec "$cached" "$@"
+  fi
+done
 
 if [ -x "$ROOT/target/release/workbench-mesh" ]; then
   exec "$ROOT/target/release/workbench-mesh" "$@"
@@ -51,4 +73,6 @@ if [ -x "$ROOT/target/debug/workbench-mesh" ]; then
   exec "$ROOT/target/debug/workbench-mesh" "$@"
 fi
 
-exec "$ROOT/scripts/mesh-bootstrap.sh" "$platform" "$target" "$version" "$@"
+# Nothing cached: bootstrap into workbench's data dir (never another plugin's).
+[ -n "$data_dir" ] || data_dir="$config_dir/plugins/data/workbench-workbench"
+WORKBENCH_MESH_DATA_DIR="$data_dir" exec "$ROOT/scripts/mesh-bootstrap.sh" "$platform" "$target" "$version" "$@"

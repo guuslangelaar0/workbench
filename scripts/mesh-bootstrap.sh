@@ -8,7 +8,14 @@ shift 3 || true
 
 asset="workbench-mesh-v${version}-${platform}.tar.gz"
 base="${WORKBENCH_MESH_RELEASE_BASE_URL:-https://github.com/guuslangelaar0/workbench/releases/download/v${version}}"
-plugin_data="${CLAUDE_PLUGIN_DATA:-}"
+# The launcher resolves workbench's own data dir (CLAUDE_PLUGIN_DATA can be
+# unset, or name another plugin's dir, in a session's Bash tool).
+plugin_data="${WORKBENCH_MESH_DATA_DIR:-}"
+if [ -z "$plugin_data" ]; then
+  case "$(basename "${CLAUDE_PLUGIN_DATA:-}")" in
+    workbench|workbench-*) plugin_data="$CLAUDE_PLUGIN_DATA" ;;
+  esac
+fi
 
 fallback() {
   cat >&2 <<EOF
@@ -34,7 +41,7 @@ if [ "${WORKBENCH_MESH_BOOTSTRAP:-}" = "build" ]; then
 fi
 
 if [ -z "$plugin_data" ]; then
-  echo "workbench-mesh: CLAUDE_PLUGIN_DATA is not set; cannot cache verified binary" >&2
+  echo "workbench-mesh: no workbench plugin data dir (run via bin/workbench-mesh, or set WORKBENCH_MESH_DATA_DIR); cannot cache verified binary" >&2
   fallback
   exit 69
 fi

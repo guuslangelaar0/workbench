@@ -122,7 +122,10 @@ BOOT_TMP="$(mktemp -d "${TMPDIR:-/tmp}/mesh-bootstrap.XXXXXX")"
 trap 'rm -rf "$WRAP_TMP" "$BOOT_TMP"' EXIT
 BOOT_PLUGIN="$BOOT_TMP/plugin"
 BOOT_RELEASE="$BOOT_TMP/release"
-BOOT_DATA="$BOOT_TMP/data"
+# The launcher only trusts a data dir that belongs to workbench, and also
+# searches the active config dir — point both at this test's sandbox.
+export CLAUDE_CONFIG_DIR="$BOOT_TMP/config"
+BOOT_DATA="$BOOT_TMP/workbench-data"
 mkdir -p "$BOOT_PLUGIN" "$BOOT_RELEASE" "$BOOT_DATA"
 cp -R "$HERE/bin" "$HERE/scripts" "$HERE/.claude-plugin" "$BOOT_PLUGIN/"
 python3 - "$BOOT_PLUGIN/.claude-plugin/plugin.json" <<'PY'
@@ -181,7 +184,7 @@ chk "bootstrap atomically replaces cached binary file" "grep -q 'bootstrapped-v2
 
 BAD_PLUGIN="$BOOT_TMP/bad-plugin"
 BAD_RELEASE="$BOOT_TMP/bad-release"
-BAD_DATA="$BOOT_TMP/bad-data"
+BAD_DATA="$BOOT_TMP/workbench-bad-data"
 cp -R "$BOOT_PLUGIN" "$BAD_PLUGIN"
 mkdir -p "$BAD_RELEASE" "$BAD_DATA"
 printf 'not a tarball\n' > "$BAD_RELEASE/workbench-mesh-v0.5.1-linux-x64.tar.gz"
@@ -196,7 +199,7 @@ chk "bootstrap rejects checksum mismatch" "[ '$BAD_RC' -ne 0 ] && grep -qi 'chec
 chk "bootstrap does not cache bad binary" "[ ! -e '$BAD_DATA/mesh/bin/0.5.1/linux-x64/workbench-mesh' ]"
 
 CORRUPT_RELEASE="$BOOT_TMP/corrupt-release"
-CORRUPT_DATA="$BOOT_TMP/corrupt-data"
+CORRUPT_DATA="$BOOT_TMP/workbench-corrupt-data"
 mkdir -p "$CORRUPT_RELEASE" "$CORRUPT_DATA"
 printf 'not a tarball\n' > "$CORRUPT_RELEASE/workbench-mesh-v0.5.1-linux-x64.tar.gz"
 (cd "$CORRUPT_RELEASE" && sha256sum workbench-mesh-v0.5.1-linux-x64.tar.gz > checksums.txt)
@@ -210,7 +213,7 @@ chk "bootstrap reports extract failure with fallback" "[ '$CORRUPT_RC' -ne 0 ] &
 chk "bootstrap does not cache corrupt archive binary" "[ ! -e '$CORRUPT_DATA/mesh/bin/0.5.1/linux-x64/workbench-mesh' ]"
 
 MALFORMED_RELEASE="$BOOT_TMP/malformed-release"
-MALFORMED_DATA="$BOOT_TMP/malformed-data"
+MALFORMED_DATA="$BOOT_TMP/workbench-malformed-data"
 mkdir -p "$MALFORMED_RELEASE" "$MALFORMED_DATA"
 printf 'abc  workbench-mesh-v0.5.1-linux-x64.tar.gz\n' > "$MALFORMED_RELEASE/checksums.txt"
 MALFORMED_RC=0
@@ -223,14 +226,14 @@ chk "bootstrap rejects malformed checksum length before asset download" "[ '$MAL
 chk "bootstrap does not cache malformed checksum binary" "[ ! -e '$MALFORMED_DATA/mesh/bin/0.5.1/linux-x64/workbench-mesh' ]"
 
 UNSUPPORTED_RC=0
-CLAUDE_PLUGIN_DATA="$BOOT_TMP/unsupported-data" \
+CLAUDE_PLUGIN_DATA="$BOOT_TMP/workbench-unsupported-data" \
 WORKBENCH_MESH_TEST_OS="Plan9" \
 WORKBENCH_MESH_TEST_ARCH="x86_64" \
   "$BOOT_PLUGIN/bin/workbench-mesh" nope > "$BOOT_TMP/unsupported.out" 2>&1 || UNSUPPORTED_RC=$?
 chk "launcher reports unsupported platform" "[ '$UNSUPPORTED_RC' -ne 0 ] && grep -qi 'unsupported platform Plan9/x86_64' '$BOOT_TMP/unsupported.out'"
 
 MAC_RC=0
-CLAUDE_PLUGIN_DATA="$BOOT_TMP/mac-data" \
+CLAUDE_PLUGIN_DATA="$BOOT_TMP/workbench-mac-data" \
 WORKBENCH_MESH_RELEASE_BASE_URL="file://$BOOT_TMP/no-such-release" \
 WORKBENCH_MESH_TEST_OS="Darwin" \
 WORKBENCH_MESH_TEST_ARCH="x86_64" \
