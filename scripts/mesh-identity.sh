@@ -186,20 +186,26 @@ PY
 
 # The model this session runs: $1 (the SessionStart hook input's `model`),
 # then `--model` on the Claude process's command line, then the account's
-# settings.json, else `unknown`. Sets WB_MESH_MODEL_SOURCE as a side effect.
+# settings.json, else `unknown`. Prints the model; when called without a
+# subshell it also leaves WB_MESH_MODEL and WB_MESH_MODEL_SOURCE
+# (hook-input | cmdline | settings | none) set.
 wb_mesh_model() {
-  local hook_model="${1:-}" pid="${2:-$(wb_mesh_claude_pid)}" model=""
-  WB_MESH_MODEL_SOURCE="none"
-  if [ -n "$hook_model" ]; then
-    WB_MESH_MODEL_SOURCE="hook-input"; printf '%s\n' "$hook_model"; return 0
+  local hook_model="${1:-}" pid="${2:-$(wb_mesh_claude_pid)}"
+  WB_MESH_MODEL="$hook_model"
+  WB_MESH_MODEL_SOURCE="hook-input"
+  if [ -z "$WB_MESH_MODEL" ] && [ -n "$pid" ]; then
+    WB_MESH_MODEL="$(wb_mesh_proc_args "$pid" | awk 'f { print; exit } $0 == "--model" { f = 1 } /^--model=/ { sub(/^--model=/, ""); print; exit }')"
+    WB_MESH_MODEL_SOURCE="cmdline"
   fi
-  if [ -n "$pid" ]; then
-    model="$(wb_mesh_proc_args "$pid" | awk 'f { print; exit } $0 == "--model" { f = 1 } /^--model=/ { sub(/^--model=/, ""); print; exit }')"
-    if [ -n "$model" ]; then WB_MESH_MODEL_SOURCE="cmdline"; printf '%s\n' "$model"; return 0; fi
+  if [ -z "$WB_MESH_MODEL" ]; then
+    WB_MESH_MODEL="$(wb_mesh_settings_field model)"
+    WB_MESH_MODEL_SOURCE="settings"
   fi
-  model="$(wb_mesh_settings_field model)"
-  if [ -n "$model" ]; then WB_MESH_MODEL_SOURCE="settings"; printf '%s\n' "$model"; return 0; fi
-  printf 'unknown\n'
+  if [ -z "$WB_MESH_MODEL" ]; then
+    WB_MESH_MODEL="unknown"
+    WB_MESH_MODEL_SOURCE="none"
+  fi
+  printf '%s\n' "$WB_MESH_MODEL"
 }
 
 wb_mesh_json_escape() {

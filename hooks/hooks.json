@@ -1,5 +1,5 @@
 {
-  "description": "workbench continuity hooks \u2014 re-ground on session start, checkpoint before compaction, coord presence",
+  "description": "workbench continuity hooks \u2014 re-ground on session start, checkpoint before compaction, coord presence, mesh presence",
   "hooks": {
     "SessionStart": [
       {
@@ -13,6 +13,15 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/mesh-context.sh\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/mesh-presence.sh\"",
             "timeout": 10
           }
         ]
@@ -37,6 +46,15 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/coord-ping.sh\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/mesh-presence.sh\"",
             "timeout": 10
           }
         ]
@@ -94,6 +112,15 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/mesh-presence.sh\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "TeammateIdle": [
@@ -127,6 +154,15 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/mesh-presence.sh\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "SubagentStop": [
@@ -136,6 +172,17 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/usage-meter.sh\"",
             "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/mesh-presence.sh\"",
+            "timeout": 5
           }
         ]
       }

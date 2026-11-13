@@ -106,7 +106,7 @@ metadata_url() {
 mesh_status="Mesh server metadata: not found at .workbench/mesh/server.json; mesh may be stopped or not started."
 url="$(metadata_url || true)"
 if [ -n "$url" ]; then
-  mesh_status="Mesh server metadata: found. Command center: $url. Use /workbench:mesh open for local authenticated access."
+  mesh_status="Mesh server metadata: found. Command center: $url (needs sign-in). To open it signed in, run /workbench:mesh open: it copies the signed-in link to the clipboard, or opens the browser, without ever printing the token."
 fi
 
 snapshot_json="$(status_snapshot || true)"
