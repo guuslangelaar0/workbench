@@ -4,6 +4,12 @@ set -euo pipefail
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 BIN="$PLUGIN_ROOT/bin/workbench-mesh"
 TARGET="${CLAUDE_PROJECT_DIR:-$PWD}"
+MESH_DIR="$TARGET/.workbench/mesh"
+# The single actor derivation (shared with the hooks and the channel server).
+# shellcheck source=scripts/mesh-identity.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/mesh-identity.sh"
+# Everything this script writes under the mesh dir is private to the user.
+umask 077
 
 if [ ! -x "$BIN" ]; then
   echo "mesh: missing executable $BIN" >&2
@@ -23,7 +29,11 @@ usage: mesh.sh <operation> [args]
 operations:
   start [--local|--lan] [--bind local|lan] [--port N] [--pid-file PATH] [--as ACTOR]
   stop [--pid-file PATH]
-  status | who | jobs | open
+  status | jobs
+  who [--json]              (every live session: actor, account, model, provider, idle/busy, machine, session id)
+  open [--clipboard|--browser]   (hands over the signed-in command-center link; never prints the token)
+  leave [--as ACTOR] [--session-id ID]   (say goodbye: drop this session from who/the dashboard now)
+  mirror on|off|status      (opt this session's typed prompts into the command-center chat; default off)
   invite [--role ROLE] [--ttl-seconds N] [--max-uses N]
   connect [HOST|URL] TOKEN [DEVICE] [--fingerprint sha256:HASH] [-y|--yes]
   devices
@@ -41,10 +51,13 @@ operations:
   listen-wait --as ACTOR   (blocks on the actor's FIFO, written by `workbench-mesh listen`; falls back to inbox --wait polling if no listen connector is running)
   activity reading|typing|idle [--as ACTOR]   (live engagement indicator on the dashboard)
 
---as ACTOR identifies this session/process as ACTOR in the posted event,
-instead of the shared default "session:lead". Set this (or export
-WORKBENCH_MESH_ACTOR) whenever more than one real session is expected to
-post into the same room/mesh, so senders are distinguishable.
+--as ACTOR identifies this session/process as ACTOR in the posted event.
+Without it the actor is derived, in this order: WORKBENCH_MESH_ACTOR; the
+alias map (<workbench home>/mesh/aliases, lines of `account=alias`); the
+account name from the CLAUDE_CONFIG_DIR basename (`<N>-<name>_<domain>` ->
+`session:<name>`); `session:lead` for the default ~/.claude. A headless
+`claude -p` run is `lane:<name>-<pid>`. listen and tail never guess: they need
+--as or WORKBENCH_MESH_ACTOR.
 
 availability/doing auto-detect this session's OS (macos/linux/windows) and
 its default dispatch capabilities (e.g. macOS gets ios-simulator). --platform
@@ -290,6 +303,88 @@ case "$cmd" in
     ;;
 esac
 
+# Resolve the actor once, here, so the binary's own last-resort default is
+# never reached through this wrapper. listen/tail are long-lived writers and
+# refuse to guess (explicit --as or WORKBENCH_MESH_ACTOR only).
+if [ "${#AS_ARGS[@]}" -gt 0 ] && [ -z "${AS_ARGS[1]//[[:space:]]/}" ]; then
+  AS_ARGS=()
+fi
+if [ "${#AS_ARGS[@]}" -eq 0 ]; then
+  case "$cmd" in
+    start|room|message|ask|handoff|availability|doing|watch|activity|leave|inbox|listen-wait)
+      AS_ARGS=(--as "$(wb_mesh_actor)")
+      ;;
+    listen|tail)
+      strict_actor="$(WB_MESH_STRICT=1 wb_mesh_actor)"
+      [ -z "$strict_actor" ] || AS_ARGS=(--as "$strict_actor")
+      ;;
+  esac
+fi
+
+# Create the mesh dir private and tighten what earlier versions left loose.
+# (The binary does the same for events.jsonl / audit.jsonl / server.json.)
+mesh_private_dir() {
+  mkdir -p "$MESH_DIR/sessions"
+  chmod 700 "$MESH_DIR" "$MESH_DIR/sessions" 2>/dev/null || true
+  local f
+  for f in "$MESH_DIR"/*.seq "$MESH_DIR"/*.jsonl "$MESH_DIR"/*.log "$MESH_DIR"/*.html "$MESH_DIR"/sessions/*; do
+    [ -f "$f" ] && chmod 600 "$f" 2>/dev/null
+  done
+  return 0
+}
+
+# Keep the runtime dir (server.json holds the local bearer token) out of git.
+# `start` writes .git/info/exclude rather than .gitignore: starting a server
+# must never dirty a tracked file. (`init`, an explicit scaffold, writes
+# .gitignore.) No-op outside a git work tree or when already ignored.
+mesh_git_ignore() {
+  command -v git >/dev/null 2>&1 || return 0
+  git -C "$TARGET" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+  git -C "$TARGET" check-ignore -q .workbench/mesh/server.json 2>/dev/null && return 0
+  local prefix exclude
+  prefix="$(git -C "$TARGET" rev-parse --show-prefix 2>/dev/null || true)"
+  exclude="$(git -C "$TARGET" rev-parse --git-path info/exclude 2>/dev/null || true)"
+  [ -n "$exclude" ] || return 0
+  case "$exclude" in /*) ;; *) exclude="$TARGET/$exclude" ;; esac
+  mkdir -p "$(dirname "$exclude")" 2>/dev/null || return 0
+  ( umask 022; printf '\n# workbench mesh runtime state (local token, event log) — never commit\n/%s.workbench/mesh/\n' "$prefix" >> "$exclude" ) 2>/dev/null || true
+}
+
+# Which clipboard tool to pipe into. WORKBENCH_MESH_CLIPBOARD names one
+# (or `none`); otherwise the first of the usual suspects on PATH.
+mesh_clipboard_cmd() {
+  local choice="${WORKBENCH_MESH_CLIPBOARD:-}" tool
+  if [ -n "$choice" ]; then
+    [ "$choice" = "none" ] || printf '%s\n' "$choice"
+    return 0
+  fi
+  for tool in clip.exe pbcopy wl-copy xclip xsel; do
+    if command -v "$tool" >/dev/null 2>&1; then
+      case "$tool" in
+        wl-copy) [ -n "${WAYLAND_DISPLAY:-}" ] || continue ;;
+        xclip|xsel) [ -n "${DISPLAY:-}" ] || continue ;;
+      esac
+      printf '%s\n' "$tool"
+      return 0
+    fi
+  done
+}
+
+# Which program opens a local file in the browser. WORKBENCH_MESH_OPENER
+# names one (or `none`).
+mesh_opener_cmd() {
+  local choice="${WORKBENCH_MESH_OPENER:-}"
+  if [ -n "$choice" ]; then
+    [ "$choice" = "none" ] || printf '%s\n' "$choice"
+    return 0
+  fi
+  if [ "$(uname -s)" = "Darwin" ] && command -v open >/dev/null 2>&1; then
+    printf 'open\n'
+  elif command -v xdg-open >/dev/null 2>&1 && { [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; }; then
+    printf 'xdg-open\n'
+  fi
+}
+
 case "$cmd" in
   start)
     mode="local"
@@ -343,6 +438,8 @@ case "$cmd" in
     # a fixed path next to server.json rather than leaving the server unstoppable.
     [ -n "$pidfile" ] || pidfile="$TARGET/.workbench/mesh/server.pid"
     pass+=(--pid-file "$pidfile")
+    mesh_private_dir
+    mesh_git_ignore
     "$BIN" auth bootstrap "${PROJECT_ARGS[@]}" >/dev/null
     print_start_info "$mode" "$port"
     exec "$BIN" serve "${PROJECT_ARGS[@]}" --bind "$mode" "${pass[@]}" "${AS_ARGS[@]}"
@@ -392,7 +489,7 @@ case "$cmd" in
       echo "mesh: sent SIGTERM to $pid but it is still running after 5s" >&2
       exit 1
     fi
-    rm -f "$pidfile"
+    rm -f "$pidfile" "$MESH_DIR/open.html"
     echo "mesh: stopped mesh server (pid $pid)"
     ;;
   status)
@@ -473,7 +570,12 @@ case "$cmd" in
     to="$1"
     shift
     require_arg "message text" "${1:-}"
-    exec "$BIN" message "${PROJECT_ARGS[@]}" --to "$to" --text "$*" "${AS_ARGS[@]}"
+    # WORKBENCH_MESH_MESSAGE_MIRROR=1 (set by the prompt-mirror hook) tags the
+    # event as a mirror of the terminal, so it is never delivered back to the
+    # session as an inbound message.
+    MIRROR_ARGS=()
+    [ "${WORKBENCH_MESH_MESSAGE_MIRROR:-}" = 1 ] && MIRROR_ARGS=(--mirror)
+    exec "$BIN" message "${PROJECT_ARGS[@]}" --to "$to" --text "$*" "${AS_ARGS[@]}" "${MIRROR_ARGS[@]}"
     ;;
   ask)
     require_arg "ask target" "${1:-}"
@@ -527,7 +629,7 @@ case "$cmd" in
     # tail reads stream-json on stdin and needs an actor identity to name its
     # per-agent room output:<ACTOR>. Without --as it would write into "output:",
     # which the server rejects — fail early with a clear message instead.
-    if [ "${#AS_ARGS[@]}" -eq 0 ] && [ -z "${WORKBENCH_MESH_ACTOR:-}" ]; then
+    if [ "${#AS_ARGS[@]}" -eq 0 ]; then
       echo "mesh: tail requires --as ACTOR (or export WORKBENCH_MESH_ACTOR)" >&2
       usage >&2
       exit 2
@@ -539,11 +641,7 @@ case "$cmd" in
     # own room, or shared rooms. --wait blocks until one arrives and then
     # exits — run it as a background task and its completion becomes a push
     # notification into the session (the harness re-invokes on completion).
-    if [ "${#AS_ARGS[@]}" -eq 0 ] && [ -z "${WORKBENCH_MESH_ACTOR:-}" ]; then
-      echo "mesh: inbox requires --as ACTOR (or export WORKBENCH_MESH_ACTOR)" >&2
-      exit 2
-    fi
-    actor="${AS_ARGS[1]:-$WORKBENCH_MESH_ACTOR}"
+    actor="${AS_ARGS[1]}"
     wait_flag=0
     since=""
     while [ "$#" -gt 0 ]; do
@@ -574,16 +672,22 @@ for line in sys.stdin:
         continue
     if e.get("from") == actor:
         continue
+    p = e.get("payload") or {}
+    # A mirrored terminal prompt was typed INTO this session already.
+    if p.get("mirror"):
+        continue
     if e.get("to") == actor or e.get("room") in (actor, "team") or e.get("room", "").startswith("repo:"):
-        p = e.get("payload", {})
         text = p.get("text") or p.get("task_id") or p.get("question") or "?"
         hits.append("seq=%s room=%s from=%s: %s" % (e["seq"], e["room"], e["from"], text))
 print(top)
 for h in hits:
     print(h)
 ')"
-      top="$(printf '%s\n' "$out" | head -1)"
-      body="$(printf '%s\n' "$out" | tail -n +2)"
+      # No pipes here: `printf | head -1` on a body larger than the pipe
+      # buffer made printf die of SIGPIPE, and pipefail took the script
+      # down with exit 141 and no output.
+      top="${out%%$'\n'*}"
+      if [ "$top" = "$out" ]; then body=""; else body="${out#*$'\n'}"; fi
       if [ -n "$body" ]; then
         printf '%s\n' "$top" > "$seq_file"
         printf 'mesh inbox for %s:\n%s\n' "$actor" "$body"
@@ -599,7 +703,7 @@ for h in hits:
     # process `listen-wait`'s FIFO fast path depends on. Run this as a
     # long-lived background task (nohup/tmux/&) for it to have any effect;
     # it blocks until killed.
-    if [ "${#AS_ARGS[@]}" -eq 0 ] && [ -z "${WORKBENCH_MESH_ACTOR:-}" ]; then
+    if [ "${#AS_ARGS[@]}" -eq 0 ]; then
       echo "mesh: listen requires --as ACTOR (or export WORKBENCH_MESH_ACTOR)" >&2
       exit 2
     fi
@@ -610,11 +714,7 @@ for h in hits:
     # `workbench-mesh listen` connector — zero CPU cost, instant wake.
     # Falls back to polling `inbox --wait` if no connector is running
     # (i.e. the FIFO does not exist yet).
-    if [ "${#AS_ARGS[@]}" -eq 0 ] && [ -z "${WORKBENCH_MESH_ACTOR:-}" ]; then
-      echo "mesh: listen-wait requires --as ACTOR (or export WORKBENCH_MESH_ACTOR)" >&2
-      exit 2
-    fi
-    actor="${AS_ARGS[1]:-$WORKBENCH_MESH_ACTOR}"
+    actor="${AS_ARGS[1]}"
     safe_actor="$(printf '%s' "$actor" | tr ':/' '--')"
     fifo="$TARGET/.workbench/mesh/inbox-$safe_actor.fifo"
     if [ -p "$fifo" ]; then
@@ -629,19 +729,77 @@ for h in hits:
     exec "$0" inbox --as "$actor" --wait
     ;;
   open)
-    if url="$(metadata_url)"; then
-      token="$(metadata_field local_token)"
-      if [ -n "$token" ]; then
-        printf 'Command center: %s/?token=%s\n' "$url" "$token"
-      else
-        printf 'Command center: %s\n' "$url"
-        echo "mesh: no local_token found in $TARGET/.workbench/mesh/server.json — the server may need a restart"
-      fi
-    else
+    # Hand over the signed-in command-center link WITHOUT printing the token:
+    # onto the clipboard (via stdin, never argv), or into the browser through
+    # a private redirect file. Nothing that holds the token reaches stdout,
+    # stderr or another process's command line.
+    prefer="clipboard"
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --clipboard) prefer="clipboard"; shift ;;
+        --browser) prefer="browser"; shift ;;
+        *) echo "mesh: unknown arg to open: '$1'" >&2; exit 2 ;;
+      esac
+    done
+    if ! url="$(metadata_url)"; then
       echo "mesh: no running mesh metadata found at $TARGET/.workbench/mesh/server.json" >&2
       echo "mesh: run /workbench:mesh start first" >&2
       exit 1
     fi
+    token="$(metadata_field local_token || true)"
+    printf 'Command center: %s\n' "$url"
+    if [ -z "$token" ]; then
+      echo "mesh: no local_token found in $TARGET/.workbench/mesh/server.json — the server may need a restart" >&2
+      exit 1
+    fi
+    clip="$(mesh_clipboard_cmd)"
+    opener="$(mesh_opener_cmd)"
+    copy_link() {
+      [ -n "$clip" ] || return 1
+      case "${clip##*/}" in
+        xclip) printf '%s/?token=%s' "$url" "$token" | "$clip" -selection clipboard ;;
+        xsel) printf '%s/?token=%s' "$url" "$token" | "$clip" --clipboard --input ;;
+        *) printf '%s/?token=%s' "$url" "$token" | "$clip" ;;
+      esac >/dev/null 2>&1 || return 1
+      echo "mesh: copied the signed-in link to the clipboard (${clip##*/}) — paste it into a browser. The token is not shown here."
+    }
+    open_link() {
+      [ -n "$opener" ] || return 1
+      mesh_private_dir
+      redirect="$MESH_DIR/open.html"
+      printf '<!doctype html><meta charset="utf-8"><title>Workbench mesh</title><meta http-equiv="refresh" content="0; url=%s/?token=%s">\n' "$url" "$token" > "$redirect"
+      chmod 600 "$redirect"
+      "$opener" "$redirect" >/dev/null 2>&1 || return 1
+      echo "mesh: opened the command center in your browser (${opener##*/}) through a private redirect file. The token is not shown here."
+    }
+    if [ "$prefer" = "browser" ]; then
+      open_link || copy_link || prefer="none"
+    else
+      copy_link || open_link || prefer="none"
+    fi
+    if [ "$prefer" = "none" ]; then
+      echo "mesh: could not hand over the signed-in link: no clipboard tool (clip.exe, pbcopy, wl-copy, xclip, xsel) and no browser opener worked." >&2
+      echo "mesh: set WORKBENCH_MESH_CLIPBOARD or WORKBENCH_MESH_OPENER to a command, or read local_token from $TARGET/.workbench/mesh/server.json yourself (it is never printed)." >&2
+      exit 1
+    fi
+    ;;
+  leave)
+    exec "$BIN" leave "${PROJECT_ARGS[@]}" "$@" "${AS_ARGS[@]}"
+    ;;
+  mirror)
+    # Per-session opt-in for the prompt mirror (hooks/bin/mesh-mirror-prompt.sh).
+    sid="$(wb_mesh_session_id)"
+    if [ -z "$sid" ]; then
+      echo "mesh: mirror needs a session id (CLAUDE_CODE_SESSION_ID) — run it from inside the session, or export WORKBENCH_MESH_MIRROR=on for every session" >&2
+      exit 2
+    fi
+    flag="$MESH_DIR/sessions/$sid.mirror"
+    case "${1:-status}" in
+      on) mesh_private_dir; : > "$flag"; echo "mesh: prompt mirror ON for this session — typed prompts are posted (redacted) to $(wb_mesh_actor) in the command center" ;;
+      off) rm -f "$flag"; echo "mesh: prompt mirror OFF for this session" ;;
+      status) if [ -f "$flag" ] || [ "${WORKBENCH_MESH_MIRROR:-}" = "on" ]; then echo "mesh: prompt mirror is ON"; else echo "mesh: prompt mirror is OFF (default)"; fi ;;
+      *) echo "mesh: mirror takes on, off or status" >&2; exit 2 ;;
+    esac
     ;;
   help|-h|--help)
     usage
