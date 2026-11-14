@@ -16,7 +16,7 @@ Thanks for your interest. Workbench is a Claude Code plugin built from plain mar
 commands/         /workbench:* slash commands (markdown the model executes)
 skills/           operating disciplines (levels, orchestration, continuity, …)
 agents/           engineer + verifier subagent definitions
-hooks/            SessionStart / PreCompact / PostToolUse / PreToolUse / Notification
+hooks/            SessionStart / PreCompact / PostToolUse / Notification
 scripts/          the CLI (init, task-new, task-move, mc, levels, loop-policy, graduate, drift)
 templates/        what gets scaffolded into a project (minimal | full)
 test/             all.sh (offline suites) + e2e/ (live-plugin)
