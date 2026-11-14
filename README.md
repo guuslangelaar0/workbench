@@ -102,7 +102,7 @@ That's the whole rhythm: pick a level, capture work as tasks, let the loop drive
 | `/workbench:checkpoint` | Write a `SESSION_STATE` checkpoint now for the next session |
 | `/workbench:upgrade` | Reconcile this project's workbench files to the current plugin version (preserves your edits) |
 | `/workbench:doctor` | Health-check: drift, stale state, in-review cap |
-| `/workbench:remote` | Operate the project from your phone over Telegram, with a catastrophic-command guard |
+| `/workbench:remote` | Operate the project from your phone over Telegram |
 | `/workbench:self-test` | Run plugin-source validation, or `--live` for the release gate that drives real Claude plugin E2E/bench checks |
 
 → Full reference: **[docs/commands.md](docs/commands.md)**.
@@ -202,7 +202,7 @@ workbench/
 ├── commands/           /workbench:* slash commands (markdown)
 ├── skills/             the operating disciplines (levels, orchestration, continuity, architecture, …)
 ├── agents/             engineer + verifier subagents
-├── hooks/              SessionStart / PreCompact / PostToolUse / PreToolUse / Notification
+├── hooks/              SessionStart / PreCompact / PostToolUse / Notification
 ├── scripts/            the CLI: init, task-new, task-move, mc, mesh, levels, loop-policy, graduate, drift, upgrade, uninstall, doctor, self-test, release-gate
 ├── crates/             Rust runtime crates, including workbench-mesh
 ├── templates/          what gets scaffolded into a project (minimal | full profiles)

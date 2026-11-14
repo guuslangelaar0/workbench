@@ -150,7 +150,7 @@ Plugin-source self-test for workbench contributors. Validates plugin JSON, marke
 ## Remote
 
 ### `/workbench:remote`
-Operate the project from your phone over the official Telegram Channels plugin: status + decisions, an outbound `Notification`→Telegram nudge, and a `PreToolUse` guard that hard-blocks catastrophic commands (`rm -rf`, force-push) on remote-driven sessions. Active only when `way_of_working.remote != off`.
+Operate the project from your phone over the official Telegram Channels plugin: status + decisions, an outbound `Notification`→Telegram nudge. Active only when `way_of_working.remote != off`.
 
 ---
 

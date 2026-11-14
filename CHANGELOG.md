@@ -6,6 +6,9 @@ All notable changes to workbench are documented here. The format follows
 
 ## [Unreleased]
 
+### Removed
+- Removed: remote-guard PreToolUse hook (owner's instruction)
+
 ## [0.11.0] - 2026-07-05
 
 The mesh real-time protocol and pre-release audit hardening release. Ships the live-messaging protocol work (delivery/read receipts, per-room WebSocket subscriptions, micro-batched pushes, paginated history, the `listen` connector) alongside the full closeout of the mesh command-center pre-release audit: 7 Blocker, 27 Important, and 25 Minor findings, every one fixed and independently re-reviewed (several review rounds caught additional regressions and confound bugs beyond the original findings, all closed before this release). This is the first tagged release since v0.9.0 — it also folds in the untagged v0.10.0 command-center v2 work below and, for completeness, brief entries for the 7 blocker fixes that shipped earlier but were never changelogged.

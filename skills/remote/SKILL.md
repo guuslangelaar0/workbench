@@ -1,6 +1,6 @@
 ---
 name: remote
-description: Use when operating a workbench project remotely (remote != off) — running the loop over the official Telegram Channels plugin, answering status and decisions from your phone, the disk-based fallback when the session is down, and the security model (allowlist, secrets out of git, the PreToolUse guard). Setup/install lives in the setup wizard; this is how to run it.
+description: Use when operating a workbench project remotely (remote != off) — running the loop over the official Telegram Channels plugin, answering status and decisions from your phone, the disk-based fallback when the session is down, and the security model (allowlist, secrets out of git, no command guard). Setup/install lives in the setup wizard; this is how to run it.
 ---
 
 # Remote operation (Telegram)
@@ -21,7 +21,7 @@ Workbench ships a `Notification` hook (`notify.sh`) that pings Telegram on `perm
 ## Security model (non-negotiable)
 - **Secrets never in git.** The bot token lives only in `~/.claude/channels/telegram/.env`. Never commit it; never echo it. (A `check-secrets` pre-commit hook backs this up.)
 - **Allowlist-only.** Pair the bot to your chat and set `/telegram:access policy allowlist` so only you can drive the session.
-- **The hard guard.** Workbench ships a `PreToolUse` guard (`remote-guard.sh`) that hard-blocks (exit 2) a narrow set of catastrophic, irreversible commands — `rm -rf` of root/home, `git push --force` — even under bypass/auto-approve mode, so a misread remote message can't destroy the machine. It's a safety net, not a full sandbox: treat genuinely destructive or irreversible actions as local-only with explicit approval, regardless of channel.
+- **No command guard.** The plugin no longer blocks commands on remote sessions, so treat destructive or irreversible actions (`rm -rf` of root/home, `git push --force`) as local-only with explicit approval, regardless of channel.
 
 ## Native alternative
 Remote Control (the Claude app / claude.ai/code, push to phone via `/config`) is the complementary `native` option and can run alongside Channels. It needs no bot token. Pick `telegram` for two-way chat control, `native` if you live in the Claude app, or `both`.
